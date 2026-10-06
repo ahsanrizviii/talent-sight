@@ -9,7 +9,7 @@ class Settings(BaseSettings):
     seed_interviewer_password: str
 
     groq_api_key: str = ""
-    llm_model: str = "llama-3.3-70b-versatile"
+    llm_model: str = "openai/gpt-oss-120b"
 
     careers_email: str = "careers@talentsight.local"
 
