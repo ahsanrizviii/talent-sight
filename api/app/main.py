@@ -21,7 +21,7 @@ app = FastAPI(
     title="TalentSight API",
     lifespan=lifespan,
     docs_url="/api/docs",
-    openai_url="/api/openapi.json",
+    openapi_url="/api/openapi.json",
 )
 
 @app.middleware("http")
