@@ -16,4 +16,8 @@ class Settings(BaseSettings):
     livekit_api_key: str = ""
     livekit_api_secret: str = ""
 
+       # Speech to text (AssemblyAI streaming)
+    assemblyai_api_key: str = ""
+    stt_model: str = "universal-3-6-pro"
+
 settings = Settings()
