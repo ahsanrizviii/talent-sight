@@ -16,7 +16,7 @@ def current_interviewer(
     credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
     db: Session = Depends(get_db),
 ) -> Interviewer:
-    """Lets the request through only for a logged-in interviewer."""
+    
     not_logged_in = HTTPException(status.HTTP_401_UNAUTHORIZED, "Please log in.")
 
     if credentials is None:
@@ -41,7 +41,7 @@ def session_from_invite(
     invite_token: str,
     db: Session = Depends(get_db),
 ) -> InterviewSession:
-    """Lets a candidate in only with a valid, unexpired invite token, and only to their own interview."""
+
     session = db.scalar(
         select(InterviewSession).where(InterviewSession.invite_token == invite_token)
     )

@@ -1,4 +1,5 @@
 import os
+import zlib
 
 import psycopg
 import pytest
@@ -14,25 +15,43 @@ with psycopg.connect(real_url.set(drivername="postgresql").render_as_string(hide
 
 os.environ["DATABASE_URL"] = test_url.render_as_string(hide_password=False)
 
-from fastapi.testclient import TestClient  # noqa: E402
+from fastapi.testclient import TestClient  
 
-from app.db import engine  # noqa: E402
-from app.main import app  # noqa: E402
-from app.models import Base  # noqa: E402
-from app.settings import settings  # noqa: E402
+from app import knowledge  
+from app.db import engine  
+from app.main import app
+from app.models import Base  
+from app.settings import settings  
+
+
+def fake_embedding(text: str) -> list[float]:
+    vector = [0.0] * 384
+    vector[0] = 1.0  
+    for word in text.lower().split():
+        vector[zlib.crc32(word.encode()) % 384] += 1.0
+    return vector
+
+
+@pytest.fixture(autouse=True)
+def no_real_embedding_model(monkeypatch):
+    monkeypatch.setattr(knowledge, "embed_texts", lambda texts: [fake_embedding(t) for t in texts])
+    monkeypatch.setattr(knowledge, "embed_question", fake_embedding)
+
+
+@pytest.fixture(autouse=True)
+def no_real_blog_posts(monkeypatch):
+    monkeypatch.setattr(settings, "blogger_blog_id", "")
 
 
 @pytest.fixture
 def client():
-    """A fake browser for the API. Every test starts with empty tables."""
     Base.metadata.drop_all(engine)
-    with TestClient(app) as test_client:  # "with" runs the startup code, which creates the tables
+    with TestClient(app) as test_client:  
         yield test_client
 
 
 @pytest.fixture
 def auth_headers(client):
-    """Logs in as the seeded interviewer and returns the header that proves it."""
     response = client.post(
         "/api/auth/login",
         json={"email": settings.seed_interviewer_email, "password": settings.seed_interviewer_password},
