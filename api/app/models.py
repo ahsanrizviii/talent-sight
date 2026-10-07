@@ -4,7 +4,6 @@ from pgvector.sqlalchemy import Vector
 from sqlalchemy import JSON, DateTime, Float, ForeignKey, Integer, String, Text, func
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
-# How strongly each part counts in the final CV score, in percent (adds up to 100).
 DEFAULT_WEIGHTS = {"technical_skills": 40, "experience": 30, "qualifications": 15, "jd_match": 15}
 
 
@@ -13,7 +12,6 @@ class Base(DeclarativeBase):
 
 
 class Interviewer(Base):
-    """The only kind of user account. Candidates never get an account (Q&A 18)."""
 
     __tablename__ = "interviewers"
 
@@ -24,7 +22,6 @@ class Interviewer(Base):
 
 
 class JobProfile(Base):
-    """A job: its requirements, its scoring weights and its public job post."""
 
     __tablename__ = "job_profiles"
 
@@ -37,13 +34,12 @@ class JobProfile(Base):
     min_experience_years: Mapped[int] = mapped_column(Integer, default=0)
     selection_criteria: Mapped[str] = mapped_column(Text, default="")
     weights: Mapped[dict] = mapped_column(JSON, default=lambda: dict(DEFAULT_WEIGHTS))
-    status: Mapped[str] = mapped_column(String(20), default="draft")  # draft | published
-    slug: Mapped[str | None] = mapped_column(String(250), unique=True)  # web address part, set on publish
+    status: Mapped[str] = mapped_column(String(20), default="draft")  
+    slug: Mapped[str | None] = mapped_column(String(250), unique=True)  
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class PolicyChunk(Base):
-    """One paragraph of a company hiring policy, with its embedding (Module 4)."""
 
     __tablename__ = "policy_chunks"
 
@@ -54,7 +50,6 @@ class PolicyChunk(Base):
 
 
 class Candidate(Base):
-    """One applicant for one job, with the text read from their CV (Module 5)."""
 
     __tablename__ = "candidates"
 
@@ -69,7 +64,6 @@ class Candidate(Base):
 
 
 class RequirementVerdict(Base):
-    """Met / Partially Met / Unmet for one requirement of one candidate (Module 5)."""
 
     __tablename__ = "requirement_verdicts"
 
@@ -81,7 +75,6 @@ class RequirementVerdict(Base):
 
 
 class CandidateScore(Base):
-    """The 0-100 scores of one candidate (Module 6)."""
 
     __tablename__ = "candidate_scores"
 
@@ -96,7 +89,6 @@ class CandidateScore(Base):
 
 
 class InterviewSession(Base):
-    """One scheduled interview, with the candidate's private invite token (Modules 3 and 7)."""
 
     __tablename__ = "interview_sessions"
 
@@ -111,7 +103,6 @@ class InterviewSession(Base):
 
 
 class TranscriptSegment(Base):
-    """One finished sentence of the interview: who said it and when (Module 8)."""
 
     __tablename__ = "transcript_segments"
 
@@ -124,7 +115,6 @@ class TranscriptSegment(Base):
 
 
 class Assessment(Base):
-    """The final report for one candidate (Module 10)."""
 
     __tablename__ = "assessments"
 
