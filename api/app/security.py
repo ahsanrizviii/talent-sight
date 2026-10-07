@@ -15,10 +15,10 @@ def create_access_token(interviewer_id: int) -> str:
 
     now = datetime.now(timezone.utc)
     payload = {
-        "sub": str(interviewer_id),  # sub = "subject": who the token belongs to
+        "sub": str(interviewer_id),  
         "role": "interviewer",
-        "iat": now,  # issued at
-        "exp": now + timedelta(minutes=settings.jwt_minutes),  # expires at
+        "iat": now,  
+        "exp": now + timedelta(minutes=settings.jwt_minutes),  
     }
     return jwt.encode(payload, settings.jwt_secret, algorithm="HS256")
 

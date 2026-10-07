@@ -1,6 +1,8 @@
 from pydantic_settings import BaseSettings
 
+
 class Settings(BaseSettings):
+
     database_url: str
 
     jwt_secret: str
@@ -13,11 +15,17 @@ class Settings(BaseSettings):
 
     careers_email: str = "careers@talentsight.local"
 
+    blogger_blog_id: str = ""
+    blogger_blog_url: str = ""  
+    google_client_id: str = ""
+    google_client_secret: str = ""
+    google_refresh_token: str = ""
+
     livekit_api_key: str = ""
     livekit_api_secret: str = ""
 
-       # Speech to text (AssemblyAI streaming)
     assemblyai_api_key: str = ""
     stt_model: str = "universal-3-6-pro"
+
 
 settings = Settings()

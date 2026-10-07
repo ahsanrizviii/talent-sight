@@ -1,12 +1,9 @@
 import logging
-
 from langchain_groq import ChatGroq
 from pydantic import BaseModel
-
 from app.settings import settings
 
 log = logging.getLogger("talentsight.llm")
-
 
 class LLMUnavailable(Exception):
     """The language model could not give a usable answer."""
