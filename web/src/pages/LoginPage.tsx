@@ -1,8 +1,9 @@
 import { useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
-
 import { api } from "../api";
 import { saveToken } from "../auth";
+import Arrow from "../components/Arrow";
+import PublicFrame from "../components/PublicFrame";
 
 export default function LoginPage() {
   const navigate = useNavigate();
@@ -12,10 +13,9 @@ export default function LoginPage() {
   const [busy, setBusy] = useState(false);
 
   async function submit(event: FormEvent) {
-    event.preventDefault(); 
+    event.preventDefault();
     setBusy(true);
     setError("");
-
     try {
       const body = await api<{ access_token: string }>("/auth/login", {
         method: "POST",
@@ -31,39 +31,47 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="content" style={{ maxWidth: 420 }}>
-      <form className="card" onSubmit={submit}>
-        <h1>TalentSight</h1>
-        <p className="muted">Interviewer login</p>
+    <PublicFrame>
+      <main className="hero">
+        <h1 className="display">
+          Hire on evidence,
+          <br />
+          not instinct.
+        </h1>
+        <p className="lead">
+          Screen CVs, run interviews and turn both into one evidence-backed assessment.
+        </p>
 
-        <div className="field">
-          <label htmlFor="email">E-mail</label>
-          <input
-            id="email"
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-          />
-        </div>
-
-        <div className="field">
-          <label htmlFor="password">Password</label>
-          <input
-            id="password"
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-          />
-        </div>
-
-        {error && <p className="error">{error}</p>}
-
-        <button className="button" type="submit" disabled={busy}>
-          {busy ? "Logging in..." : "Log in"}
-        </button>
-      </form>
-    </main>
+        <form className="card login-card" onSubmit={submit}>
+          <p className="eyebrow">Interviewer login</p>
+          <div className="field">
+            <label htmlFor="email">E-mail</label>
+            <input
+              id="email"
+              type="email"
+              autoComplete="username"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+            />
+          </div>
+          <div className="field">
+            <label htmlFor="password">Password</label>
+            <input
+              id="password"
+              type="password"
+              autoComplete="current-password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+            />
+          </div>
+          {error && <p className="error">{error}</p>}
+          <button className="button arrow wide" type="submit" disabled={busy}>
+            {busy ? "Logging in..." : "Log in"} <Arrow />
+          </button>
+        </form>
+      </main>
+    </PublicFrame>
   );
 }

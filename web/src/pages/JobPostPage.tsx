@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api } from "../api";
 import JobPostView from "../components/JobPostView";
+import PublicFrame from "../components/PublicFrame";
 import type { PublicJob } from "../types";
 
 export default function JobPostPage() {
@@ -16,26 +17,28 @@ export default function JobPostPage() {
   }, [slug]);
 
   return (
-    <main className="content">
-      <p>
-        <Link to="/careers">All open positions</Link>
-      </p>
+    <PublicFrame>
+      <main className="content narrow post-page">
+        <Link className="back-link" to="/careers">
+          ← All open positions
+        </Link>
 
-      {error && <p className="error">{error}</p>}
+        {error && <p className="error">{error}</p>}
+        {!job && !error && <p className="muted">Loading...</p>}
 
-    {job && (
-    <div className="card">
-        <JobPostView {...job} />
-        <p className="muted">
-        Demo vacancy from the TalentSight training project. This is not a real job opening.
-        </p>
-        <h3>How to apply</h3>
-        <p>
-        Send your CV to{" "}
-        <a href={`mailto:${job.apply_email}`}>{job.apply_email}</a>.
-        </p>
-    </div>
-    )}
-    </main>
+        {job && (
+          <article className="card">
+            <JobPostView {...job} />
+            <h3>How to apply</h3>
+            <p>
+              Send your CV to <a href={`mailto:${job.apply_email}`}>{job.apply_email}</a>.
+            </p>
+            <p className="demo-note">
+              Demo vacancy from the TalentSight training project. This is not a real job opening.
+            </p>
+          </article>
+        )}
+      </main>
+    </PublicFrame>
   );
 }
