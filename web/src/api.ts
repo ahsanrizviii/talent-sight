@@ -3,7 +3,7 @@ import { clearToken, getToken } from "./auth";
 export async function api<T>(path: string, options: RequestInit = {}): Promise<T> {
   const headers = new Headers(options.headers);
   headers.set("Content-Type", "application/json");
-
+  
   const token = getToken();
   if (token) {
     headers.set("Authorization", `Bearer ${token}`);
@@ -12,19 +12,14 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
   const response = await fetch(`/api${path}`, { ...options, headers });
 
   if (response.status === 401 && token) {
-    
+
     clearToken();
     window.location.href = "/login";
   }
 
   if (!response.ok) {
     const body = await response.json().catch(() => ({}));
-
-    const message =
-      typeof body.detail === "string"
-        ? body.detail
-        : "Please check the form and try again.";
-    throw new Error(message);
+    throw new Error(errorMessage(body.detail, response.status));
   }
 
   if (response.status === 204) {
@@ -32,4 +27,18 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
   }
 
   return response.json() as Promise<T>;
+}
+
+function errorMessage(detail: unknown, status: number): string {
+  if (typeof detail === "string") {
+    return detail;
+  }
+  
+  if (Array.isArray(detail)) {
+    return detail
+            .map((problem: { msg: string }) => problem.msg.replace("Value error, ", ""))
+      .join(" ");
+  }
+  
+  return `Request failed (${status}).`;
 }
