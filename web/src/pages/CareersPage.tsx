@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api";
+import Arrow from "../components/Arrow";
+import PublicFrame from "../components/PublicFrame";
 import type { PublicJobSummary } from "../types";
 
 export default function CareersPage() {
@@ -13,25 +15,32 @@ export default function CareersPage() {
   }, []);
 
   return (
-    <main className="content">
-      <h1>Careers</h1>
+    <PublicFrame>
+      <section className="hero hero-short">
+        <p className="eyebrow">Careers</p>
+        <h1 className="display">Find your next role.</h1>
+        <p className="lead">Open positions, published by our hiring team.</p>
+      </section>
 
-      {jobs === null && <p className="muted">Loading...</p>}
+      <main className="content">
+        {jobs === null && <p className="muted center">Loading...</p>}
 
-      {jobs?.length === 0 && (
-        <p className="muted">There are no open positions right now.</p>
-      )}
+        {jobs?.length === 0 && (
+          <div className="card muted center">There are no open positions right now.</div>
+        )}
 
-      {jobs?.map((job) => (
-        <div className="card" key={job.slug}>
-          <h2>
-            <Link to={`/careers/${job.slug}`}>{job.title}</Link>
-          </h2>
-          <p className="muted">
-            Minimum experience: {job.min_experience_years} years
-          </p>
+        <div className="job-grid">
+          {jobs?.map((job) => (
+            <Link className="card job-card" key={job.slug} to={`/careers/${job.slug}`}>
+              <h2>{job.title}</h2>
+              <p className="muted">Minimum experience: {job.min_experience_years} years</p>
+              <span className="card-more">
+                View role <Arrow />
+              </span>
+            </Link>
+          ))}
         </div>
-      ))}
-    </main>
+      </main>
+    </PublicFrame>
   );
 }

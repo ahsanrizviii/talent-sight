@@ -1,5 +1,7 @@
 import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
 import { clearToken } from "../auth";
+import Arrow from "./Arrow";
+import SkyScene from "./SkyScene";
 
 export default function Layout() {
   const navigate = useNavigate();
@@ -11,11 +13,8 @@ export default function Layout() {
 
   return (
     <>
+      <SkyScene variant="calm" />
       <header className="topbar">
-        <Link to="/" className="brand">
-          TalentSight
-        </Link>
-
         <nav className="nav">
           <NavLink to="/" end>
             Home
@@ -28,9 +27,15 @@ export default function Layout() {
           </a>
         </nav>
 
-        <button className="button secondary" onClick={logout}>
-          Log out
-        </button>
+        <Link to="/" className="brand">
+          TalentSight
+        </Link>
+
+        <div className="topbar-end">
+          <button className="button arrow" onClick={logout}>
+            Log out <Arrow />
+          </button>
+        </div>
       </header>
 
       <main className="content">
