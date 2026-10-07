@@ -12,7 +12,7 @@ export default function LoginPage() {
   const [busy, setBusy] = useState(false);
 
   async function submit(event: FormEvent) {
-    event.preventDefault(); // stop the browser from reloading the page
+    event.preventDefault(); 
     setBusy(true);
     setError("");
 
