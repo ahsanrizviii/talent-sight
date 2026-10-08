@@ -73,6 +73,15 @@ class CVProfile(BaseModel):
         description="Years of work experience in total, 0 if none"
     )
 
+class Verdict(BaseModel):
+    number: int = Field(description="The requirement's number")
+    verdict: Literal["met", "partially_met", "unmet"]
+    explanation: str = Field(
+        description="One sentence naming the evidence in the profile, or saying there is none"
+    )
+
+class Verdicts(BaseModel):
+    verdicts: list[Verdict]
 
 # ---------- 3. Helpers ----------
 def requirements_of(job: JobProfile) -> list[dict]:
@@ -130,6 +139,12 @@ PROFILE_PROMPT = (
     "Never record age, date of birth, gender, religion, marital status, nationality, photos or family details."
 )
 
+MATCH_PROMPT = (
+    "You check a candidate's profile against job requirements. For EVERY numbered requirement give one verdict: "
+    "met = clear evidence in the profile; partially_met = related or weaker evidence (a similar tool, fewer years); "
+    "unmet = no evidence. Match by meaning, not exact words (PostgreSQL counts for Postgres). "
+    "Judge only from the profile. The explanation names the evidence in one sentence."
+)
 
 # ---------- 4. The steps ----------
 def extract_profile(state: ScreeningState) -> dict:
@@ -169,6 +184,35 @@ def check_profile(state: ScreeningState) -> dict:
         return {"error": "The AI could not read a usable profile from this CV."}
     return {"feedback": "\n".join(problems)}
 
+def match_requirements(state: ScreeningState) -> dict:
+    requirements = state["job"]["requirements"]
+    numbered = "\n".join(
+        f"{i}. {r['requirement']}" for i, r in enumerate(requirements, start=1)
+    )
+    prompt = (
+        f"Profile:\n{json.dumps(state['profile'], ensure_ascii=False)}"
+        f"\n\nRequirements:\n{numbered}"
+    )
+
+    for _ in range(MAX_MATCH_ATTEMPTS):
+        try:
+            answer = ask(MATCH_PROMPT, prompt, Verdicts)
+        except LLMUnavailable as error:
+            return {"error": str(error)}
+
+        by_number = {v.number: v for v in answer.verdicts}
+        if all(i in by_number for i in range(1, len(requirements) + 1)):
+            verdicts = [
+                {
+                    **r,
+                    "verdict": by_number[i].verdict,
+                    "explanation": by_number[i].explanation,
+                }
+                for i, r in enumerate(requirements, start=1)
+            ]
+            return {"verdicts": verdicts}
+
+    return {"error": "The AI did not give a verdict for every requirement."}
 
 def failed(state: ScreeningState) -> dict:
     log.warning(
@@ -178,7 +222,6 @@ def failed(state: ScreeningState) -> dict:
     return {}
 
 
-# ---------- 5. The edges ----------
 def after_extract(state: ScreeningState) -> str:
     return "failed" if has_error(state) else "check_profile"
 
@@ -186,7 +229,11 @@ def after_extract(state: ScreeningState) -> str:
 def after_check(state: ScreeningState) -> str:
     if has_error(state):
         return "failed"
-    return "extract_profile" if state.get("feedback") else END
+    return "extract_profile" if state.get("feedback") else "match_requirements"
+
+
+def after_match(state: ScreeningState) -> str:
+    return "failed" if has_error(state) else END
 
 
 # ---------- 6. The graph ----------
@@ -195,6 +242,7 @@ def get_screening_agent():
     graph = StateGraph(ScreeningState)
     graph.add_node("extract_profile", extract_profile)
     graph.add_node("check_profile", check_profile)
+    graph.add_node("match_requirements", match_requirements)
     graph.add_node("failed", failed)
 
     graph.add_edge(START, "extract_profile")
@@ -206,7 +254,12 @@ def get_screening_agent():
     graph.add_conditional_edges(
         "check_profile",
         after_check,
-        ["extract_profile", "failed", END],
+        ["extract_profile", "match_requirements", "failed"],
+    )
+    graph.add_conditional_edges(
+        "match_requirements",
+        after_match,
+        ["failed", END],
     )
     graph.add_edge("failed", END)
 
