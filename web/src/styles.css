@@ -318,3 +318,87 @@ td a:hover { text-decoration: underline; }
   .lead { font-size: 16px; }
   table { display: block; overflow-x: auto; }
 }
+/* ---------- Candidates (Module 5) ---------- */
+.verdict-met {
+  color: var(--color-success);
+  border-color: rgba(143, 209, 169, 0.45);
+}
+
+.verdict-partially_met {
+  color: #e8c47c;
+  border-color: rgba(232, 196, 124, 0.45);
+}
+
+.verdict-unmet {
+  color: var(--color-danger);
+  border-color: rgba(241, 156, 144, 0.45);
+}
+
+.verdict-counts {
+  display: inline-flex;
+  gap: 12px;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.progress-block {
+  margin-top: 16px;
+}
+
+.progress {
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+
+.progress div {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--color-accent);
+  transition: width 0.4s;
+}
+
+.tabs {
+  display: flex;
+  gap: 6px;
+  margin: 8px 0 12px;
+}
+
+.tabs button {
+  font: inherit;
+  font-size: 14px;
+  padding: 8px 16px;
+  border-radius: 999px;
+  border: 1px solid var(--color-border);
+  background: transparent;
+  color: var(--color-muted);
+  cursor: pointer;
+}
+
+.tabs button[aria-selected="true"] {
+  color: var(--color-text);
+  border-color: var(--color-border-strong);
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.notice {
+  border-color: rgba(241, 156, 144, 0.35);
+}
+
+input[type="file"] {
+  font: inherit;
+  font-size: 14px;
+  color: var(--color-muted);
+}
+
+input[type="file"]::file-selector-button {
+  font: inherit;
+  margin-right: 12px;
+  padding: 8px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--color-border-strong);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--color-text);
+  cursor: pointer;
+}

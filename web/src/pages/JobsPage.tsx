@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+
 import { api } from "../api";
 import type { Job } from "../types";
 
@@ -44,6 +45,7 @@ export default function JobsPage() {
                 <th>Title</th>
                 <th>Status</th>
                 <th>Required skills</th>
+                <th>Candidates</th>
                 <th>Public page</th>
                 <th>Blog</th>
               </tr>
@@ -58,6 +60,9 @@ export default function JobsPage() {
                     <span className="badge">{job.status}</span>
                   </td>
                   <td>{job.required_skills.join(", ")}</td>
+                  <td>
+                    <Link to={`/jobs/${job.id}/candidates`}>Open</Link>
+                  </td>
                   <td>
                     {job.slug ? (
                       <a
