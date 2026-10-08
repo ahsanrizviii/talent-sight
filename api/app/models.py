@@ -113,8 +113,8 @@ class ScreeningRun(Base):
         DateTime(timezone=True), server_default=func.now()
     )
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    seconds: Mapped[float | None] = mapped_column
-    
+    seconds: Mapped[float | None] = mapped_column (Float)
+
 class CandidateScore(Base):
 
     __tablename__ = "candidate_scores"

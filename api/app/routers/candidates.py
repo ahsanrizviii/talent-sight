@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile, status
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -10,7 +10,8 @@ from app.db import get_db
 from app.deps import current_interviewer
 from app.google_api import GoogleError
 from app.intake import add_cv
-from app.models import Candidate, JobProfile, RequirementVerdict
+from app.models import Candidate, JobProfile, RequirementVerdict, ScreeningRun
+from app.screening import run_screening, start_run
 from app.settings import settings
 
 router = APIRouter(
@@ -60,7 +61,19 @@ class CandidateDetail(CandidateRow):
     phone: str
     profile: dict
     verdicts: list[VerdictOut]
-    
+
+class RunOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    status: str
+    total: int
+    done: int
+    failed: int
+    started_at: datetime
+    finished_at: datetime | None
+    seconds: float | None
+
 class ImportResult(BaseModel):
     imported: int
     skipped: int
@@ -178,6 +191,34 @@ def import_from_google_form(job_id: int, db: Session = Depends(get_db)):
         return google_form.import_applications(db, job)
     except GoogleError as error:
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(error))
+
+# ---------- Screening ----------
+@router.post(
+    "/jobs/{job_id}/screening",
+    response_model=RunOut,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+def start_screening(
+    job_id: int,
+    background: BackgroundTasks,
+    again: bool = False,
+    db: Session = Depends(get_db),
+):
+    """Starts screening in the background and answers at once (N4). again=true rescreens everyone."""
+    run, candidate_ids = start_run(db, find_job(db, job_id), again)
+    background.add_task(run_screening, run.id, candidate_ids)
+    return run
+
+
+@router.get("/jobs/{job_id}/screening", response_model=RunOut | None)
+def latest_screening(job_id: int, db: Session = Depends(get_db)):
+    """The progress of the job's latest screening, or null if it never ran."""
+    find_job(db, job_id)
+    return db.scalar(
+        select(ScreeningRun)
+        .where(ScreeningRun.job_profile_id == job_id)
+        .order_by(ScreeningRun.id.desc())
+    )
 
 
 @router.get("/jobs/{job_id}/candidates", response_model=list[CandidateRow])

@@ -9,6 +9,7 @@ from app.db import init_db
 from app.knowledge import load_policies
 from app.logging_setup import setup_logging
 from app.routers import auth, candidates, health, invites, jd_chat, jobs, public
+from app.screening import mark_interrupted_runs
 from app.seed import seed_interviewer
 
 setup_logging()
@@ -21,6 +22,7 @@ async def lifespan(app: FastAPI):
     init_db()
     seed_interviewer()
     load_policies()
+    mark_interrupted_runs()
 
     # Build the agent now: this also creates LangGraph's checkpoint tables. Doing it
     # here, before any request, matters: creating those tables waits until no other
