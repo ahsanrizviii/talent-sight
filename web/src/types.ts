@@ -50,4 +50,77 @@ export type PublicJob = {
   qualifications: string[];
   min_experience_years: number;
   apply_email: string;
+  apply_url: string | null;
+};
+
+export type Verdict = {
+  requirement: string;
+  kind: "skill" | "qualification" | "experience" | "preferred";
+  mandatory: boolean;
+  verdict: "met" | "partially_met" | "unmet";
+  explanation: string;
+};
+
+export type CandidateStatus =
+  | "uploaded"
+  | "queued"
+  | "screened"
+  | "excluded"
+  | "unreadable"
+  | "failed";
+
+export type CandidateRow = {
+  id: number;
+  name: string;
+  email: string;
+  cv_filename: string;
+  source: "upload" | "google_form";
+  status: CandidateStatus;
+  text_method: string;
+  exclusion_reason: string;
+  error: string;
+  created_at: string;
+  met: number;
+  partially_met: number;
+  unmet: number;
+};
+
+type ProfileItem = Record<string, string>;
+
+export type CandidateDetail = CandidateRow & {
+  job_profile_id: number;
+  phone: string;
+  profile: {
+    education?: ProfileItem[];
+    work_history?: ProfileItem[];
+    skills?: string[];
+    certifications?: string[];
+    projects?: ProfileItem[];
+    total_experience_years?: number;
+  };
+  verdicts: Verdict[];
+};
+
+export type UploadResult = {
+  filename: string;
+  ok: boolean;
+  candidate_id: number | null;
+  error: string;
+};
+
+export type ImportResult = {
+  imported: number;
+  skipped: number;
+  failed: { filename: string; error: string }[];
+};
+
+export type ScreeningRun = {
+  id: number;
+  status: "running" | "done" | "interrupted";
+  total: number;
+  done: number;
+  failed: number;
+  started_at: string;
+  finished_at: string | null;
+  seconds: number | null;
 };

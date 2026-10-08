@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
+
 import { api } from "../api";
 import type { Job, JobInput, Weights } from "../types";
 
@@ -26,15 +27,13 @@ const WEIGHT_LABELS: Record<keyof Weights, string> = {
   jd_match: "Overall CV match",
 };
 
-
 const toLines = (items: string[]) => items.join("\n");
 const fromLines = (text: string) => text.split("\n");
 const clean = (items: string[]) =>
   items.map((item) => item.trim()).filter(Boolean);
 
-
 export default function JobFormPage() {
-  const { id } = useParams(); 
+  const { id } = useParams();
   const navigate = useNavigate();
 
   const [job, setJob] = useState<JobInput>(EMPTY_JOB);
@@ -126,7 +125,16 @@ export default function JobFormPage() {
           </a>
         </p>
       )}
-            {saved?.blog_url && (
+
+      {id && (
+        <p>
+          <Link to={`/jobs/${id}/candidates`}>
+            Candidates for this job →
+          </Link>
+        </p>
+      )}
+
+      {saved?.blog_url && (
         <p>
           Blog post:{" "}
           <a href={saved.blog_url} target="_blank" rel="noreferrer">
@@ -247,7 +255,11 @@ export default function JobFormPage() {
           Save
         </button>
         {id && (
-          <button className="button secondary" type="button" onClick={publish}>
+          <button
+            className="button secondary"
+            type="button"
+            onClick={publish}
+          >
             Publish
           </button>
         )}

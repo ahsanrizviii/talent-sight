@@ -32,3 +32,9 @@ assemblyai==1.6.1
 # Tests
 pytest==9.1.1
 httpx==0.28.1
+
+# CV upload and text extraction, with OCR for scanned CVs (Module 5)
+python-multipart==0.0.32
+python-docx==1.2.0
+pypdfium2==5.14.0
+pytesseract==0.3.13

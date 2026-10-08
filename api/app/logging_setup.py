@@ -4,7 +4,8 @@ import sys
 import traceback
 from datetime import datetime, timezone
 
-SAFE_FIELDS = ("event", "path", "status_code", "error_type", "thread_id", "job_id")
+SAFE_FIELDS = ("event", "path", "status_code", "error_type", "thread_id", "job_id",
+"candidate_id", "count", "seconds")
 
 class JsonFormatter(logging.Formatter):
 

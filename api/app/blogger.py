@@ -6,7 +6,7 @@ from pathlib import Path
 from urllib.parse import quote
 
 from mcp import Client, StdioServerParameters
-
+from app.google_form import apply_url
 from app.models import JobProfile
 from app.settings import settings
 
@@ -39,7 +39,17 @@ def build_post_html(job: JobProfile) -> str:
     if job.qualifications:
         parts.append(f"<h3>Qualifications</h3><ul>{items(job.qualifications)}</ul>")
     parts.append(f"<p>Minimum experience: {job.min_experience_years} years</p>")
-    parts.append(f"<p>How to apply: send your CV to {html.escape(settings.careers_email)}</p>")
+    form = apply_url(job.slug)
+    if form:
+        parts.append(
+            f'<p><a href="{html.escape(form)}">Apply with the application form</a> '
+            f"(upload your CV as PDF or DOCX).</p>"
+        )
+    else:
+        parts.append(
+            f"<p>How to apply: send your CV to "
+            f"{html.escape(settings.careers_email)}</p>"
+        )
     return "\n".join(parts)
 
 

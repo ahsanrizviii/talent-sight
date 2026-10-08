@@ -1,7 +1,7 @@
 from datetime import datetime
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import JSON, DateTime, Float, ForeignKey, Integer, String, Text, func
+from sqlalchemy import JSON, DateTime, Float, ForeignKey, Integer, String, Text, func, Boolean
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 DEFAULT_WEIGHTS = {"technical_skills": 40, "experience": 30, "qualifications": 15, "jd_match": 15}
@@ -50,29 +50,70 @@ class PolicyChunk(Base):
 
 
 class Candidate(Base):
+    """One applicant for one job: their CV file, its text, and what the screening found (Module 5)."""
 
     __tablename__ = "candidates"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    job_profile_id: Mapped[int] = mapped_column(ForeignKey("job_profiles.id", ondelete="CASCADE"))
+    job_profile_id: Mapped[int] = mapped_column(
+        ForeignKey("job_profiles.id", ondelete="CASCADE")
+    )
     name: Mapped[str] = mapped_column(String(200), default="")
     email: Mapped[str] = mapped_column(String(255), default="")
-    cv_filename: Mapped[str] = mapped_column(String(255))
+    phone: Mapped[str] = mapped_column(String(50), default="")
+    source: Mapped[str] = mapped_column(String(20), default="upload")  # upload | google_form
+
+    # For Google Form CVs: the form response and Drive file, so the same CV is never imported twice
+    source_ref: Mapped[str | None] = mapped_column(String(255), unique=True)
+    cv_filename: Mapped[str] = mapped_column(String(255))  # the name the file had when it arrived
+    cv_path: Mapped[str] = mapped_column(String(500), default="")  # where we stored it, on the cv_uploads volume
     cv_text: Mapped[str] = mapped_column(Text, default="")
+    text_method: Mapped[str] = mapped_column(String(10), default="")  # text | ocr
+    profile: Mapped[dict] = mapped_column(JSON, default=dict)  # the structured CV the AI extracted
+
+    # uploaded -> screened or excluded; unreadable = no text in the file; failed = the AI step failed
     status: Mapped[str] = mapped_column(String(20), default="uploaded")
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    exclusion_reason: Mapped[str] = mapped_column(Text, default="")
+    error: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
 
 
 class RequirementVerdict(Base):
+    """Met / Partially Met / Unmet for one requirement of one candidate (Module 5)."""
 
     __tablename__ = "requirement_verdicts"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    candidate_id: Mapped[int] = mapped_column(ForeignKey("candidates.id", ondelete="CASCADE"))
+    candidate_id: Mapped[int] = mapped_column(
+        ForeignKey("candidates.id", ondelete="CASCADE")
+    )
     requirement: Mapped[str] = mapped_column(Text)
+    kind: Mapped[str] = mapped_column(String(20))  # skill | preferred | qualification | experience
+    mandatory: Mapped[bool] = mapped_column(Boolean, default=False)
     verdict: Mapped[str] = mapped_column(String(20))  # met | partially_met | unmet
     explanation: Mapped[str] = mapped_column(Text, default="")
 
+
+class ScreeningRun(Base):
+    """One background screening of a job's CVs, with its progress and how long it took (Module 5)."""
+
+    __tablename__ = "screening_runs"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    job_profile_id: Mapped[int] = mapped_column(
+        ForeignKey("job_profiles.id", ondelete="CASCADE")
+    )
+    status: Mapped[str] = mapped_column(String(20), default="running")  # running | done | interrupted
+    total: Mapped[int] = mapped_column(Integer, default=0)
+    done: Mapped[int] = mapped_column(Integer, default=0)
+    failed: Mapped[int] = mapped_column(Integer, default=0)
+    started_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    seconds: Mapped[float | None] = mapped_column (Float)
 
 class CandidateScore(Base):
 

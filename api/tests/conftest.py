@@ -42,6 +42,18 @@ def no_real_embedding_model(monkeypatch):
 def no_real_blog_posts(monkeypatch):
     monkeypatch.setattr(settings, "blogger_blog_id", "")
 
+@pytest.fixture(autouse=True)
+def cv_files_in_temp_folder(monkeypatch, tmp_path):
+    
+    monkeypatch.setattr(settings, "cv_upload_dir", str(tmp_path / "cv_uploads"))
+
+@pytest.fixture(autouse=True)
+def no_real_google_form(monkeypatch):
+    """autouse = applied to every test. Tests must never call the real Google Form or Drive."""
+    monkeypatch.setattr(settings, "google_form_id", "")
+    monkeypatch.setattr(settings, "google_form_url", "")
+    monkeypatch.setattr(settings, "google_form_job_field", "")
+
 
 @pytest.fixture
 def client():

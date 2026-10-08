@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
+
 import { api } from "../api";
+import Arrow from "../components/Arrow";
 import JobPostView from "../components/JobPostView";
 import PublicFrame from "../components/PublicFrame";
 import type { PublicJob } from "../types";
@@ -29,12 +31,36 @@ export default function JobPostPage() {
         {job && (
           <article className="card">
             <JobPostView {...job} />
+
             <h3>How to apply</h3>
-            <p>
-              Send your CV to <a href={`mailto:${job.apply_email}`}>{job.apply_email}</a>.
-            </p>
+
+            {job.apply_url ? (
+              <>
+                <p>
+                  <a
+                    className="button arrow"
+                    href={job.apply_url}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Apply now <Arrow />
+                  </a>
+                </p>
+                <p className="muted small">
+                  The application form asks you to sign in with Google, then upload
+                  your CV as PDF or DOCX.
+                </p>
+              </>
+            ) : (
+              <p>
+                Send your CV to{" "}
+                <a href={`mailto:${job.apply_email}`}>{job.apply_email}</a>.
+              </p>
+            )}
+
             <p className="demo-note">
-              Demo vacancy from the TalentSight training project. This is not a real job opening.
+              Demo vacancy from the TalentSight training project. This is not a real
+              job opening.
             </p>
           </article>
         )}
