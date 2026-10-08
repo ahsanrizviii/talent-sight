@@ -4,6 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db import get_db
+from app.google_form import apply_url
 from app.models import JobProfile
 from app.settings import settings
 
@@ -25,6 +26,7 @@ class PublicJob(BaseModel):
     qualifications: list[str]
     min_experience_years: int
     apply_email: str
+    apply_url: str | None 
 
 
 @router.get("/jobs", response_model=list[PublicJobSummary])
@@ -63,4 +65,6 @@ def read_published_job(slug: str, db: Session = Depends(get_db)):
         qualifications=job.qualifications,
         min_experience_years=job.min_experience_years,
         apply_email=settings.careers_email,
+        apply_url=apply_url(job.slug),
+
     )

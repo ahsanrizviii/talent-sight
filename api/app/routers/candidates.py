@@ -4,10 +4,11 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import select
 from sqlalchemy.orm import Session
-
+from app import google_form
 from app.cv_files import CVFileError, delete_cv_file
 from app.db import get_db
 from app.deps import current_interviewer
+from app.google_api import GoogleError
 from app.intake import add_cv
 from app.models import Candidate, JobProfile, RequirementVerdict
 from app.settings import settings
@@ -59,7 +60,11 @@ class CandidateDetail(CandidateRow):
     phone: str
     profile: dict
     verdicts: list[VerdictOut]
-
+    
+class ImportResult(BaseModel):
+    imported: int
+    skipped: int
+    failed: list[dict]
 
 def find_job(db: Session, job_id: int) -> JobProfile:
     job = db.get(JobProfile, job_id)
@@ -153,6 +158,26 @@ def upload_cvs(
             )
     return results
 
+@router.post("/jobs/{job_id}/candidates/import", response_model=ImportResult)
+def import_from_google_form(job_id: int, db: Session = Depends(get_db)):
+    """Fetches the CVs sent through the Google Form for this job."""
+    job = find_job(db, job_id)
+
+    if not google_form.is_enabled():
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "The Google Form import is not set up.",
+        )
+    if job.status != "published":
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "Publish the job first: applicants need its link.",
+        )
+
+    try:
+        return google_form.import_applications(db, job)
+    except GoogleError as error:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(error))
 
 
 @router.get("/jobs/{job_id}/candidates", response_model=list[CandidateRow])

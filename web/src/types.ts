@@ -50,4 +50,5 @@ export type PublicJob = {
   qualifications: string[];
   min_experience_years: number;
   apply_email: string;
+  apply_url: string | null;
 };
