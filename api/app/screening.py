@@ -1,4 +1,3 @@
-
 import logging
 import time
 from datetime import datetime, timezone
@@ -9,7 +8,8 @@ from sqlalchemy.orm import Session
 
 from app.agents.screening_agent import get_screening_agent, job_for_agent
 from app.db import SessionLocal
-from app.models import Candidate, JobProfile, RequirementVerdict, ScreeningRun
+from app.models import Candidate, CandidateScore, JobProfile, RequirementVerdict, ScreeningRun
+from app.scoring import save_scores
 
 log = logging.getLogger("talentsight.screening")
 
@@ -52,13 +52,24 @@ def start_run(
     return run, [c.id for c in candidates]
 
 
-def save_result(db: Session, candidate: Candidate, result: dict) -> None:
+def save_result(
+    db: Session,
+    candidate: Candidate,
+    result: dict,
+    weights: dict,
+) -> None:
     """Stores what the agent found for one candidate."""
     db.execute(
         delete(RequirementVerdict).where(
             RequirementVerdict.candidate_id == candidate.id
         )
     )
+    db.execute(
+        delete(CandidateScore).where(
+            CandidateScore.candidate_id == candidate.id
+        )
+    )
+
     if result.get("error"):
         candidate.status, candidate.error = "failed", result["error"]
         return
@@ -72,6 +83,8 @@ def save_result(db: Session, candidate: Candidate, result: dict) -> None:
     for verdict in result["verdicts"]:
         db.add(RequirementVerdict(candidate_id=candidate.id, **verdict))
 
+    if result.get("scores"):
+        save_scores(db, candidate, result["scores"], weights)
     candidate.status = "excluded" if result["excluded"] else "screened"
     candidate.exclusion_reason = result["exclusion_reason"]
     candidate.error = ""
@@ -81,7 +94,7 @@ def screen_candidate(db: Session, candidate: Candidate, job: JobProfile) -> None
     result = get_screening_agent().invoke(
         {"cv_text": candidate.cv_text, "job": job_for_agent(job)}
     )
-    save_result(db, candidate, result)
+    save_result(db, candidate, result, job.weights)
 
 
 def run_screening(run_id: int, candidate_ids: list[int]) -> None:
@@ -122,15 +135,16 @@ def run_screening(run_id: int, candidate_ids: list[int]) -> None:
         run.finished_at = datetime.now(timezone.utc)
         run.seconds = round(time.monotonic() - started, 1)
         db.commit()
-        log.info(
-            "screening finished",
-            extra={
-                "event": "screening_done",
-                "job_id": job.id,
-                "count": run.total,
-                "seconds": run.seconds,
-            },
-        )
+
+    log.info(
+        "screening finished",
+        extra={
+            "event": "screening_done",
+            "job_id": job.id,
+            "count": run.total,
+            "seconds": run.seconds,
+        },
+    )
 
 
 def mark_interrupted_runs() -> None:

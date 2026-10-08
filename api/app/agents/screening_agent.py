@@ -62,6 +62,10 @@ class CVProfile(BaseModel):
         description="Technical and professional skills named in the CV"
     )
     certifications: list[str]
+    languages: list[str] = Field(
+        default_factory=list,
+        description="Languages with the level exactly as the CV states it, e.g. 'English: fluent', 'Japanese: JLPT N3'",
+    )
     projects: list[Project]
     total_experience_years: float = Field(
         description="Years of work experience in total, 0 if none"
@@ -141,6 +145,8 @@ def ask(system_prompt: str, user_prompt: str, answer_shape):
 PROFILE_PROMPT = (
     "You read CVs and copy their facts into a structured profile. Copy facts exactly as the CV gives them; "
     "never guess or add anything. Leave a field empty when the CV does not give it. "
+    "Record spoken and written languages with the level exactly as written (for example English: fluent, "
+    "Japanese: JLPT N3); a language is a skill, not a personal attribute. "
     "Never record age, date of birth, gender, religion, marital status, nationality, photos or family details."
 )
 

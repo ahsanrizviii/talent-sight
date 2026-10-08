@@ -7,6 +7,7 @@ from app.db import get_db
 from app.deps import current_interviewer
 from app.job_profiles import JobIn, JobOut, publish_job_post
 from app.models import JobProfile
+from app.scoring import rescore_job
 
 router = APIRouter(prefix="/api/jobs", tags=["jobs"], dependencies=[Depends(current_interviewer)])
 

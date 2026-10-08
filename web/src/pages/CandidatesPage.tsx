@@ -238,15 +238,16 @@ export default function CandidatesPage() {
               <tr>
                 <th>{tab === "ranked" ? "#" : ""}</th>
                 <th>Candidate</th>
+                {tab === "ranked" && <th>Score</th>}
                 <th>Requirements</th>
                 <th>{tab === "excluded" ? "Reason" : "Status"}</th>
                 <th>From</th>
               </tr>
             </thead>
             <tbody>
-              {shown.map((c, index) => (
+              {shown.map((c) => (
                 <tr key={c.id}>
-                  <td className="muted">{tab === "ranked" ? index + 1 : ""}</td>
+                  <td className="muted">{c.rank ?? ""}</td>
                   <td>
                     <Link to={`/candidates/${c.id}`}>
                       {c.name || c.cv_filename}
@@ -255,6 +256,9 @@ export default function CandidatesPage() {
                       {c.email || c.cv_filename}
                     </div>
                   </td>
+                  {tab === "ranked" && (
+                    <td className="score-cell">{c.overall ?? "—"}</td>
+                  )}
                   <td>
                     {c.met + c.partially_met + c.unmet > 0 ? (
                       <span className="verdict-counts">

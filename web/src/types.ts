@@ -83,6 +83,8 @@ export type CandidateRow = {
   met: number;
   partially_met: number;
   unmet: number;
+  overall: number | null;
+  rank: number | null;
 };
 
 type ProfileItem = Record<string, string>;

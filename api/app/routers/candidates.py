@@ -10,7 +10,7 @@ from app.db import get_db
 from app.deps import current_interviewer
 from app.google_api import GoogleError
 from app.intake import add_cv
-from app.models import Candidate, JobProfile, RequirementVerdict, ScreeningRun
+from app.models import Candidate, CandidateScore, JobProfile, RequirementVerdict, ScreeningRun
 from app.screening import run_screening, start_run
 from app.settings import settings
 
@@ -54,6 +54,8 @@ class CandidateRow(BaseModel):
     met: int = 0
     partially_met: int = 0
     unmet: int = 0
+    overall: float | None = None  
+    rank: int | None = None  
 
 
 class CandidateDetail(CandidateRow):
@@ -108,10 +110,15 @@ def counts(verdicts: list[RequirementVerdict]) -> dict:
     }
 
 
+def score_of(db: Session, candidate_id: int) -> CandidateScore | None:
+    return db.scalar(select(CandidateScore).where(CandidateScore.candidate_id == candidate_id))
+
+
 def to_row(db: Session, candidate: Candidate) -> CandidateRow:
     base = CandidateRow.model_validate(candidate).model_dump()
-    return CandidateRow(**{**base, **counts(verdicts_of(db, candidate.id))})
-
+    score = score_of(db, candidate.id)
+    overall = {"overall": score.overall} if score else {}
+    return CandidateRow(**{**base, **counts(verdicts_of(db, candidate.id)), **overall})
 
 def to_detail(db: Session, candidate: Candidate) -> CandidateDetail:
     verdicts = verdicts_of(db, candidate.id)
@@ -126,11 +133,10 @@ def to_detail(db: Session, candidate: Candidate) -> CandidateDetail:
 
 
 def ranking_key(item: CandidateRow):
-    """Screened first, best match first; then excluded; then the rest."""
+    """Screened first, highest total score first (Q&A 46); then excluded; then the rest."""
     group = {"screened": 0, "excluded": 1}.get(item.status, 2)
-    return (group, -item.met, -item.partially_met, item.name.lower())
-
-
+    overall = item.overall if item.overall is not None else -1
+    return (group, -overall, -item.met, item.name.lower())
 
 @router.post("/jobs/{job_id}/candidates", response_model=list[UploadResult])
 def upload_cvs(
@@ -227,7 +233,10 @@ def list_candidates(job_id: int, db: Session = Depends(get_db)):
     candidates = db.scalars(
         select(Candidate).where(Candidate.job_profile_id == job_id)
     ).all()
-    return sorted((to_row(db, c) for c in candidates), key=ranking_key)
+    rows = sorted((to_row(db, c) for c in candidates), key=ranking_key)
+    for place, item in enumerate((r for r in rows if r.status == "screened"), start=1):
+        item.rank = place  # the ranked shortlist
+    return rows
 
 
 @router.get("/candidates/{candidate_id}", response_model=CandidateDetail)
