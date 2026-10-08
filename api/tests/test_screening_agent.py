@@ -104,3 +104,16 @@ def test_requirements_come_from_the_job_profile():
         ("At least 3 years of relevant work experience", "experience", True),
         ("Docker", "preferred", False),
     ]
+
+# ---------- Task 5.2.3: the mandatory-requirement gate ----------
+def test_unmet_mandatory_requirement_excludes(monkeypatch):
+    use_fake_llm(monkeypatch, [GOOD_PROFILE], [verdicts("unmet", "met")])
+    result = run_agent()
+    assert result["excluded"] is True
+    assert result["exclusion_reason"] == "Mandatory requirement not met: Python"
+
+
+def test_unmet_preferred_requirement_does_not_exclude(monkeypatch):
+    use_fake_llm(monkeypatch, [GOOD_PROFILE], [verdicts("met", "unmet")])
+    result = run_agent()
+    assert result["excluded"] is False

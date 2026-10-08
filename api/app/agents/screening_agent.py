@@ -214,6 +214,20 @@ def match_requirements(state: ScreeningState) -> dict:
 
     return {"error": "The AI did not give a verdict for every requirement."}
 
+def mandatory_gate(state: ScreeningState) -> dict:
+    """Excludes the candidate if any mandatory requirement is unmet. Plain code (Q&A 9)."""
+    missing = [
+        v["requirement"]
+        for v in state["verdicts"]
+        if v["mandatory"] and v["verdict"] == "unmet"
+    ]
+    if missing:
+        return {
+            "excluded": True,
+            "exclusion_reason": "Mandatory requirement not met: " + "; ".join(missing),
+        }
+    return {"excluded": False, "exclusion_reason": ""}
+
 def failed(state: ScreeningState) -> dict:
     log.warning(
         "screening agent stopped with an error",
@@ -233,16 +247,16 @@ def after_check(state: ScreeningState) -> str:
 
 
 def after_match(state: ScreeningState) -> str:
-    return "failed" if has_error(state) else END
+    return "failed" if has_error(state) else "mandatory_gate"
 
 
-# ---------- 6. The graph ----------
 @lru_cache
 def get_screening_agent():
     graph = StateGraph(ScreeningState)
     graph.add_node("extract_profile", extract_profile)
     graph.add_node("check_profile", check_profile)
     graph.add_node("match_requirements", match_requirements)
+    graph.add_node("mandatory_gate", mandatory_gate)
     graph.add_node("failed", failed)
 
     graph.add_edge(START, "extract_profile")
@@ -259,8 +273,9 @@ def get_screening_agent():
     graph.add_conditional_edges(
         "match_requirements",
         after_match,
-        ["failed", END],
+        ["mandatory_gate", "failed"],
     )
+    graph.add_edge("mandatory_gate", END)
     graph.add_edge("failed", END)
 
-    return graph.compile()  # no checkpointer: a screening never pauses for a person
+    return graph.compile()
