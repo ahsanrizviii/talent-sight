@@ -42,6 +42,10 @@ def no_real_embedding_model(monkeypatch):
 def no_real_blog_posts(monkeypatch):
     monkeypatch.setattr(settings, "blogger_blog_id", "")
 
+@pytest.fixture(autouse=True)
+def cv_files_in_temp_folder(monkeypatch, tmp_path):
+    
+    monkeypatch.setattr(settings, "cv_upload_dir", str(tmp_path / "cv_uploads"))
 
 @pytest.fixture
 def client():
