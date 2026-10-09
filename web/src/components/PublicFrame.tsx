@@ -1,36 +1,19 @@
 import type { ReactNode } from "react";
-import { Link, NavLink, useLocation } from "react-router-dom";
-import Arrow from "./Arrow";
+import { Link } from "react-router-dom";
 import SkyScene from "./SkyScene";
 
-// The frame around the public pages (login, careers): the full scene and a simple header.
+// The frame around the login page: the full scene and the brand.
+// The site is for the hiring team only; candidates apply from the blog post.
 export default function PublicFrame({ children }: { children: ReactNode }) {
-  const onLoginPage = useLocation().pathname.startsWith("/login");
-
   return (
     <>
       <SkyScene />
       <header className="topbar">
-        <nav className="nav">
-          <NavLink to="/careers">Open positions</NavLink>
-          <NavLink to="/login">Interviewer login</NavLink>
-        </nav>
-
-        <Link to="/careers" className="brand">
+        <nav className="nav" />
+        <Link to="/login" className="brand">
           TalentSight
         </Link>
-
-        <div className="topbar-end">
-          {onLoginPage ? (
-            <Link className="button arrow" to="/careers">
-              View open positions <Arrow />
-            </Link>
-          ) : (
-            <Link className="button arrow" to="/login">
-              Interviewer login <Arrow />
-            </Link>
-          )}
-        </div>
+        <div className="topbar-end" />
       </header>
       {children}
     </>

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Link, useParams } from "react-router-dom";
 
 import { api } from "../api";
+import JobPipeline from "../components/JobPipeline";
 import type {
   CandidateRow,
   ImportResult,
@@ -128,6 +129,7 @@ export default function CandidatesPage() {
       </p>
 
       <h1>Candidates</h1>
+      {job && <JobPipeline job={job} candidates={candidates} />}
 
       <div className="card">
         <p className="eyebrow">Add CVs</p>

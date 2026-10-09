@@ -21,10 +21,6 @@ export default function Layout() {
           </NavLink>
           <NavLink to="/jobs">Jobs</NavLink>
           <NavLink to="/jd-chat">Write a job with AI</NavLink>
-          <NavLink to="/prototype/video">Video test</NavLink>
-          <a href="/careers" target="_blank" rel="noreferrer">
-            Careers page
-          </a>
         </nav>
 
         <Link to="/" className="brand">
