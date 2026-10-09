@@ -158,13 +158,17 @@ MATCH_PROMPT = (
 )
 
 SCORE_PROMPT = (
-    "You score a candidate for a job from 0 to 100 on four dimensions. "
-    "technical_skills: how well their skills cover the required and preferred skills. "
-    "experience: years and relevance of their work to this job. "
-    "qualifications: degrees and certifications against the required ones. "
-    "jd_match: an ATS-style match of the whole CV against the job description's key terms, tools and duties, by meaning. "
-    "Scale: 90-100 clearly exceeds, 70-89 meets, 50-69 partly meets, below 50 weak. "
-    "Use only the evidence given. Each justification names that evidence in one or two sentences."
+    "You score a candidate for a job on four dimensions, each from 0 to 100 in steps of 5. "
+    "Follow this rubric exactly and use only the evidence given. "
+    "technical_skills: the share of required skills that are Met (Partially Met counts half), "
+    "plus up to 10 points for preferred skills. "
+    "experience: 60 = exactly the minimum years of relevant work; add 5 per extra relevant year, at most 100; "
+    "take off 15 per missing year, and up to 15 if the work is only partly relevant. "
+    "qualifications: 80 = the required degree or an accepted equivalent; 90-100 = more than required "
+    "(a related master's degree or relevant certifications); 50 = only a related degree; 20 = none. "
+    "jd_match: how many of the job description's key duties and tools appear in the CV, by meaning: "
+    "90 almost all, 75 most, 60 about half, 40 a few, 20 almost none. "
+    "Each justification names the evidence in one or two sentences."
 )
 
 MAX_SCORE_ATTEMPTS = 2  # one retry if a score is outside 0-100
@@ -266,6 +270,8 @@ def score_candidate(state: ScreeningState) -> dict:
             return {"error": str(error)}
         scores = answer.model_dump()
         if all(0 <= s["score"] <= 100 for s in scores.values()):
+            for s in scores.values():
+                s["score"] = int(5 * round(s["score"] / 5))  # steps of 5: small wobbles do not change the total
             return {"scores": scores}
     return {"error": "The AI gave a score outside 0-100."}
 
