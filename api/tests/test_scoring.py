@@ -115,3 +115,21 @@ def test_original_cv_can_be_opened(client, auth_headers, monkeypatch):
     assert response.status_code == 200
     assert response.headers["content-type"] == "application/pdf"
     assert response.content.startswith(b"%PDF")
+
+# ---------- Task 6.2.1: repeat-run test (B2) ----------
+
+from app.agents import screening_agent  # noqa: E402
+
+
+def test_scoring_asks_the_same_question_every_time(monkeypatch):
+    """Our side of B2: the same CV and job always give the same prompt, and the AI runs
+    at temperature 0. scripts/repeat_score.py checks the real AI three times."""
+    fake = use_fake_llm(monkeypatch, [], [])
+    state = {
+        "job": {"title": "Backend Developer", "description": "Python APIs", "requirements": []},
+        "profile": GOOD_PROFILE.model_dump(),
+        "verdicts": [{"requirement": "Python", "verdict": "met", "explanation": "In the CV."}],
+    }
+    results = [screening_agent.score_candidate(state) for _ in range(3)]
+    assert fake.prompts[0] == fake.prompts[1] == fake.prompts[2]
+    assert results[0] == results[1] == results[2]
