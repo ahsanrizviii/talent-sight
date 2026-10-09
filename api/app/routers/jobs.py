@@ -7,6 +7,7 @@ from app.db import get_db
 from app.deps import current_interviewer
 from app.job_profiles import JobIn, JobOut, publish_job_post
 from app.models import JobProfile
+from app.scoring import rescore_job
 
 router = APIRouter(prefix="/api/jobs", tags=["jobs"], dependencies=[Depends(current_interviewer)])
 
@@ -38,6 +39,7 @@ def update_job(job_id: int, body: JobIn, db: Session = Depends(get_db)):
     for field, value in body.model_dump().items():
         setattr(job, field, value)
     db.commit()
+    rescore_job(db, job)  # new weights: every candidate's total and the ranking follow at once
     db.refresh(job)
     return job
 

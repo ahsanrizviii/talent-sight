@@ -40,6 +40,7 @@ def ask_llm(
             max_retries=max_retries,  # retries with growing waits when Groq is busy or rate-limited
             # gpt-oss models "think" before answering; low keeps that short, which saves tokens
             reasoning_effort="low" if name.startswith("openai/gpt-oss") else None,
+            model_kwargs={"seed": 42},  # same seed every call, so repeated questions get the same answer more often (B2)
         )
         structured_model = chat.with_structured_output(answer_shape, method="json_schema")
         answer = structured_model.invoke(

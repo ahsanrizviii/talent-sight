@@ -1,10 +1,3 @@
-"""Screening Agent: reads one CV and checks it against the job's requirements (Modules 5 and 6).
-
-Steps: extract_profile -> check_profile (retry edge back to extract_profile) -> match_requirements
--> mandatory_gate -> score_candidate (Module 6). get_screening_agent() at the end draws the arrows.
-
-Any step that fails goes to "failed" -> END.
-"""
 import json
 import logging
 from functools import lru_cache
@@ -34,6 +27,7 @@ class ScreeningState(AgentState, total=False):
     verdicts: list[dict]
     excluded: bool
     exclusion_reason: str
+    scores: dict 
 
 
 # ---------- 2. The answer shapes ----------
@@ -68,6 +62,10 @@ class CVProfile(BaseModel):
         description="Technical and professional skills named in the CV"
     )
     certifications: list[str]
+    languages: list[str] = Field(
+        default_factory=list,
+        description="Languages with the level exactly as the CV states it, e.g. 'English: fluent', 'Japanese: JLPT N3'",
+    )
     projects: list[Project]
     total_experience_years: float = Field(
         description="Years of work experience in total, 0 if none"
@@ -82,6 +80,17 @@ class Verdict(BaseModel):
 
 class Verdicts(BaseModel):
     verdicts: list[Verdict]
+
+class DimensionScore(BaseModel):
+    score: int = Field(description="0 to 100")
+    justification: str = Field(description="One or two sentences naming the evidence for this score")
+
+
+class Scores(BaseModel):
+    technical_skills: DimensionScore
+    experience: DimensionScore
+    qualifications: DimensionScore
+    jd_match: DimensionScore
 
 # ---------- 3. Helpers ----------
 def requirements_of(job: JobProfile) -> list[dict]:
@@ -136,6 +145,8 @@ def ask(system_prompt: str, user_prompt: str, answer_shape):
 PROFILE_PROMPT = (
     "You read CVs and copy their facts into a structured profile. Copy facts exactly as the CV gives them; "
     "never guess or add anything. Leave a field empty when the CV does not give it. "
+    "Record spoken and written languages with the level exactly as written (for example English: fluent, "
+    "Japanese: JLPT N3); a language is a skill, not a personal attribute. "
     "Never record age, date of birth, gender, religion, marital status, nationality, photos or family details."
 )
 
@@ -145,6 +156,22 @@ MATCH_PROMPT = (
     "unmet = no evidence. Match by meaning, not exact words (PostgreSQL counts for Postgres). "
     "Judge only from the profile. The explanation names the evidence in one sentence."
 )
+
+SCORE_PROMPT = (
+    "You score a candidate for a job on four dimensions, each from 0 to 100 in steps of 5. "
+    "Follow this rubric exactly and use only the evidence given. "
+    "technical_skills: the share of required skills that are Met (Partially Met counts half), "
+    "plus up to 10 points for preferred skills. "
+    "experience: 60 = exactly the minimum years of relevant work; add 5 per extra relevant year, at most 100; "
+    "take off 15 per missing year, and up to 15 if the work is only partly relevant. "
+    "qualifications: 80 = the required degree or an accepted equivalent; 90-100 = more than required "
+    "(a related master's degree or relevant certifications); 50 = only a related degree; 20 = none. "
+    "jd_match: how many of the job description's key duties and tools appear in the CV, by meaning: "
+    "90 almost all, 75 most, 60 about half, 40 a few, 20 almost none. "
+    "Each justification names the evidence in one or two sentences."
+)
+
+MAX_SCORE_ATTEMPTS = 2  # one retry if a score is outside 0-100
 
 # ---------- 4. The steps ----------
 def extract_profile(state: ScreeningState) -> dict:
@@ -228,6 +255,27 @@ def mandatory_gate(state: ScreeningState) -> dict:
         }
     return {"excluded": False, "exclusion_reason": ""}
 
+def score_candidate(state: ScreeningState) -> dict:
+    """Module 6: four scores with a justification each (Q&A 11, 20). Only for candidates who passed the gate."""
+    job = state["job"]
+    verdicts = "\n".join(f"- {v['requirement']}: {v['verdict']} ({v['explanation']})" for v in state["verdicts"])
+    prompt = (
+        f"Job: {job['title']}\n\nJob description:\n{job['description'][:3000]}\n\n"
+        f"Requirement check:\n{verdicts}\n\nProfile:\n{json.dumps(state['profile'], ensure_ascii=False)}"
+    )
+    for _ in range(MAX_SCORE_ATTEMPTS):
+        try:
+            answer = ask(SCORE_PROMPT, prompt, Scores)
+        except LLMUnavailable as error:
+            return {"error": str(error)}
+        scores = answer.model_dump()
+        if all(0 <= s["score"] <= 100 for s in scores.values()):
+            for s in scores.values():
+                s["score"] = int(5 * round(s["score"] / 5))  # steps of 5: small wobbles do not change the total
+            return {"scores": scores}
+    return {"error": "The AI gave a score outside 0-100."}
+
+
 def failed(state: ScreeningState) -> dict:
     log.warning(
         "screening agent stopped with an error",
@@ -250,6 +298,17 @@ def after_match(state: ScreeningState) -> str:
     return "failed" if has_error(state) else "mandatory_gate"
 
 
+def after_gate(state: ScreeningState) -> str:
+    return END if state["excluded"] else "score_candidate"
+
+
+def after_score(state: ScreeningState) -> str:
+    return "failed" if has_error(state) else END
+
+
+# ---------- 6. The graph ----------
+
+
 @lru_cache
 def get_screening_agent():
     graph = StateGraph(ScreeningState)
@@ -257,25 +316,14 @@ def get_screening_agent():
     graph.add_node("check_profile", check_profile)
     graph.add_node("match_requirements", match_requirements)
     graph.add_node("mandatory_gate", mandatory_gate)
+    graph.add_node("score_candidate", score_candidate)
     graph.add_node("failed", failed)
 
     graph.add_edge(START, "extract_profile")
-    graph.add_conditional_edges(
-        "extract_profile",
-        after_extract,
-        ["check_profile", "failed"],
-    )
-    graph.add_conditional_edges(
-        "check_profile",
-        after_check,
-        ["extract_profile", "match_requirements", "failed"],
-    )
-    graph.add_conditional_edges(
-        "match_requirements",
-        after_match,
-        ["mandatory_gate", "failed"],
-    )
-    graph.add_edge("mandatory_gate", END)
+    graph.add_conditional_edges("extract_profile", after_extract, ["check_profile", "failed"])
+    graph.add_conditional_edges("check_profile", after_check, ["extract_profile", "match_requirements", "failed"])
+    graph.add_conditional_edges("match_requirements", after_match, ["mandatory_gate", "failed"])
+    graph.add_conditional_edges("mandatory_gate", after_gate, ["score_candidate", END])
+    graph.add_conditional_edges("score_candidate", after_score, ["failed", END])
     graph.add_edge("failed", END)
-
-    return graph.compile()
+    return graph.compile()  
