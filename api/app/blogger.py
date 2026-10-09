@@ -84,11 +84,12 @@ def post_job(job: JobProfile) -> str | None:
     if not is_enabled():
         return None
     try:
-        url = call_tool("publish_job", {"title": job.title, "html": build_post_html(job), "label": job.slug})
-    except Exception as error:  
+        text = call_tool("publish_job", {"title": job.title, "html": build_post_html(job), "label": job.slug})
+    except Exception as error:  # posting is an extra: never let it break publishing
         log.warning("blogger post failed", extra={"event": "blogger_failed", "error_type": type(error).__name__})
         return None
-    log.info("job posted on blogger", extra={"event": "blogger_posted", "job_id": job.id})
+    url = text.strip() or blog_url_for(job.slug) or ""
+    log.info(f"job posted on blogger, tool said {text!r}, using {url!r}", extra={"event": "blogger_posted", "job_id": job.id})
     return url
 
 

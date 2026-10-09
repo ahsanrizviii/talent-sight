@@ -14,7 +14,9 @@ function aiMessage(chat: ChatState): string {
       : "Done. The job is saved and published, but the blog post could not be made.";
   if (chat.kind === "questions")
     return "I need a few more details:\n- " + chat.questions.join("\n- ");
-  return "Here is my draft, based on your brief and the company's hiring policies. Approve it, or tell me what to change.";
+    return chat.policies?.length
+    ? "Here is my draft, based on your brief and the company's hiring policies. Approve it, or tell me what to change."
+    : "Here is my draft, based on your brief. No company hiring policies are loaded. Approve it, or tell me what to change.";
 }
 
 // "[policy-file.md] The paragraph..." -> source and text

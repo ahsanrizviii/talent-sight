@@ -30,6 +30,7 @@ class JDState(AgentState, total=False):
     draft_attempts: int  
     job_id: int  
     slug: str  
+    blog_url: str  # the post on the public blog, "" if it was not posted
 
 
 class BriefCheck(BaseModel):
