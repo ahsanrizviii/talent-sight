@@ -9,12 +9,41 @@ type Message = { from: "you" | "ai"; text: string };
 function aiMessage(chat: ChatState): string {
   if (chat.status === "failed") return chat.message;
   if (chat.status === "done")
-    return "Done. The job is saved and published on the careers page.";
+    return chat.blog_url
+      ? "Done. The job is saved, published and posted on the blog."
+      : "Done. The job is saved and published, but the blog post could not be made.";
   if (chat.kind === "questions")
     return "I need a few more details:\n- " + chat.questions.join("\n- ");
   return "Here is my draft, based on your brief and the company's hiring policies. Approve it, or tell me what to change.";
 }
 
+// "[policy-file.md] The paragraph..." -> source and text
+function splitPolicy(policy: string): { source: string; text: string } {
+  const match = policy.match(/^\[(.+?)\]\s*([\s\S]*)$/);
+  return match ? { source: match[1], text: match[2] } : { source: "", text: policy };
+}
+
+function PolicySources({ policies }: { policies: string[] }) {
+  return (
+    <div className="card">
+      <h2>Company policy used</h2>
+      <p className="muted small">
+        The AI searched the company's hiring policies (RAG), found these paragraphs, and wrote the draft to follow them.
+      </p>
+      <ul className="policies">
+        {policies.map((policy, index) => {
+          const { source, text } = splitPolicy(policy);
+          return (
+            <li key={index}>
+              {source && <span className="badge">{source}</span>}
+              <span className="small">{text}</span>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
 
 export default function JdChatPage() {
   const [chat, setChat] = useState<ChatState | null>(null);
@@ -39,15 +68,9 @@ export default function JdChatPage() {
           });
 
       setChat(next);
-      setMessages((old) => [
-        ...old,
-        { from: "ai", text: aiMessage(next) },
-      ]);
+      setMessages((old) => [...old, { from: "ai", text: aiMessage(next) }]);
     } catch (err) {
-      setMessages((old) => [
-        ...old,
-        { from: "ai", text: (err as Error).message },
-      ]);
+      setMessages((old) => [...old, { from: "ai", text: (err as Error).message }]);
     } finally {
       setBusy(false);
     }
@@ -59,8 +82,7 @@ export default function JdChatPage() {
   }
 
   const finished = chat?.status === "done" || chat?.status === "failed";
-  const waitingForApproval =
-    chat?.status === "waiting" && chat.kind === "draft";
+  const waitingForApproval = chat?.status === "waiting" && chat.kind === "draft";
 
   return (
     <>
@@ -80,9 +102,7 @@ export default function JdChatPage() {
         ))}
 
         {busy && (
-          <p className="muted">
-            The AI is working... this can take up to a minute.
-          </p>
+          <p className="muted">The AI is working... this can take up to a minute.</p>
         )}
       </div>
 
@@ -106,19 +126,25 @@ export default function JdChatPage() {
         </div>
       )}
 
+      {waitingForApproval && !!chat.policies?.length && (
+        <PolicySources policies={chat.policies} />
+      )}
+
       {chat?.status === "done" && (
         <div className="card row">
           <Link className="button secondary" to={`/jobs/${chat.job_id}`}>
             Open the job profile
           </Link>
-          <a
-            className="button secondary"
-            href={`/careers/${chat.slug}`}
-            target="_blank"
-            rel="noreferrer"
-          >
-            See the public page
-          </a>
+          {chat.blog_url && (
+            <a
+              className="button secondary"
+              href={chat.blog_url}
+              target="_blank"
+              rel="noreferrer"
+            >
+              View the blog post
+            </a>
+          )}
         </div>
       )}
 
