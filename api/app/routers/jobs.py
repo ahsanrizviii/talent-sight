@@ -39,6 +39,7 @@ def update_job(job_id: int, body: JobIn, db: Session = Depends(get_db)):
     for field, value in body.model_dump().items():
         setattr(job, field, value)
     db.commit()
+    rescore_job(db, job)  # new weights: every candidate's total and the ranking follow at once
     db.refresh(job)
     return job
 
