@@ -5,7 +5,7 @@ from pathlib import Path
 
 from fastembed import TextEmbedding
 from pypdf import PdfReader
-from sqlalchemy import func, select
+from sqlalchemy import func, select, delete
 from sqlalchemy.orm import Session
 
 from app.db import SessionLocal
@@ -58,18 +58,20 @@ def split_policy(text: str) -> list[str]:
 
 
 def load_policies() -> None:
+    """Makes policy_chunks match the PDF. Runs at every start, so an edited or removed PDF takes effect."""
+    chunks = split_policy(read_pdf_text(POLICY_FILE)) if POLICY_FILE.exists() else []
     with SessionLocal() as db:
-        if db.scalar(select(func.count()).select_from(PolicyChunk)):
-            return
-        if not POLICY_FILE.exists():
-            log.warning("hiring policy file not found", extra={"event": "policies_missing"})
-            return
-        chunks = split_policy(read_pdf_text(POLICY_FILE))
-        for chunk, vector in zip(chunks, embed_texts(chunks)):
-            db.add(PolicyChunk(source=POLICY_FILE.name, text=chunk, embedding=vector))
+        stored = list(db.scalars(select(PolicyChunk.text).order_by(PolicyChunk.id)))
+        if stored == chunks:
+            return  # nothing changed
+        db.execute(delete(PolicyChunk))
+        if chunks:
+            for chunk, vector in zip(chunks, embed_texts(chunks)):
+                db.add(PolicyChunk(source=POLICY_FILE.name, text=chunk, embedding=vector))
+        else:
+            log.warning("hiring policy file not found or empty", extra={"event": "policies_missing"})
         db.commit()
-    log.info("hiring policies loaded", extra={"event": "policies_loaded"})
-
+    log.info("hiring policies loaded", extra={"event": "policies_loaded", "count": len(chunks)})
 
 def search_policies(db: Session, question: str, limit: int = 5) -> list[PolicyChunk]:
     vector = embed_question(question)
