@@ -1,3 +1,6 @@
+// The shapes of the data the API sends and receives.
+// They mirror the Pydantic models in the api folder.
+
 export type Weights = {
   technical_skills: number;
   experience: number;
@@ -30,6 +33,7 @@ export type ChatState = {
   kind: "questions" | "draft" | null;
   questions: string[];
   draft: JobInput | null;
+  policies?: string[]; // the company policy paragraphs the AI used (RAG)
   job_id: number | null;
   slug: string | null;
   blog_url: string | null;
@@ -61,13 +65,7 @@ export type Verdict = {
   explanation: string;
 };
 
-export type CandidateStatus =
-  | "uploaded"
-  | "queued"
-  | "screened"
-  | "excluded"
-  | "unreadable"
-  | "failed";
+export type CandidateStatus = "uploaded" | "queued" | "screened" | "excluded" | "unreadable" | "failed";
 
 export type CandidateRow = {
   id: number;
@@ -87,6 +85,18 @@ export type CandidateRow = {
   rank: number | null;
 };
 
+export type ScoreBreakdown = {
+  overall: number;
+  dimensions: {
+    dimension: string;
+    label: string;
+    score: number;
+    weight: number;
+    contribution: number;
+    justification: string;
+  }[];
+};
+
 type ProfileItem = Record<string, string>;
 
 export type CandidateDetail = CandidateRow & {
@@ -97,24 +107,18 @@ export type CandidateDetail = CandidateRow & {
     work_history?: ProfileItem[];
     skills?: string[];
     certifications?: string[];
+    languages?: string[];
     projects?: ProfileItem[];
     total_experience_years?: number;
   };
+  cv_text: string;
   verdicts: Verdict[];
+  score: ScoreBreakdown | null;
 };
 
-export type UploadResult = {
-  filename: string;
-  ok: boolean;
-  candidate_id: number | null;
-  error: string;
-};
+export type UploadResult = { filename: string; ok: boolean; candidate_id: number | null; error: string };
 
-export type ImportResult = {
-  imported: number;
-  skipped: number;
-  failed: { filename: string; error: string }[];
-};
+export type ImportResult = { imported: number; skipped: number; failed: { filename: string; error: string }[] };
 
 export type ScreeningRun = {
   id: number;

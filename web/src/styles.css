@@ -402,3 +402,18 @@ input[type="file"]::file-selector-button {
   color: var(--color-text);
   cursor: pointer;
 }
+
+/* ---------- Scores and CV (Module 6) ---------- */
+.score-cell { font-size: 18px; font-weight: 500; font-variant-numeric: tabular-nums; }
+.score-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }
+.score-total { font-size: 56px; font-weight: 300; line-height: 1; letter-spacing: -0.03em; }
+.dimension { margin-top: 18px; }
+.dimension-head { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 6px; }
+.bar { height: 6px; border-radius: 999px; background: rgba(255, 255, 255, 0.08); overflow: hidden; margin-bottom: 8px; }
+.bar div { height: 100%; border-radius: 999px; background: var(--color-primary); }
+.split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; align-items: start; }
+@media (max-width: 960px) { .split { grid-template-columns: minmax(0, 1fr); } }
+.card-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+.card-head h2 { margin: 0; }
+.cv-frame { display: block; width: 100%; height: 78vh; border: 0; border-radius: 10px; background: #fff; }
+.cv-text { white-space: pre-wrap; max-height: 78vh; overflow: auto; margin: 0; font: inherit; font-size: 13px; line-height: 1.55; color: var(--color-text); }

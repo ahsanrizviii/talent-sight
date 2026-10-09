@@ -87,3 +87,31 @@ def test_new_weights_change_the_total_without_asking_the_ai(client, auth_headers
     row = client.get(f"/api/jobs/{job_id}/candidates", headers=auth_headers).json()[0]
     assert row["overall"] == 78.8  # (80 + 70 + 90 + 75) / 4 = 78.75
     assert len(fake.prompts) == calls  # no new AI call
+
+# ---------- Task 6.2.2: the score breakdown and the original CV ----------
+
+
+def test_breakdown_shows_each_dimension_with_its_weight(client, auth_headers, monkeypatch):
+    use_fake_llm(monkeypatch, [GOOD_PROFILE], [ALL_MET], [scores(80, 70, 90, 75)])
+    job_id = screened_job(client, auth_headers, 1)
+    candidate_id = client.get(f"/api/jobs/{job_id}/candidates", headers=auth_headers).json()[0]["id"]
+    score = client.get(f"/api/candidates/{candidate_id}", headers=auth_headers).json()["score"]
+    assert score["overall"] == 77.8
+    technical = score["dimensions"][0]
+    assert (technical["label"], technical["score"], technical["weight"], technical["contribution"]) == (
+        "Technical skills",
+        80,
+        40,
+        32.0,
+    )
+    assert technical["justification"] == "Python, FastAPI and PostgreSQL in the CV."
+
+
+def test_original_cv_can_be_opened(client, auth_headers, monkeypatch):
+    use_fake_llm(monkeypatch, [GOOD_PROFILE], [ALL_MET])
+    job_id = screened_job(client, auth_headers, 1)
+    candidate_id = client.get(f"/api/jobs/{job_id}/candidates", headers=auth_headers).json()[0]["id"]
+    response = client.get(f"/api/candidates/{candidate_id}/cv", headers=auth_headers)
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "application/pdf"
+    assert response.content.startswith(b"%PDF")
