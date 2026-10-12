@@ -183,3 +183,14 @@ def test_invite_info_tells_the_candidate_only_what_they_need(client, auth_header
     assert starts - opens == timedelta(minutes=settings.join_early_minutes)
     for hidden in ("score", "overall", "rank", "email", "invite_token", "verdicts"):
         assert hidden not in str(info).lower()
+
+
+
+def test_the_candidate_profile_is_for_interviewers_only(client, auth_headers):
+    """The side panel reads this endpoint (Task 7.3.2). A candidate has no login, so it must refuse them."""
+    candidate_id = make_candidate()
+    session = schedule(client, auth_headers, candidate_id, in_hours(0.1)).json()
+    token = stored_session(session["id"]).invite_token
+    assert client.get(f"/api/candidates/{candidate_id}").status_code == 401  # no login
+    assert client.get(f"/api/candidates/{candidate_id}", headers={"Authorization": f"Bearer {token}"}).status_code == 401  # invite token is not a login
+    assert client.get(f"/api/candidates/{candidate_id}", headers=auth_headers).status_code == 200

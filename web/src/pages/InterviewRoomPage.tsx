@@ -1,15 +1,17 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { api } from "../api";
+import CandidatePanel from "../components/CandidatePanel";
 import VideoRoom from "../components/VideoRoom";
 import type { Interview, JoinInfo } from "../types";
 
-// The interviewer's side of the video interview (Task 7.2.1).
+// The interviewer's side of the video interview (Tasks 7.2.1 and 7.3.2).
 export default function InterviewRoomPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const [interview, setInterview] = useState<Interview | null>(null);
   const [error, setError] = useState("");
+  const [showPanel, setShowPanel] = useState(true);
 
   useEffect(() => {
     api<Interview>(`/interviews/${id}`)
@@ -57,11 +59,22 @@ export default function InterviewRoomPage() {
 
   return (
     <>
-      <h1>Interview with {interview.candidate_name}</h1>
-      <p className="muted">
-        {interview.job_title} · {new Date(interview.scheduled_at).toLocaleString()}
-      </p>
-      <VideoRoom join={join} remoteLabel="Candidate" onLeave={leave} onEnd={end} />
+      <div className="row between">
+        <div>
+          <h1>Interview with {interview.candidate_name}</h1>
+          <p className="muted">
+            {interview.job_title} · {new Date(interview.scheduled_at).toLocaleString()}
+          </p>
+        </div>
+        <button className="button secondary" onClick={() => setShowPanel(!showPanel)}>
+          {showPanel ? "Hide profile" : "Show profile"}
+        </button>
+      </div>
+      {/* The video room is always the first child, so hiding the panel never restarts the call. */}
+      <div className={`interview-layout ${showPanel ? "" : "no-panel"}`}>
+        <VideoRoom join={join} remoteLabel="Candidate" onLeave={leave} onEnd={end} />
+        {showPanel && <CandidatePanel candidateId={interview.candidate_id} />}
+      </div>
     </>
   );
 }

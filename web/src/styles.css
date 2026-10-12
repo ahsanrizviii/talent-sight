@@ -501,3 +501,20 @@ input[type="file"]::file-selector-button {
   background: rgba(20, 10, 10, 0.8);
   border: 1px solid rgba(241, 156, 144, 0.45);
 }
+
+
+/* ---------- Candidate profile side panel (Task 7.3.2) ---------- */
+.row.between { justify-content: space-between; align-items: flex-start; }
+.interview-layout { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: calc(var(--space) * 3); align-items: start; }
+.interview-layout.no-panel { grid-template-columns: minmax(0, 1fr); }
+@media (max-width: 960px) {
+  .interview-layout { grid-template-columns: minmax(0, 1fr); }
+}
+.panel { margin-bottom: 0; }
+.panel h2 { font-size: 20px; margin-bottom: 4px; }
+.panel p { margin-bottom: 4px; }
+.panel-score { gap: 8px; margin-bottom: 8px; }
+.panel-dimension { margin-bottom: 8px; }
+.panel-dimension-head { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 3px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: calc(var(--space) * 1.5); }
+.panel .score-total { font-size: 40px; }
