@@ -58,6 +58,8 @@ def no_real_google_form(monkeypatch):
 def no_real_mail(monkeypatch):
     """autouse = applied to every test. Tests must never send a real e-mail (not even to Mailpit)."""
     monkeypatch.setattr(settings, "smtp_host", "")
+    monkeypatch.setattr(settings, "gmail_user", "")
+    monkeypatch.setattr(settings, "gmail_app_password", "")
 
 @pytest.fixture
 def client():

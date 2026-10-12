@@ -15,14 +15,23 @@ from tests.test_interviews import fake_video_server, in_hours, make_candidate, s
 
 
 class FakeSMTP:
-    """Collects the messages instead of sending them."""
+    """Collects the messages instead of sending them, and remembers which server they went to."""
 
     sent: list = []
+    servers: list = []
+    logins: list = []
     fail = False
 
     def __init__(self, host, port, timeout=None):
         if FakeSMTP.fail:
             raise ConnectionRefusedError("mail server is down")
+        FakeSMTP.servers.append(host)
+
+    def starttls(self, context=None):
+        pass
+
+    def login(self, user, password):
+        FakeSMTP.logins.append(user)
 
     def __enter__(self):
         return self
@@ -36,7 +45,7 @@ class FakeSMTP:
 
 @pytest.fixture(autouse=True)
 def fake_mail_server(monkeypatch):
-    FakeSMTP.sent, FakeSMTP.fail = [], False
+    FakeSMTP.sent, FakeSMTP.servers, FakeSMTP.logins, FakeSMTP.fail = [], [], [], False
     monkeypatch.setattr(settings, "smtp_host", "mailpit")
     monkeypatch.setattr(smtplib, "SMTP", FakeSMTP)
 
@@ -140,3 +149,45 @@ def test_expired_and_unknown_links_are_refused(client, auth_headers):
         db.commit()
     assert client.get(f"/api/invite/{token}").status_code == 404
     assert client.get("/api/invite/made-up-token").status_code == 404
+
+    
+
+# ---------- Real Gmail for real addresses, Mailpit for everything else ----------
+
+
+@pytest.fixture
+def gmail_on(monkeypatch):
+    monkeypatch.setattr(settings, "gmail_user", "talentsight.demo@gmail.com")
+    monkeypatch.setattr(settings, "gmail_app_password", "test-app-password")
+
+
+def test_a_gmail_address_gets_a_real_email_through_gmail(client, auth_headers, gmail_on):
+    candidate_id = make_candidate()
+    set_email(candidate_id, "maya.rahman@gmail.com")
+    assert schedule(client, auth_headers, candidate_id).json()["email_sent"] is True
+    assert FakeSMTP.servers == ["smtp.gmail.com"]
+    assert FakeSMTP.logins == ["talentsight.demo@gmail.com"]
+    assert FakeSMTP.sent[0]["From"] == "TalentSight <talentsight.demo@gmail.com>"
+
+
+def test_a_made_up_address_still_goes_to_mailpit(client, auth_headers, gmail_on):
+    schedule(client, auth_headers, make_candidate())  # maya@example.com
+    assert FakeSMTP.servers == ["mailpit"]
+    assert FakeSMTP.logins == []
+
+
+def test_without_gmail_settings_everything_stays_in_mailpit(client, auth_headers):
+    candidate_id = make_candidate()
+    set_email(candidate_id, "maya.rahman@gmail.com")
+    schedule(client, auth_headers, candidate_id)
+    assert FakeSMTP.servers == ["mailpit"]
+
+
+def test_the_safety_list_limits_real_mail_to_chosen_people(client, auth_headers, gmail_on, monkeypatch):
+    monkeypatch.setattr(settings, "real_mail_only_to", "me@gmail.com")
+    first, second = make_candidate(), make_candidate(name="Other Person")
+    set_email(first, "me@gmail.com")
+    set_email(second, "stranger@gmail.com")
+    schedule(client, auth_headers, first)
+    schedule(client, auth_headers, second)
+    assert FakeSMTP.servers == ["smtp.gmail.com", "mailpit"]  # the stranger only reaches Mailpit
