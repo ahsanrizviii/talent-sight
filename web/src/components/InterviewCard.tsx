@@ -10,13 +10,14 @@ function toInputValue(date: Date): string {
 
 type Props = { candidateId: number; candidateStatus: string };
 
-// Schedule, move or end the interview of one screened candidate (Task 7.1.2).
+// Schedule, move or end the interview of one screened candidate (Tasks 7.1.2 and 7.1.3).
 export default function InterviewCard({ candidateId, candidateStatus }: Props) {
   const [interview, setInterview] = useState<Interview | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [when, setWhen] = useState(() => toInputValue(new Date(Date.now() + 60 * 60 * 1000)));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     api<Interview | null>(`/candidates/${candidateId}/interview`)
@@ -40,6 +41,30 @@ export default function InterviewCard({ candidateId, candidateStatus }: Props) {
       setError((err as Error).message);
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function sendAgain() {
+    if (!interview) return;
+    setBusy(true);
+    setError("");
+    try {
+      setInterview(await api<Interview>(`/interviews/${interview.id}/invite`, { method: "POST" }));
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function copyLink() {
+    if (!interview) return;
+    try {
+      await navigator.clipboard.writeText(interview.invite_url);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setError("Could not copy. Select the link and copy it yourself.");
     }
   }
 
@@ -73,6 +98,20 @@ export default function InterviewCard({ candidateId, candidateStatus }: Props) {
         </p>
       )}
 
+      {active && (
+        <div className="field">
+          <label htmlFor="invite-link">Candidate's private link</label>
+          <div className="row">
+            <input id="invite-link" className="grow" readOnly value={interview.invite_url} onFocus={(event) => event.target.select()} />
+            <button className="button secondary" onClick={copyLink}>
+              {copied ? "Copied" : "Copy"}
+            </button>
+          </div>
+        </div>
+      )}
+      {interview?.email_sent === true && <p className="success">Invitation e-mail sent.</p>}
+      {interview?.email_sent === false && <p className="error">{interview.email_error}</p>}
+
       {candidateStatus === "screened" && (interview === null || interview.status !== "live") && (
         <div className="field">
           <label htmlFor="interview-time">{active ? "Move to another time" : "Date and time"}</label>
@@ -84,6 +123,11 @@ export default function InterviewCard({ candidateId, candidateStatus }: Props) {
         {candidateStatus === "screened" && (interview === null || interview.status !== "live") && (
           <button className="button" onClick={save} disabled={busy || !when}>
             {active ? "Reschedule" : interview ? "Schedule a new interview" : "Schedule interview"}
+          </button>
+        )}
+        {interview?.status === "scheduled" && (
+          <button className="button secondary" onClick={sendAgain} disabled={busy}>
+            Send e-mail again
           </button>
         )}
         {active && (

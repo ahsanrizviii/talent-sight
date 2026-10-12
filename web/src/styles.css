@@ -434,3 +434,4 @@ input[type="file"]::file-selector-button {
 .policies li { display: flex; gap: 10px; align-items: flex-start; }
 .policies .badge { flex-shrink: 0; }
 
+.grow { flex: 1; min-width: 0; }

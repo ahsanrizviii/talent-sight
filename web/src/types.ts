@@ -141,4 +141,7 @@ export type Interview = {
   status: "scheduled" | "live" | "ended";
   started_at: string | null;
   ended_at: string | null;
+  invite_url: string;
+  email_sent: boolean | null; // null = no e-mail was tried in this answer
+  email_error: string;
 };

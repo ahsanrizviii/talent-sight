@@ -55,6 +55,13 @@ class Settings(BaseSettings):
     join_early_minutes: int = 15  # a candidate can join this long before the start time
     invite_hours_after: int = 24  # an invite link stops working this long after the start time
     
+    # E-mail (Module 7). In development every message goes to Mailpit, a fake inbox at http://localhost:8025
+    smtp_host: str = "mailpit"  # leave empty to switch e-mail off
+    smtp_port: int = 1025
+    mail_from: str = "TalentSight <interviews@talentsight.local>"
+    public_base_url: str = "http://localhost:8080"  # the address candidates open; used in invite links
+    interview_utc_offset_minutes: int = 360  # the time zone shown in e-mails: 360 = UTC+06:00 (Dhaka)
+    
     # Speech to text (AssemblyAI streaming)
     assemblyai_api_key: str = ""
     stt_model: str = "universal-3-6-pro"

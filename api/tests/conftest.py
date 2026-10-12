@@ -54,6 +54,10 @@ def no_real_google_form(monkeypatch):
     monkeypatch.setattr(settings, "google_form_url", "")
     monkeypatch.setattr(settings, "google_form_job_field", "")
 
+@pytest.fixture(autouse=True)
+def no_real_mail(monkeypatch):
+    """autouse = applied to every test. Tests must never send a real e-mail (not even to Mailpit)."""
+    monkeypatch.setattr(settings, "smtp_host", "")
 
 @pytest.fixture
 def client():

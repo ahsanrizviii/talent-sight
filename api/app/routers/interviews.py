@@ -11,7 +11,7 @@ from pydantic import BaseModel, field_validator
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app import livekit_service
+from app import invite_mail, livekit_service
 from app.db import get_db
 from app.deps import current_interviewer
 from app.models import Candidate, Interviewer, InterviewSession, JobProfile
@@ -54,6 +54,9 @@ class SessionOut(BaseModel):
     status: str  # scheduled | live | ended
     started_at: datetime | None
     ended_at: datetime | None
+    invite_url: str  
+    email_sent: bool | None = None  
+    email_error: str = ""
 
 
 class JoinOut(BaseModel):
@@ -84,7 +87,8 @@ def find_session(db: Session, session_id: int) -> InterviewSession:
     return session
 
 
-def to_out(db: Session, session: InterviewSession) -> SessionOut:
+def to_out(db: Session, session: InterviewSession, mail_error: str | None = None) -> SessionOut:
+    """mail_error: None = no e-mail was tried, "" = it was sent, anything else = why it was not."""
     candidate = db.get(Candidate, session.candidate_id)
     job = db.get(JobProfile, candidate.job_profile_id)
     return SessionOut(
@@ -97,7 +101,18 @@ def to_out(db: Session, session: InterviewSession) -> SessionOut:
         status=session.status,
         started_at=session.started_at,
         ended_at=session.ended_at,
+        invite_url=invite_mail.invite_link(session.invite_token),
+        email_sent=None if mail_error is None else mail_error == "",
+        email_error=mail_error or "",
     )
+
+
+def send_invite_for(db: Session, session: InterviewSession, rescheduled: bool = False) -> str:
+    """Sends the invitation. Returns "" when sent, otherwise the reason. Never raises."""
+    candidate = db.get(Candidate, session.candidate_id)
+    job = db.get(JobProfile, candidate.job_profile_id)
+    return invite_mail.send_invite(session, candidate, job, rescheduled)
+    
 
 
 def video_join(session: InterviewSession, identity: str, name: str, role: str) -> JoinOut:
@@ -143,7 +158,7 @@ def schedule_interview(candidate_id: int, body: ScheduleIn, db: Session = Depend
     )
     db.add(session)
     db.commit()
-    return to_out(db, session)
+    return to_out(db, session, send_invite_for(db, session))
 
 
 @router.get("/candidates/{candidate_id}/interview", response_model=SessionOut | None)
@@ -172,7 +187,16 @@ def reschedule_interview(session_id: int, body: ScheduleIn, db: Session = Depend
     session.scheduled_at = body.scheduled_at
     session.invite_expires_at = expiry_for(body.scheduled_at)
     db.commit()
-    return to_out(db, session)
+    return to_out(db, session, send_invite_for(db, session, rescheduled=True))
+
+
+@router.post("/interviews/{session_id}/invite", response_model=SessionOut)
+def send_invite_again(session_id: int, db: Session = Depends(get_db)):
+    """Sends the invitation e-mail again, with the same link."""
+    session = find_session(db, session_id)
+    if session.status != "scheduled":
+        raise HTTPException(status.HTTP_409_CONFLICT, "Only an interview that has not started can be sent again.")
+    return to_out(db, session, send_invite_for(db, session))
 
 
 @router.post("/interviews/{session_id}/join", response_model=JoinOut)
