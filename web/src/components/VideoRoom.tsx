@@ -1,9 +1,9 @@
 import { useEffect, useReducer, useRef, useState } from "react";
-import { Room, RoomEvent, Track } from "livekit-client";
+import { ConnectionState, DisconnectReason, Room, RoomEvent, Track } from "livekit-client";
 import type { Participant } from "livekit-client";
 import type { JoinInfo } from "../types";
 
-// The video call itself: two tiles and the buttons below them (Task 7.2.1).
+// The video call itself: two tiles and the buttons below them (Tasks 7.2.1 and 7.3.1).
 // The interviewer's page and the candidate's page both use it; they only differ in how
 // they ask the API for a join token (the `join` prop) and in what happens after Leave.
 
@@ -19,6 +19,16 @@ const REDRAW_EVENTS = [
   RoomEvent.LocalTrackPublished,
   RoomEvent.LocalTrackUnpublished,
 ];
+
+// If the connection is lost, LiveKit first tries by itself for a short while. If that fails we
+// ask the API for a fresh token and try again, waiting a little longer each time (Task 7.3.1).
+const RETRY_WAIT_SECONDS = [2, 4, 6, 8, 8, 8];
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+// A 4xx answer (link expired, interview ended) will not get better by trying again.
+const refused = (error: unknown) => {
+  const status = (error as { status?: number }).status;
+  return status !== undefined && status >= 400 && status < 500;
+};
 
 type Props = {
   join: () => Promise<JoinInfo>; // asks the API for a LiveKit token
@@ -78,7 +88,9 @@ export default function VideoRoom({ join, remoteLabel, onLeave, onEnd }: Props) 
   const roomRef = useRef<Room | null>(null);
   const joinRef = useRef(join); // the latest join function, without restarting the call when it changes
   joinRef.current = join;
+  const wanted = useRef({ microphone: true, camera: true }); // what the user switched on, kept across reconnects
   const [phase, setPhase] = useState<"connecting" | "live" | "closed">("connecting");
+  const [reconnecting, setReconnecting] = useState(false);
   const [message, setMessage] = useState("");
   const [deviceNote, setDeviceNote] = useState("");
   const [soundBlocked, setSoundBlocked] = useState(false);
@@ -86,49 +98,91 @@ export default function VideoRoom({ join, remoteLabel, onLeave, onEnd }: Props) 
 
   useEffect(() => {
     let cancelled = false; // true once this page is closed, so late results are ignored
+    let rejoining = false;
     const room = new Room({ adaptiveStream: true, dynacast: true });
     roomRef.current = room;
     REDRAW_EVENTS.forEach((event) => room.on(event, redraw));
     room.on(RoomEvent.AudioPlaybackStatusChanged, () => setSoundBlocked(!room.canPlaybackAudio));
-    room.on(RoomEvent.Disconnected, () => {
+
+    function close(text: string) {
       if (cancelled) return;
+      setReconnecting(false);
       setPhase("closed");
-      setMessage("You are no longer connected to the interview.");
-    });
+      setMessage(text);
+    }
 
-    (async () => {
-      try {
-        const info = await joinRef.current();
-        if (cancelled) return;
-        await room.connect(info.livekit_url, info.token);
-        if (cancelled) return;
-        setPhase("live");
-      } catch (error) {
-        if (!cancelled) {
-          setPhase("closed");
-          setMessage((error as Error).message);
-        }
-        return;
-      }
-
-      // Camera and microphone are asked for one by one, so a missing camera does not cost us the microphone.
+    // Camera and microphone are asked for one by one, so a missing camera does not cost us the microphone.
+    async function startDevices() {
       const problems: string[] = [];
-      try {
-        await room.localParticipant.setMicrophoneEnabled(true);
-      } catch {
-        problems.push("microphone");
+      if (wanted.current.microphone) {
+        try {
+          await room.localParticipant.setMicrophoneEnabled(true);
+        } catch {
+          problems.push("microphone");
+        }
       }
-      try {
-        await room.localParticipant.setCameraEnabled(true);
-      } catch {
-        problems.push("camera");
+      if (wanted.current.camera) {
+        try {
+          await room.localParticipant.setCameraEnabled(true);
+        } catch {
+          problems.push("camera");
+        }
       }
       if (cancelled) return;
       if (problems.length) {
         setDeviceNote(`Your ${problems.join(" and ")} could not be started. Allow access in the browser address bar and use the buttons below.`);
       }
       redraw();
-    })();
+    }
+
+    // Gets a fresh token from the API and enters the room. Used the first time and after a lost connection.
+    async function enter() {
+      const info = await joinRef.current();
+      if (cancelled) return;
+      await room.connect(info.livekit_url, info.token);
+      if (cancelled) return;
+      setReconnecting(false);
+      setPhase("live");
+      await startDevices();
+    }
+
+    async function rejoin() {
+      if (rejoining) return;
+      rejoining = true;
+      setReconnecting(true);
+      for (const seconds of RETRY_WAIT_SECONDS) {
+        await sleep(seconds * 1000);
+        if (cancelled) return;
+        try {
+          await enter();
+          rejoining = false;
+          return;
+        } catch (error) {
+          if (refused(error)) return close((error as Error).message);
+        }
+      }
+      close("We could not reconnect you. Please check your internet connection and join again.");
+    }
+
+    // LiveKit's own quick reconnect: we only show or hide the banner.
+    room.on(RoomEvent.ConnectionStateChanged, (state: ConnectionState) => {
+      if (cancelled) return;
+      if (state === ConnectionState.Reconnecting || state === ConnectionState.SignalReconnecting) setReconnecting(true);
+      else if (state === ConnectionState.Connected) {
+        setReconnecting(false);
+        redraw();
+      }
+    });
+
+    room.on(RoomEvent.Disconnected, (reason?: DisconnectReason) => {
+      if (cancelled || reason === DisconnectReason.CLIENT_INITIATED) return; // CLIENT_INITIATED = the Leave button
+      if (reason === DisconnectReason.ROOM_DELETED) return close("The interview has ended. Thank you!");
+      if (reason === DisconnectReason.DUPLICATE_IDENTITY) return close("You opened the interview in another window, so this one was closed.");
+      if (reason === DisconnectReason.PARTICIPANT_REMOVED) return close("You were removed from the interview.");
+      void rejoin(); // anything else: the connection was lost
+    });
+
+    enter().catch((error) => close((error as Error).message));
 
     return () => {
       cancelled = true;
@@ -137,14 +191,16 @@ export default function VideoRoom({ join, remoteLabel, onLeave, onEnd }: Props) 
   }, []);
 
   const room = roomRef.current;
-  const me = phase === "live" && room ? room.localParticipant : null;
+  const me = phase === "live" && !reconnecting && room ? room.localParticipant : null;
   const other = phase === "live" && room ? Array.from(room.remoteParticipants.values())[0] ?? null : null;
 
   async function toggle(device: "microphone" | "camera") {
     if (!me) return;
     try {
-      if (device === "microphone") await me.setMicrophoneEnabled(!me.isMicrophoneEnabled);
-      else await me.setCameraEnabled(!me.isCameraEnabled);
+      const turnOn = device === "microphone" ? !me.isMicrophoneEnabled : !me.isCameraEnabled;
+      if (device === "microphone") await me.setMicrophoneEnabled(turnOn);
+      else await me.setCameraEnabled(turnOn);
+      wanted.current[device] = turnOn;
       setDeviceNote("");
     } catch {
       setDeviceNote(`The ${device} could not be switched. Check that the browser is allowed to use it.`);
@@ -153,7 +209,7 @@ export default function VideoRoom({ join, remoteLabel, onLeave, onEnd }: Props) 
   }
 
   function leave() {
-    room?.disconnect();
+    room?.disconnect(); // CLIENT_INITIATED: the Disconnected handler knows this is not a lost connection
     onLeave();
   }
 
@@ -172,8 +228,9 @@ export default function VideoRoom({ join, remoteLabel, onLeave, onEnd }: Props) 
     <div className="room">
       <div className="room-stage">
         <Tile participant={other} label={remoteLabel} local={false} />
-        {me && <Tile participant={me} label="You" local />}
+        {phase === "live" && room && <Tile participant={room.localParticipant} label="You" local />}
         {phase === "connecting" && <div className="tile-off">Connecting...</div>}
+        {reconnecting && <div className="room-banner">Connection lost. Reconnecting...</div>}
       </div>
 
       {deviceNote && <p className="error small">{deviceNote}</p>}

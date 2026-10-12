@@ -485,3 +485,19 @@ input[type="file"]::file-selector-button {
   color: var(--color-text);
 }
 .room-bar { display: flex; justify-content: center; gap: calc(var(--space) * 1.5); flex-wrap: wrap; }
+
+
+/* ---------- Lost connection (Task 7.3.1) ---------- */
+.room-banner {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 3;
+  padding: 6px 16px;
+  border-radius: 999px;
+  font-size: 13px;
+  color: var(--color-danger);
+  background: rgba(20, 10, 10, 0.8);
+  border: 1px solid rgba(241, 156, 144, 0.45);
+}
