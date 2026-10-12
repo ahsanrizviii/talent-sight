@@ -14,11 +14,13 @@ import InterviewRoomPage from "./pages/InterviewRoomPage";
 import JoinPage from "./pages/JoinPage";
 
 
-
 export default function App() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
+
+      {/* Public: the candidate opens this from the e-mail, no login */}
+      <Route path="/join/:token" element={<JoinPage />} />
 
       {/* Interviewer only */}
       <Route element={<RequireLogin />}>
@@ -33,7 +35,6 @@ export default function App() {
           <Route path="/jd-chat" element={<JdChatPage />} />
           <Route path="/prototype/video" element={<VideoTestPage />} />
         </Route>
-      <Route path="/join/:token" element={<JoinPage />} />
       </Route>
     </Routes>
   );
