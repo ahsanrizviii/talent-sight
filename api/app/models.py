@@ -142,6 +142,22 @@ class InterviewSession(Base):
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
+class SessionParticipant(Base):
+    """Who was in an interview and when (Module 7).
+
+    Only the role and the times are stored. Raw audio and video are never saved (Q&A 7).
+    A person who leaves and comes back gets a new row, so the history stays honest.
+    """
+
+    __tablename__ = "session_participants"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    session_id: Mapped[int] = mapped_column(ForeignKey("interview_sessions.id", ondelete="CASCADE"))
+    role: Mapped[str] = mapped_column(String(20))  # interviewer | candidate
+    identity: Mapped[str] = mapped_column(String(100))  # the name used in the video room, e.g. candidate-7
+    joined_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    left_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
 
 class TranscriptSegment(Base):
 

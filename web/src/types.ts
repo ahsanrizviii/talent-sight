@@ -144,4 +144,6 @@ export type Interview = {
   invite_url: string;
   email_sent: boolean | null; // null = no e-mail was tried in this answer
   email_error: string;
+  duration_seconds: number | null; // null until the interview has ended
+  participants: { role: "interviewer" | "candidate"; joined_at: string; left_at: string | null }[];
 };

@@ -6,12 +6,12 @@ Candidates never use this file. They only use their private invite link (routers
 import secrets
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from pydantic import BaseModel, field_validator
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app import invite_mail, livekit_service
+from app import invite_mail, livekit_service, participants
 from app.db import get_db
 from app.deps import current_interviewer
 from app.models import Candidate, Interviewer, InterviewSession, JobProfile
@@ -44,6 +44,12 @@ class ScheduleIn(BaseModel):
         return value
 
 
+class ParticipantOut(BaseModel):
+    role: str
+    joined_at: datetime
+    left_at: datetime | None
+
+
 class SessionOut(BaseModel):
     id: int
     candidate_id: int
@@ -54,8 +60,10 @@ class SessionOut(BaseModel):
     status: str  # scheduled | live | ended
     started_at: datetime | None
     ended_at: datetime | None
-    invite_url: str  
-    email_sent: bool | None = None  
+    duration_seconds: int | None  # from the first join to the end; None until the interview has ended
+    participants: list[ParticipantOut]
+    invite_url: str  # the candidate's private link; only the logged-in interviewer ever sees it
+    email_sent: bool | None = None  # None = no e-mail was tried in this answer
     email_error: str = ""
 
 
@@ -101,6 +109,11 @@ def to_out(db: Session, session: InterviewSession, mail_error: str | None = None
         status=session.status,
         started_at=session.started_at,
         ended_at=session.ended_at,
+        duration_seconds=participants.duration_seconds(session),
+        participants=[
+            ParticipantOut(role=row.role, joined_at=row.joined_at, left_at=row.left_at)
+            for row in participants.history(db, session.id)
+        ],
         invite_url=invite_mail.invite_link(session.invite_token),
         email_sent=None if mail_error is None else mail_error == "",
         email_error=mail_error or "",
@@ -112,7 +125,6 @@ def send_invite_for(db: Session, session: InterviewSession, rescheduled: bool = 
     candidate = db.get(Candidate, session.candidate_id)
     job = db.get(JobProfile, candidate.job_profile_id)
     return invite_mail.send_invite(session, candidate, job, rescheduled)
-    
 
 
 def video_join(session: InterviewSession, identity: str, name: str, role: str) -> JoinOut:
@@ -158,6 +170,7 @@ def schedule_interview(candidate_id: int, body: ScheduleIn, db: Session = Depend
     )
     db.add(session)
     db.commit()
+    # A failed e-mail never blocks the interview: the answer says why, and the link can be copied.
     return to_out(db, session, send_invite_for(db, session))
 
 
@@ -213,8 +226,17 @@ def join_interview(
     if session.status == "scheduled":
         session.status = "live"
         session.started_at = utcnow()
+    participants.record_join(db, session.id, "interviewer", join.identity)
     db.commit()
     return join
+
+
+@router.post("/interviews/{session_id}/leave", status_code=status.HTTP_204_NO_CONTENT)
+def leave_interview(session_id: int, db: Session = Depends(get_db)):
+    """The interviewer left the room but the interview goes on (they can come back)."""
+    participants.record_leave(db, find_session(db, session_id).id, "interviewer")
+    db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.post("/interviews/{session_id}/end", response_model=SessionOut)
@@ -224,6 +246,7 @@ def end_interview(session_id: int, db: Session = Depends(get_db)):
     if session.status != "ended":
         session.status = "ended"
         session.ended_at = utcnow()
+        participants.close_all(db, session.id, session.ended_at)
         db.commit()
         livekit_service.close_room(session.id)
     return to_out(db, session)

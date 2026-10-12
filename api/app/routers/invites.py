@@ -1,9 +1,10 @@
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from app import participants
 from app.db import get_db
 from app.deps import session_from_invite
 from app.models import Candidate, InterviewSession
@@ -40,4 +41,15 @@ def join_as_candidate(session: InterviewSession = Depends(session_from_invite), 
             f"It is too early to join. You can join {settings.join_early_minutes} minutes before the start time.",
         )
     candidate = db.get(Candidate, session.candidate_id)
-    return video_join(session, f"candidate-{candidate.id}", candidate.name or "Candidate", "candidate")
+    join = video_join(session, f"candidate-{candidate.id}", candidate.name or "Candidate", "candidate")
+    participants.record_join(db, session.id, "candidate", join.identity)
+    db.commit()
+    return join
+
+
+@router.post("/{invite_token}/leave", status_code=status.HTTP_204_NO_CONTENT)
+def leave_as_candidate(session: InterviewSession = Depends(session_from_invite), db: Session = Depends(get_db)):
+    """The candidate left the room (closed the page or pressed Leave)."""
+    participants.record_leave(db, session.id, "candidate")
+    db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

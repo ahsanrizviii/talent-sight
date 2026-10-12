@@ -8,6 +8,7 @@ function toInputValue(date: Date): string {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
+const clock = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 type Props = { candidateId: number; candidateStatus: string };
 
 // Schedule, move or end the interview of one screened candidate (Tasks 7.1.2 and 7.1.3).
@@ -97,7 +98,17 @@ export default function InterviewCard({ candidateId, candidateStatus }: Props) {
             : `Scheduled for ${new Date(interview.scheduled_at).toLocaleString()}`}
         </p>
       )}
-
+      {interview && interview.participants.length > 0 && (
+        <ul className="small muted">
+          {interview.participants.map((p, i) => (
+            <li key={i}>
+              {p.role === "interviewer" ? "Interviewer" : "Candidate"}: joined {clock(p.joined_at)}
+              {p.left_at && `, left ${clock(p.left_at)}`}
+            </li>
+          ))}
+          {interview.duration_seconds !== null && <li>Duration: {Math.max(1, Math.round(interview.duration_seconds / 60))} min</li>}
+        </ul>
+      )}
       {active && (
         <div className="field">
           <label htmlFor="invite-link">Candidate's private link</label>
