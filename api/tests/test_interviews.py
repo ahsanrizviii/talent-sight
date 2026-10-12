@@ -169,3 +169,17 @@ def test_interviewer_endpoints_need_login(client, auth_headers):
     assert client.get(f"/api/interviews/{session['id']}").status_code == 401
     assert client.post(f"/api/interviews/{session['id']}/join").status_code == 401
     assert client.post(f"/api/interviews/{session['id']}/end").status_code == 401
+
+
+
+def test_invite_info_tells_the_candidate_only_what_they_need(client, auth_headers):
+    session = schedule(client, auth_headers, make_candidate(), in_hours(3)).json()
+    token = stored_session(session["id"]).invite_token
+    info = client.get(f"/api/invite/{token}").json()
+    assert info["candidate_name"] == "Maya Rahman"
+    assert info["job_title"] == "Backend Developer"
+    opens = datetime.fromisoformat(info["opens_at"])
+    starts = datetime.fromisoformat(info["scheduled_at"])
+    assert starts - opens == timedelta(minutes=settings.join_early_minutes)
+    for hidden in ("score", "overall", "rank", "email", "invite_token", "verdicts"):
+        assert hidden not in str(info).lower()

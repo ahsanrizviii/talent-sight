@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from app import participants
 from app.db import get_db
 from app.deps import session_from_invite
-from app.models import Candidate, InterviewSession
+from app.models import Candidate, InterviewSession, JobProfile
 from app.routers.interviews import JoinOut, video_join
 from app.settings import settings
 
@@ -19,12 +19,24 @@ class InviteInfo(BaseModel):
 
     session_id: int
     scheduled_at: datetime
+    opens_at: datetime  # from this moment the candidate can enter the room
     status: str
+    candidate_name: str
+    job_title: str
 
 
 @router.get("/{invite_token}", response_model=InviteInfo)
-def invite_info(session: InterviewSession = Depends(session_from_invite)):
-    return InviteInfo(session_id=session.id, scheduled_at=session.scheduled_at, status=session.status)
+def invite_info(session: InterviewSession = Depends(session_from_invite), db: Session = Depends(get_db)):
+    candidate = db.get(Candidate, session.candidate_id)
+    job = db.get(JobProfile, candidate.job_profile_id)
+    return InviteInfo(
+        session_id=session.id,
+        scheduled_at=session.scheduled_at,
+        opens_at=session.scheduled_at - timedelta(minutes=settings.join_early_minutes),
+        status=session.status,
+        candidate_name=candidate.name,
+        job_title=job.title,
+    )
 
 
 @router.post("/{invite_token}/join", response_model=JoinOut)

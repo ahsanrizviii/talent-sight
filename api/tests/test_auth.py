@@ -69,7 +69,7 @@ def test_candidate_invite_shows_only_safe_fields(client):
     token = make_session(expires_in_hours=24)
     response = client.get(f"/api/invite/{token}")
     assert response.status_code == 200
-    assert set(response.json()) == {"session_id", "scheduled_at", "status"}
+    assert set(response.json()) == {"session_id", "scheduled_at", "opens_at", "status", "candidate_name", "job_title"}
 
 def test_invite_token_cannot_open_interviewer_pages(client):
     token = make_session(expires_in_hours=24)

@@ -151,3 +151,14 @@ export type Interview = {
 
 // What the API gives a browser to enter a video room (interviewer and candidate alike).
 export type JoinInfo = { livekit_url: string; token: string; room: string; identity: string };
+
+
+// What the candidate's page may know about their interview (no scores or other candidates).
+export type InviteInfo = {
+  session_id: number;
+  scheduled_at: string;
+  opens_at: string;
+  status: string;
+  candidate_name: string;
+  job_title: string;
+};

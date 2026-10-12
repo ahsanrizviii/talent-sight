@@ -11,6 +11,7 @@ import JobsPage from "./pages/JobsPage";
 import LoginPage from "./pages/LoginPage";
 import VideoTestPage from "./pages/VideoTestPage";
 import InterviewRoomPage from "./pages/InterviewRoomPage";
+import JoinPage from "./pages/JoinPage";
 
 
 
@@ -32,6 +33,7 @@ export default function App() {
           <Route path="/jd-chat" element={<JdChatPage />} />
           <Route path="/prototype/video" element={<VideoTestPage />} />
         </Route>
+      <Route path="/join/:token" element={<JoinPage />} />
       </Route>
     </Routes>
   );
