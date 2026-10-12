@@ -50,7 +50,11 @@ class Settings(BaseSettings):
     livekit_api_secret: str = ""
     livekit_url: str = "ws://localhost:7880"  # the address the BROWSER connects to
     livekit_server_url: str = "http://livekit:7880"  # the address the API container uses (Docker network)
-
+    
+    # Interviews (Module 7)
+    join_early_minutes: int = 15  # a candidate can join this long before the start time
+    invite_hours_after: int = 24  # an invite link stops working this long after the start time
+    
     # Speech to text (AssemblyAI streaming)
     assemblyai_api_key: str = ""
     stt_model: str = "universal-3-6-pro"

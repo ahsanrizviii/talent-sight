@@ -130,3 +130,15 @@ export type ScreeningRun = {
   finished_at: string | null;
   seconds: number | null;
 };
+
+export type Interview = {
+  id: number;
+  candidate_id: number;
+  candidate_name: string;
+  job_title: string;
+  scheduled_at: string;
+  invite_expires_at: string;
+  status: "scheduled" | "live" | "ended";
+  started_at: string | null;
+  ended_at: string | null;
+};

@@ -6,6 +6,7 @@ import CvViewer from "../components/CvViewer";
 import ScorePanel from "../components/ScorePanel";
 import VerdictBadge from "../components/VerdictBadge";
 import type { CandidateDetail } from "../types";
+import InterviewCard from "../components/InterviewCard";
 
 const KIND_LABELS = {
   skill: "Required skill",
@@ -75,6 +76,8 @@ export default function CandidatePage() {
       )}
 
       {candidate.score && <ScorePanel score={candidate.score} />}
+      
+      <InterviewCard candidateId={candidate.id} candidateStatus={candidate.status} />
 
       {candidate.verdicts.length > 0 && (
         <div className="card">
