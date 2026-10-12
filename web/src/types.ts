@@ -146,4 +146,8 @@ export type Interview = {
   email_error: string;
   duration_seconds: number | null; // null until the interview has ended
   participants: { role: "interviewer" | "candidate"; joined_at: string; left_at: string | null }[];
+
 };
+
+// What the API gives a browser to enter a video room (interviewer and candidate alike).
+export type JoinInfo = { livekit_url: string; token: string; room: string; identity: string };

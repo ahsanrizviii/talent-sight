@@ -14,6 +14,9 @@ def _now() -> datetime:
 
 def record_join(db: Session, session_id: int, role: str, identity: str) -> None:
     """Notes that someone entered the room. Joining again without leaving (a page refresh) adds nothing new."""
+    # Two joins can arrive at the same moment (a double click, a fast refresh). Locking the session row
+    # makes the second one wait until the first is saved, so it sees the row and does not add another.
+    db.execute(select(InterviewSession.id).where(InterviewSession.id == session_id).with_for_update())
     still_in = db.scalar(
         select(SessionParticipant).where(
             SessionParticipant.session_id == session_id,

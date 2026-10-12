@@ -10,6 +10,8 @@ import JobFormPage from "./pages/JobFormPage";
 import JobsPage from "./pages/JobsPage";
 import LoginPage from "./pages/LoginPage";
 import VideoTestPage from "./pages/VideoTestPage";
+import InterviewRoomPage from "./pages/InterviewRoomPage";
+
 
 
 export default function App() {
@@ -26,6 +28,7 @@ export default function App() {
           <Route path="/jobs/:id" element={<JobFormPage />} />
           <Route path="/jobs/:id/candidates" element={<CandidatesPage />} />
           <Route path="/candidates/:id" element={<CandidatePage />} />
+          <Route path="/interview/:id" element={<InterviewRoomPage />} />
           <Route path="/jd-chat" element={<JdChatPage />} />
           <Route path="/prototype/video" element={<VideoTestPage />} />
         </Route>

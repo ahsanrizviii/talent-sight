@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
 import type { Interview } from "../types";
+import { Link } from "react-router-dom";
 
 // A <input type="datetime-local"> wants "2026-10-12T15:30" in the browser's own time zone.
 function toInputValue(date: Date): string {
@@ -135,6 +136,11 @@ export default function InterviewCard({ candidateId, candidateStatus }: Props) {
           <button className="button" onClick={save} disabled={busy || !when}>
             {active ? "Reschedule" : interview ? "Schedule a new interview" : "Schedule interview"}
           </button>
+        )}
+        {active && (
+          <Link className="button" to={`/interview/${interview.id}`}>
+            {interview.status === "live" ? "Rejoin interview" : "Join interview"}
+          </Link>
         )}
         {interview?.status === "scheduled" && (
           <button className="button secondary" onClick={sendAgain} disabled={busy}>
