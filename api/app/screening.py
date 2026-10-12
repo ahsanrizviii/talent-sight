@@ -136,15 +136,15 @@ def run_screening(run_id: int, candidate_ids: list[int]) -> None:
         run.seconds = round(time.monotonic() - started, 1)
         db.commit()
 
-    log.info(
-        "screening finished",
-        extra={
-            "event": "screening_done",
-            "job_id": job.id,
-            "count": run.total,
-            "seconds": run.seconds,
-        },
-    )
+        log.info(
+            "screening finished",
+            extra={
+                "event": "screening_done",
+                "job_id": job.id,
+                "count": run.total,
+                "seconds": run.seconds,
+            },
+        )
 
 
 def mark_interrupted_runs() -> None:

@@ -130,3 +130,35 @@ export type ScreeningRun = {
   finished_at: string | null;
   seconds: number | null;
 };
+
+export type Interview = {
+  id: number;
+  candidate_id: number;
+  candidate_name: string;
+  job_title: string;
+  scheduled_at: string;
+  invite_expires_at: string;
+  status: "scheduled" | "live" | "ended";
+  started_at: string | null;
+  ended_at: string | null;
+  invite_url: string;
+  email_sent: boolean | null; // null = no e-mail was tried in this answer
+  email_error: string;
+  duration_seconds: number | null; // null until the interview has ended
+  participants: { role: "interviewer" | "candidate"; joined_at: string; left_at: string | null }[];
+
+};
+
+// What the API gives a browser to enter a video room (interviewer and candidate alike).
+export type JoinInfo = { livekit_url: string; token: string; room: string; identity: string };
+
+
+// What the candidate's page may know about their interview (no scores or other candidates).
+export type InviteInfo = {
+  session_id: number;
+  scheduled_at: string;
+  opens_at: string;
+  status: string;
+  candidate_name: string;
+  job_title: string;
+};

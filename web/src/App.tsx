@@ -10,12 +10,17 @@ import JobFormPage from "./pages/JobFormPage";
 import JobsPage from "./pages/JobsPage";
 import LoginPage from "./pages/LoginPage";
 import VideoTestPage from "./pages/VideoTestPage";
+import InterviewRoomPage from "./pages/InterviewRoomPage";
+import JoinPage from "./pages/JoinPage";
 
 
 export default function App() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
+
+      {/* Public: the candidate opens this from the e-mail, no login */}
+      <Route path="/join/:token" element={<JoinPage />} />
 
       {/* Interviewer only */}
       <Route element={<RequireLogin />}>
@@ -26,6 +31,7 @@ export default function App() {
           <Route path="/jobs/:id" element={<JobFormPage />} />
           <Route path="/jobs/:id/candidates" element={<CandidatesPage />} />
           <Route path="/candidates/:id" element={<CandidatePage />} />
+          <Route path="/interview/:id" element={<InterviewRoomPage />} />
           <Route path="/jd-chat" element={<JdChatPage />} />
           <Route path="/prototype/video" element={<VideoTestPage />} />
         </Route>

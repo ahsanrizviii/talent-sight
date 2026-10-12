@@ -1,0 +1,159 @@
+import { useEffect, useState } from "react";
+import { api } from "../api";
+import type { Interview } from "../types";
+import { Link } from "react-router-dom";
+
+// A <input type="datetime-local"> wants "2026-10-12T15:30" in the browser's own time zone.
+function toInputValue(date: Date): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+const clock = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+type Props = { candidateId: number; candidateStatus: string };
+
+// Schedule, move or end the interview of one screened candidate (Tasks 7.1.2 and 7.1.3).
+export default function InterviewCard({ candidateId, candidateStatus }: Props) {
+  const [interview, setInterview] = useState<Interview | null>(null);
+  const [loaded, setLoaded] = useState(false);
+  const [when, setWhen] = useState(() => toInputValue(new Date(Date.now() + 60 * 60 * 1000)));
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    api<Interview | null>(`/candidates/${candidateId}/interview`)
+      .then(setInterview)
+      .catch((err) => setError(err.message))
+      .finally(() => setLoaded(true));
+  }, [candidateId]);
+
+  const active = interview !== null && interview.status !== "ended";
+
+  async function save() {
+    setBusy(true);
+    setError("");
+    try {
+      const body = JSON.stringify({ scheduled_at: new Date(when).toISOString() });
+      const result = active
+        ? await api<Interview>(`/interviews/${interview.id}`, { method: "PATCH", body })
+        : await api<Interview>(`/candidates/${candidateId}/interview`, { method: "POST", body });
+      setInterview(result);
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function sendAgain() {
+    if (!interview) return;
+    setBusy(true);
+    setError("");
+    try {
+      setInterview(await api<Interview>(`/interviews/${interview.id}/invite`, { method: "POST" }));
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function copyLink() {
+    if (!interview) return;
+    try {
+      await navigator.clipboard.writeText(interview.invite_url);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setError("Could not copy. Select the link and copy it yourself.");
+    }
+  }
+
+  async function end() {
+    if (!interview || !window.confirm("End this interview? The candidate's link will stop working.")) return;
+    setBusy(true);
+    setError("");
+    try {
+      setInterview(await api<Interview>(`/interviews/${interview.id}/end`, { method: "POST" }));
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (!loaded) return null;
+  // Only screened candidates can be interviewed; an excluded or unreadable CV gets no card.
+  if (candidateStatus !== "screened" && !interview) return null;
+
+  return (
+    <div className="card">
+      <h2>Interview</h2>
+
+      {interview && (
+        <p>
+          <span className="badge">{interview.status}</span>{" "}
+          {interview.status === "ended" && interview.ended_at
+            ? `Ended ${new Date(interview.ended_at).toLocaleString()}`
+            : `Scheduled for ${new Date(interview.scheduled_at).toLocaleString()}`}
+        </p>
+      )}
+      {interview && interview.participants.length > 0 && (
+        <ul className="small muted">
+          {interview.participants.map((p, i) => (
+            <li key={i}>
+              {p.role === "interviewer" ? "Interviewer" : "Candidate"}: joined {clock(p.joined_at)}
+              {p.left_at && `, left ${clock(p.left_at)}`}
+            </li>
+          ))}
+          {interview.duration_seconds !== null && <li>Duration: {Math.max(1, Math.round(interview.duration_seconds / 60))} min</li>}
+        </ul>
+      )}
+      {active && (
+        <div className="field">
+          <label htmlFor="invite-link">Candidate's private link</label>
+          <div className="row">
+            <input id="invite-link" className="grow" readOnly value={interview.invite_url} onFocus={(event) => event.target.select()} />
+            <button className="button secondary" onClick={copyLink}>
+              {copied ? "Copied" : "Copy"}
+            </button>
+          </div>
+        </div>
+      )}
+      {interview?.email_sent === true && <p className="success">Invitation e-mail sent.</p>}
+      {interview?.email_sent === false && <p className="error">{interview.email_error}</p>}
+
+      {candidateStatus === "screened" && (interview === null || interview.status !== "live") && (
+        <div className="field">
+          <label htmlFor="interview-time">{active ? "Move to another time" : "Date and time"}</label>
+          <input id="interview-time" type="datetime-local" value={when} onChange={(event) => setWhen(event.target.value)} />
+        </div>
+      )}
+
+      <div className="row">
+        {candidateStatus === "screened" && (interview === null || interview.status !== "live") && (
+          <button className="button" onClick={save} disabled={busy || !when}>
+            {active ? "Reschedule" : interview ? "Schedule a new interview" : "Schedule interview"}
+          </button>
+        )}
+        {active && (
+          <Link className="button" to={`/interview/${interview.id}`}>
+            {interview.status === "live" ? "Rejoin interview" : "Join interview"}
+          </Link>
+        )}
+        {interview?.status === "scheduled" && (
+          <button className="button secondary" onClick={sendAgain} disabled={busy}>
+            Send e-mail again
+          </button>
+        )}
+        {active && (
+          <button className="button danger" onClick={end} disabled={busy}>
+            {interview.status === "live" ? "End interview" : "Cancel interview"}
+          </button>
+        )}
+      </div>
+      {error && <p className="error">{error}</p>}
+    </div>
+  );
+}

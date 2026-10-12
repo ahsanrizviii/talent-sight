@@ -45,9 +45,29 @@ class Settings(BaseSettings):
     # Screening agent (Module 5): leave empty to use LLM_MODEL
     screening_model: str = ""
 
-    # LiveKit video server
+        # LiveKit video server
     livekit_api_key: str = ""
     livekit_api_secret: str = ""
+    livekit_url: str = "ws://localhost:7880"  # the address the BROWSER connects to
+    livekit_server_url: str = "http://livekit:7880"  # the address the API container uses (Docker network)
+
+    # Interviews (Module 7)
+    join_early_minutes: int = 15  # a candidate can join this long before the start time
+    invite_hours_after: int = 24  # an invite link stops working this long after the start time
+
+    # E-mail (Module 7). In development every message goes to Mailpit, a fake inbox at http://localhost:8025
+    smtp_host: str = "mailpit"  # leave empty to switch e-mail off
+    smtp_port: int = 1025
+    mail_from: str = "TalentSight <interviews@talentsight.local>"
+    public_base_url: str = "http://localhost:8080"  # the address candidates open; used in invite links
+    interview_utc_offset_minutes: int = 360  # the time zone shown in e-mails: 360 = UTC+06:00 (Dhaka)
+
+    # Real e-mail through Gmail, for real addresses only. Everything else still goes to Mailpit.
+    # Leave GMAIL_USER empty to keep ALL mail in Mailpit (the safe default, also used by the tests).
+    gmail_user: str = ""  # the Gmail address that sends, e.g. talentsight.demo@gmail.com
+    gmail_app_password: str = ""  # a 16-letter Gmail App Password, NOT the normal password
+    real_mail_domains: str = "gmail.com,googlemail.com"  # addresses at these domains get real mail
+    real_mail_only_to: str = ""  # optional safety list: if set, ONLY these addresses get real mail
 
     # Speech to text (AssemblyAI streaming)
     assemblyai_api_key: str = ""

@@ -24,7 +24,8 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
   }
   if (!response.ok) {
     const body = await response.json().catch(() => ({}));
-    throw new Error(errorMessage(body.detail, response.status));
+    // The status travels with the error, so callers can tell "refused" (4xx) from "try again" (5xx, network).
+    throw Object.assign(new Error(errorMessage(body.detail, response.status)), { status: response.status });
   }
   if (response.status === 204) {
     return undefined as T; // "No Content": nothing to read
