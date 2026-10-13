@@ -1,8 +1,12 @@
-import { useState } from "react";
-import { Link } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { Link, useNavigate, useParams } from "react-router-dom";
+
 import { api } from "../api";
+import Empty from "../components/Empty";
+import Icon from "../components/Icon";
 import JobPostView from "../components/JobPostView";
-import type { ChatState } from "../types";
+import type { ChatHistory, ChatState, ChatSummary } from "../types";
+import { shortDateTime } from "../when";
 
 type Message = { from: "you" | "ai"; text: string };
 
@@ -12,9 +16,8 @@ function aiMessage(chat: ChatState): string {
     return chat.blog_url
       ? "Done. The job is saved, published and posted on the blog."
       : "Done. The job is saved and published, but the blog post could not be made.";
-  if (chat.kind === "questions")
-    return "I need a few more details:\n- " + chat.questions.join("\n- ");
-    return chat.policies?.length
+  if (chat.kind === "questions") return "I need a few more details:\n- " + chat.questions.join("\n- ");
+  return chat.policies?.length
     ? "Here is my draft, based on your brief and the company's hiring policies. Approve it, or tell me what to change."
     : "Here is my draft, based on your brief. No company hiring policies are loaded. Approve it, or tell me what to change.";
 }
@@ -30,7 +33,7 @@ function PolicySources({ policies }: { policies: string[] }) {
     <div className="card">
       <h2>Company policy used</h2>
       <p className="muted small">
-        The AI searched the company's hiring policies (RAG), found these paragraphs, and wrote the draft to follow them.
+        The AI searched the company's hiring policies, found these paragraphs, and wrote the draft to follow them.
       </p>
       <ul className="policies">
         {policies.map((policy, index) => {
@@ -47,11 +50,77 @@ function PolicySources({ policies }: { policies: string[] }) {
   );
 }
 
+// Reading a chat that happened earlier. Every job written with the AI keeps its conversation,
+// so anyone can see what was asked for and what the AI asked back.
+function PastChat({ threadId }: { threadId: string }) {
+  const [chat, setChat] = useState<ChatHistory | null>(null);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    api<ChatHistory>(`/jd-chat/${threadId}/history`)
+      .then(setChat)
+      .catch((err) => setError(err.message));
+  }, [threadId]);
+
+  if (error) return <p className="error">{error}</p>;
+  if (!chat) return <div className="card"><div className="skeleton" /><div className="skeleton" /></div>;
+
+  return (
+    <>
+      <Link className="back-link" to="/jd-chat">
+        <Icon name="back" />
+        All chats
+      </Link>
+
+      <div className="page-head">
+        <div>
+          <h1>{chat.title}</h1>
+          <p>
+            {shortDateTime(chat.created_at)} · {chat.lines.length} messages
+          </p>
+        </div>
+        <div className="row">
+          {chat.job_id && (
+            <Link className="button secondary" to={`/jobs/${chat.job_id}`}>
+              Open the job profile
+            </Link>
+          )}
+          <Link className="button" to="/jd-chat">
+            <Icon name="sparkle" />
+            Write another
+          </Link>
+        </div>
+      </div>
+
+      <div className="card">
+        <div className="chat-log">
+          {chat.lines.map((line, index) => (
+            <div className={`chat-line ${line.role}`} key={index}>
+              <span className="chat-who">{line.role === "recruiter" ? "You" : "TalentSight AI"}</span>
+              <span className="chat-text">{line.text}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </>
+  );
+}
+
+// Writing a job description with the AI, and the record of every chat that came before.
 export default function JdChatPage() {
+  const { threadId } = useParams();
+  const navigate = useNavigate();
   const [chat, setChat] = useState<ChatState | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
+  const [past, setPast] = useState<ChatSummary[]>([]);
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    api<ChatSummary[]>("/jd-chat").then(setPast).catch(() => undefined);
+  }, [threadId, chat?.status]);
+
+  if (threadId) return <PastChat threadId={threadId} />;
 
   async function send(body: object, shownText: string) {
     setBusy(true);
@@ -60,14 +129,8 @@ export default function JdChatPage() {
 
     try {
       const next = chat
-        ? await api<ChatState>(`/jd-chat/${chat.thread_id}/reply`, {
-            method: "POST",
-            body: JSON.stringify(body),
-          })
-        : await api<ChatState>("/jd-chat", {
-            method: "POST",
-            body: JSON.stringify(body),
-          });
+        ? await api<ChatState>(`/jd-chat/${chat.thread_id}/reply`, { method: "POST", body: JSON.stringify(body) })
+        : await api<ChatState>("/jd-chat", { method: "POST", body: JSON.stringify(body) });
 
       setChat(next);
       setMessages((old) => [...old, { from: "ai", text: aiMessage(next) }]);
@@ -88,49 +151,42 @@ export default function JdChatPage() {
 
   return (
     <>
-      <h1>Write a job with AI</h1>
-
-      <div className="card">
-        <p className="muted">
-          Describe the role in a few sentences: the level, the main skills and
-          the minimum experience.
-        </p>
-
-        {messages.map((message, index) => (
-          <p key={index} style={{ whiteSpace: "pre-wrap" }}>
-            <strong>{message.from === "you" ? "You" : "AI"}:</strong>{" "}
-            {message.text}
-          </p>
-        ))}
-
-        {busy && (
-          <p className="muted">The AI is working... this can take up to a minute.</p>
-        )}
+      <div className="page-head">
+        <div>
+          <h1>Write a job with AI</h1>
+          <p>Describe the role in a few sentences: the level, the main skills and the minimum experience.</p>
+        </div>
       </div>
+
+      {messages.length > 0 && (
+        <div className="card">
+          <div className="chat-log">
+            {messages.map((message, index) => (
+              <div className={`chat-line ${message.from === "you" ? "recruiter" : "assistant"}`} key={index}>
+                <span className="chat-who">{message.from === "you" ? "You" : "TalentSight AI"}</span>
+                <span className="chat-text">{message.text}</span>
+              </div>
+            ))}
+          </div>
+          {busy && <p className="muted small" style={{ marginTop: 14, marginBottom: 0 }}>Thinking… this can take up to a minute.</p>}
+        </div>
+      )}
 
       {waitingForApproval && chat.draft && (
         <div className="card">
           <JobPostView {...chat.draft} />
-          <p className="muted">
-            Scoring weights: technical skills{" "}
-            {chat.draft.weights.technical_skills}%, experience{" "}
-            {chat.draft.weights.experience}%, qualifications{" "}
-            {chat.draft.weights.qualifications}%, overall match{" "}
+          <p className="muted small">
+            Scoring weights: technical skills {chat.draft.weights.technical_skills}%, experience{" "}
+            {chat.draft.weights.experience}%, qualifications {chat.draft.weights.qualifications}%, overall match{" "}
             {chat.draft.weights.jd_match}%
           </p>
-          <button
-            className="button"
-            disabled={busy}
-            onClick={() => send({ approve: true }, "Approve and publish.")}
-          >
+          <button className="button" disabled={busy} onClick={() => send({ approve: true }, "Approve and publish.")}>
             Approve and publish
           </button>
         </div>
       )}
 
-      {waitingForApproval && !!chat.policies?.length && (
-        <PolicySources policies={chat.policies} />
-      )}
+      {waitingForApproval && !!chat.policies?.length && <PolicySources policies={chat.policies} />}
 
       {chat?.status === "done" && (
         <div className="card row">
@@ -138,12 +194,8 @@ export default function JdChatPage() {
             Open the job profile
           </Link>
           {chat.blog_url && (
-            <a
-              className="button secondary"
-              href={chat.blog_url}
-              target="_blank"
-              rel="noreferrer"
-            >
+            <a className="button secondary" href={chat.blog_url} target="_blank" rel="noreferrer">
+              <Icon name="external" />
               View the blog post
             </a>
           )}
@@ -152,23 +204,15 @@ export default function JdChatPage() {
 
       {finished ? (
         <button className="button" onClick={startAgain}>
-          Start a new job
+          Write another job
         </button>
       ) : (
         <div className="card">
           <div className="field">
             <label htmlFor="message">
-              {!chat
-                ? "Your brief"
-                : waitingForApproval
-                ? "Or ask for changes"
-                : "Your answer"}
+              {!chat ? "Your brief" : waitingForApproval ? "Or ask for changes" : "Your answer"}
             </label>
-            <textarea
-              id="message"
-              value={text}
-              onChange={(e) => setText(e.target.value)}
-            />
+            <textarea id="message" value={text} onChange={(event) => setText(event.target.value)} />
           </div>
           <button
             className="button"
@@ -179,6 +223,57 @@ export default function JdChatPage() {
           </button>
         </div>
       )}
+
+      <div className="card flush">
+        <div className="card-head">
+          <h2>Earlier chats</h2>
+          <span className="result-count">{past.length}</span>
+        </div>
+        {past.length === 0 ? (
+          <Empty title="No chats yet">Every job you write with the AI is kept here, so you can read back how it was decided.</Empty>
+        ) : (
+          <table>
+            <thead>
+              <tr>
+                <th>Role</th>
+                <th>State</th>
+                <th>Messages</th>
+                <th>Last change</th>
+                <th className="right">Job</th>
+              </tr>
+            </thead>
+            <tbody>
+              {past.map((item) => (
+                <tr key={item.thread_id}>
+                  <td>
+                    <button
+                      className="button quiet small"
+                      style={{ padding: 0 }}
+                      onClick={() => navigate(`/jd-chat/${item.thread_id}`)}
+                    >
+                      {item.title}
+                    </button>
+                  </td>
+                  <td>
+                    <span
+                      className={
+                        item.status === "done" ? "badge pass" : item.status === "failed" ? "badge stop" : "badge warn"
+                      }
+                    >
+                      {item.status === "done" ? "Published" : item.status === "failed" ? "Failed" : "Unfinished"}
+                    </span>
+                  </td>
+                  <td className="muted num">{item.messages}</td>
+                  <td className="muted small nowrap">{shortDateTime(item.updated_at)}</td>
+                  <td className="right">
+                    {item.job_id ? <Link to={`/jobs/${item.job_id}`}>Open</Link> : <span className="muted">—</span>}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
     </>
   );
 }
