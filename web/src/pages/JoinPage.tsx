@@ -91,7 +91,7 @@ export default function JoinPage() {
             <ul className="muted">
               <li>Use a quiet place with good light.</li>
               <li>When the browser asks, allow the camera and the microphone.</li>
-              <li>The interview is a video call with one interviewer. Nothing is recorded.</li>
+              <li>The interview is a video call with one interviewer. Nothing is recorded: what is said is only turned into text for the interviewer.</li>
             </ul>
             {note && <p className="success">{note}</p>}
             {open ? (
@@ -109,7 +109,7 @@ export default function JoinPage() {
           </div>
         )}
 
-        {stage === "in" && <VideoRoom join={join} remoteLabel="Interviewer" onLeave={leave} />}
+        {stage === "in" && <VideoRoom join={join} remoteLabel="Interviewer" onLeave={leave} speech={{ path: `/ws/invite/${token}/audio` }} />}
       </main>
     </>
   );

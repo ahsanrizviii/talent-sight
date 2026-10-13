@@ -11,7 +11,7 @@ from pydantic import BaseModel, field_validator
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app import invite_mail, livekit_service, participants
+from app import invite_mail, livekit_service, participants, transcription
 from app.db import get_db
 from app.deps import current_interviewer
 from app.models import Candidate, Interviewer, InterviewSession, JobProfile
@@ -249,4 +249,5 @@ def end_interview(session_id: int, db: Session = Depends(get_db)):
         participants.close_all(db, session.id, session.ended_at)
         db.commit()
         livekit_service.close_room(session.id)
+        transcription.end_interview(session.id)  # stop live speech to text for both speakers (Module 8)
     return to_out(db, session)

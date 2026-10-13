@@ -72,6 +72,7 @@ class Settings(BaseSettings):
     # Speech to text (AssemblyAI streaming)
     assemblyai_api_key: str = ""
     stt_model: str = "universal-3-6-pro"
+    stt_host: str = "streaming.assemblyai.com"  # accounts in the EU use streaming.eu.assemblyai.com
 
 
 settings = Settings()

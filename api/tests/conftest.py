@@ -61,6 +61,13 @@ def no_real_mail(monkeypatch):
     monkeypatch.setattr(settings, "gmail_user", "")
     monkeypatch.setattr(settings, "gmail_app_password", "")
 
+
+@pytest.fixture(autouse=True)
+def no_real_speech_service(monkeypatch):
+    """autouse = applied to every test. Tests must never call the real speech service (AssemblyAI)."""
+    monkeypatch.setattr(settings, "assemblyai_api_key", "")
+
+
 @pytest.fixture
 def client():
     Base.metadata.drop_all(engine)

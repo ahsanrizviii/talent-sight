@@ -162,3 +162,11 @@ export type InviteInfo = {
   candidate_name: string;
   job_title: string;
 };
+
+
+// Live speech to text (Module 8). Times are milliseconds since the interview started (Q&A 31).
+export type Speaker = "interviewer" | "candidate";
+
+export type TranscriptSegment = { id: number; speaker: Speaker; text: string; start_ms: number; end_ms: number };
+
+export type Transcript = { session_id: number; status: "scheduled" | "live" | "ended"; segments: TranscriptSegment[] };
