@@ -374,6 +374,54 @@ def test_deleting_a_candidate_deletes_their_transcript(client, auth_headers):
     assert client.delete(f"/api/candidates/{candidate_id}", headers=auth_headers).status_code == 204
     assert saved(session_id) == []  # N19: nothing of the candidate is lefts
 
+# ---------- Task 8.2.3: after the interview; audio is never stored (N16) ----------
+
+
+def test_the_full_transcript_stays_readable_after_the_end(client, auth_headers):
+    FakeSpeechStream.script = ["Thank you for your time"]
+    session_id, _ = live_interview(client, auth_headers)
+    with client.websocket_connect(f"/api/ws/interviews/{session_id}/audio") as ws:
+        signed_in(ws, auth_headers)
+        for _ in range(10):
+            ws.send_bytes(audio())
+        settle(ws)
+    client.post(f"/api/interviews/{session_id}/end", headers=auth_headers)
+    body = client.get(f"/api/interviews/{session_id}/transcript", headers=auth_headers).json()
+    assert body["status"] == "ended"
+    assert [(s["speaker"], s["text"]) for s in body["segments"]] == [("interviewer", "Thank you for your time")]
+
+
+def test_no_audio_is_ever_written_to_disk_or_database(client, auth_headers, monkeypatch):
+    # 1. No table has a column that could hold audio (bytes).
+    from sqlalchemy import LargeBinary
+
+    from app.models import Base
+
+    binary = [f"{t.name}.{c.name}" for t in Base.metadata.tables.values() for c in t.columns if isinstance(c.type, LargeBinary)]
+    assert binary == []
+
+    # 2. While audio streams, nothing opens a file for writing.
+    import builtins
+
+    real_open = builtins.open
+    written: list[str] = []
+
+    def watching_open(file, mode="r", *args, **kwargs):
+        if any(flag in mode for flag in "wax+"):
+            written.append(str(file))
+        return real_open(file, mode, *args, **kwargs)
+
+    session_id, invite = live_interview(client, auth_headers)
+    monkeypatch.setattr(builtins, "open", watching_open)
+    with client.websocket_connect(f"/api/ws/invite/{invite}/audio") as ws:
+        ws.receive_json()
+        for _ in range(20):
+            ws.send_bytes(audio())
+        settle(ws)
+    monkeypatch.setattr(builtins, "open", real_open)
+    assert written == []
+    assert len(saved(session_id)) == 2  # only the recognised text was kept
+
 # ---------- The AssemblyAI wrapper (speech.py), with a pretend AssemblyAI client ----------
 
 # ---------- Task 8.2.2: the live transcript on the interviewer's page ----------

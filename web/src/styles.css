@@ -543,3 +543,9 @@ input[type="file"]::file-selector-button {
 .transcript-line.candidate .transcript-speaker { color: var(--color-success); }
 .transcript-text { font-size: 14px; }
 .transcript-line.preview .transcript-text { color: var(--color-muted); font-style: italic; }
+
+
+/* ---------- Transcript after the interview (Task 8.2.3) ---------- */
+.saved-transcript { margin: calc(var(--space) * 2) 0; }
+.saved-transcript h3 { margin: 0; }
+.transcript-box.tall { max-height: 420px; margin-top: calc(var(--space) * 1.5); }

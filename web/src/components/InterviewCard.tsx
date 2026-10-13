@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api } from "../api";
 import type { Interview } from "../types";
 import { Link } from "react-router-dom";
+import SavedTranscript from "./SavedTranscript";
 
 // A <input type="datetime-local"> wants "2026-10-12T15:30" in the browser's own time zone.
 function toInputValue(date: Date): string {
@@ -110,6 +111,7 @@ export default function InterviewCard({ candidateId, candidateStatus }: Props) {
           {interview.duration_seconds !== null && <li>Duration: {Math.max(1, Math.round(interview.duration_seconds / 60))} min</li>}
         </ul>
       )}
+      {interview?.status === "ended" && <SavedTranscript sessionId={interview.id} candidateName={interview.candidate_name} />}
       {active && (
         <div className="field">
           <label htmlFor="invite-link">Candidate's private link</label>
