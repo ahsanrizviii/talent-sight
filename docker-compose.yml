@@ -44,11 +44,6 @@ services:
       - "7881:7881"
       - "7882:7882/udp"
 
-  mailpit:
-    image: axllent/mailpit:v1.31.4
-    ports:
-      - "8025:8025"
-
 volumes:
   pgdata:
   cv_uploads:

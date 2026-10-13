@@ -77,7 +77,7 @@ docker compose up -d
 
 1. Open your `https://….trycloudflare.com` address in a browser and log in. The site should look
    exactly as it does on localhost.
-2. Schedule an interview for a candidate whose e-mail address is a real Gmail address.
+2. Schedule an interview for a candidate whose e-mail address is one you can open on your phone.
 3. The invite card on the candidate's page should no longer warn that the link is local only.
 4. Open the e-mail on your phone, on mobile data rather than wi-fi, and press **Join your interview**.
    The camera and microphone permission prompt should appear.
@@ -90,4 +90,5 @@ If the page does not load at all, the tunnel window has been closed.
 ## Back to local-only work
 
 Delete those five lines from `.env`, or set `PUBLIC_BASE_URL=http://localhost:8080`, and run
-`docker compose up -d` again. Everything goes back to the local LiveKit container and Mailpit.
+`docker compose up -d` again. Everything goes back to the local LiveKit container. Invitation
+e-mails still go out for real, but their links will only open on this computer.
