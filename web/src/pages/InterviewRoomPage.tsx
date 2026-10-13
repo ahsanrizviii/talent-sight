@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { api } from "../api";
 import { getToken } from "../auth";
 import CandidatePanel from "../components/CandidatePanel";
+import TranscriptPanel from "../components/TranscriptPanel";
 import VideoRoom from "../components/VideoRoom";
 import type { Interview, JoinInfo } from "../types";
 
@@ -73,13 +74,16 @@ export default function InterviewRoomPage() {
       </div>
       {/* The video room is always the first child, so hiding the panel never restarts the call. */}
       <div className={`interview-layout ${showPanel ? "" : "no-panel"}`}>
-        <VideoRoom
-          join={join}
-          remoteLabel="Candidate"
-          onLeave={leave}
-          onEnd={end}
-          speech={{ path: `/ws/interviews/${id}/audio`, token: getToken() }}
-        />
+        <div className="interview-main">
+          <VideoRoom
+            join={join}
+            remoteLabel="Candidate"
+            onLeave={leave}
+            onEnd={end}
+            speech={{ path: `/ws/interviews/${id}/audio`, token: getToken() }}
+          />
+          <TranscriptPanel sessionId={interview.id} candidateName={interview.candidate_name} />
+        </div>
         {showPanel && <CandidatePanel candidateId={interview.candidate_id} />}
       </div>
     </>

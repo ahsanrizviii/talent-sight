@@ -16,7 +16,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
-
+from app import transcript_feed
 from app.db import SessionLocal, get_db
 from app.deps import current_interviewer, interviewer_from_token, open_session_for_invite
 from app.models import InterviewSession, TranscriptSegment
@@ -47,6 +47,14 @@ def interviewer_may_speak(token: str | None, session_id: int) -> int | None:
             return NOT_FOUND
     return None
 
+def interviewer_may_read(token: str | None, session_id: int) -> int | None:
+    """None if the interviewer may follow this interview's transcript, otherwise the close code."""
+    with SessionLocal() as db:
+        if not token or interviewer_from_token(db, token) is None:
+            return NOT_SIGNED_IN
+        if db.get(InterviewSession, session_id) is None:
+            return NOT_FOUND
+    return None
 
 def session_of_invite(invite_token: str) -> int | None:
     """The interview id behind a valid invite link, or None."""
@@ -161,3 +169,54 @@ def get_transcript(session_id: int, db: Session = Depends(get_db)):
     if session is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Interview not found.")
     return TranscriptOut(session_id=session.id, status=session.status, segments=saved_segments(db, session.id))
+
+
+
+
+def transcript_so_far(session_id: int) -> dict:
+    with SessionLocal() as db:
+        session = db.get(InterviewSession, session_id)
+        segments = saved_segments(db, session_id)
+        return {"status": session.status, "segments": [segment.model_dump() for segment in segments]}
+
+
+# ---------- The live transcript for the interviewer's room page (Task 8.2.2) ----------
+
+
+@router.websocket("/interviews/{session_id}/transcript")
+async def live_transcript(websocket: WebSocket, session_id: int):
+    """First everything said so far, then every new line as it happens. Interviewers only (N9)."""
+    await websocket.accept()
+    refused = await run_in_threadpool(interviewer_may_read, await read_sign_in(websocket), session_id)
+    if refused:
+        await websocket.close(code=refused)
+        return
+
+    # Listen first, then read the saved lines: a line saved in between arrives twice (the page keeps
+    # one copy, by id) instead of not at all.
+    queue = transcript_feed.subscribe(session_id)
+    leaving = asyncio.create_task(wait_until_gone(websocket, queue))
+    try:
+        await websocket.send_json({"type": "history", **await run_in_threadpool(transcript_so_far, session_id)})
+        while True:
+            next_message = asyncio.create_task(queue.get())
+            done, _ = await asyncio.wait({next_message, leaving}, return_when=asyncio.FIRST_COMPLETED)
+            if leaving in done:
+                next_message.cancel()
+                break
+            await websocket.send_json(next_message.result())
+    except (WebSocketDisconnect, RuntimeError):
+        pass  # the page closed while we were sending
+    finally:
+        leaving.cancel()
+        transcript_feed.unsubscribe(session_id, queue)
+
+
+async def wait_until_gone(websocket: WebSocket, queue: asyncio.Queue) -> None:
+    """Reads what the page sends (only keep-alive pings) and returns when it disconnects."""
+    while True:
+        message = await websocket.receive()
+        if message["type"] == "websocket.disconnect":
+            return
+        if message.get("text") and '"ping"' in message["text"]:
+            queue.put_nowait({"type": "pong"})  # answered through the queue, so only one task sends

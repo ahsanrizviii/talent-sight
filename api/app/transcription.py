@@ -1,13 +1,3 @@
-"""Live speech to text for the interview (Module 8).
-
-Each person's browser sends ONLY its own microphone, over its own WebSocket (routers/transcripts.py).
-So every piece of audio already belongs to one known speaker, and no AI has to guess who spoke (Q&A 4).
-
-One SpeakerChannel = one speaker in one interview. One SpeakerChannel = one speaker in one interview. It passes the audio to that speaker's own
-speech stream (speech.py), turns what comes back into times on the interview's clock, and saves
-every finished turn at once (Task 8.2.1), so a dropped connection never loses what was said (Q&A 34).
-The audio only passes through memory: it is never written to a file or to the database (Q&A 7, N16).
-"""
 
 import asyncio
 import bisect
@@ -15,7 +5,7 @@ import logging
 import time
 from typing import Awaitable, Callable
 
-from app import speech
+from app import speech, transcript_feed
 from app.db import SessionLocal
 from app.models import InterviewSession, TranscriptSegment
 from app.speech import SAMPLE_RATE, Heard
@@ -119,6 +109,7 @@ def end_interview(session_id: int) -> None:
     Called from the normal (non-async) end endpoint, so it hands the work to each channel's
     event loop and does not wait. Each channel still finishes its last sentence before closing.
     """
+    transcript_feed.publish(session_id, {"type": "ended"})
     for (channel_session, _), channel in list(live_channels.items()):
         if channel_session == session_id:
             try:
@@ -205,20 +196,25 @@ class SpeakerChannel:
         Nothing is lost: every final turn is already handled. The next audio piece opens a new stream.
         """
         self.stream = None
+        self.show_preview("")
         log.warning(
             f"speech stream closed: {reason}",
             extra={"event": "speech_closed", "session_id": self.session_id, "speaker": self.speaker},
         )
 
     async def heard(self, heard: Heard) -> None:
-        if not heard.final:
-            return  # live previews are shown to the interviewer later (Task 8.2.2); they are never saved
         start_ms, end_ms = await self.interview_times(heard)
+        if not heard.final:
+            # Words still being spoken: shown live to the interviewer (Task 8.2.2), never saved.
+            self.show_preview(heard.text, start_ms)
+            return
         # Saved at once (Task 8.2.1). Everything is transcribed, small talk too (Q&A 16).
         segment_id = await asyncio.to_thread(
             save_segment, self.session_id, self.speaker, heard.text, start_ms, end_ms, self.saved_turns.get(heard.turn)
         )
         self.saved_turns[heard.turn] = segment_id
+        segment = {"id": segment_id, "speaker": self.speaker, "text": heard.text, "start_ms": start_ms, "end_ms": end_ms}
+        transcript_feed.publish(self.session_id, {"type": "segment", "segment": segment})
         log.info(
             f"speech segment {start_ms}-{end_ms} ms",
             extra={
@@ -228,6 +224,11 @@ class SpeakerChannel:
                 "count": len(heard.text.split()),  # how many words; the words themselves are not logged
             },
         )
+
+    def show_preview(self, text: str, start_ms: int = 0) -> None:
+        """The grey 'still speaking' line on the interviewer's page. An empty text removes it."""
+        message = {"type": "partial", "speaker": self.speaker, "text": text, "start_ms": start_ms}
+        transcript_feed.publish(self.session_id, message)
 
     async def interview_times(self, heard: Heard) -> tuple[int, int]:
         """Start and end of a turn in milliseconds since the interview started (Q&A 31)."""
@@ -247,6 +248,7 @@ class SpeakerChannel:
         stream, self.stream = self.stream, None
         if stream is not None:
             await stream.stop()  # waits for the last words, so the end of a sentence is not lost
+            self.show_preview("")
         log.info(
             "audio stream closed",
             extra={

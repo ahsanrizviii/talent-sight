@@ -4,6 +4,7 @@ import asyncio
 import logging
 import re
 import time
+from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -371,10 +372,69 @@ def test_deleting_a_candidate_deletes_their_transcript(client, auth_headers):
     transcription.save_segment(session_id, "candidate", "Hello.", 0, 500, None)
     candidate_id = client.get(f"/api/interviews/{session_id}", headers=auth_headers).json()["candidate_id"]
     assert client.delete(f"/api/candidates/{candidate_id}", headers=auth_headers).status_code == 204
-    assert saved(session_id) == []  # N19: nothing of the candidate is left
+    assert saved(session_id) == []  # N19: nothing of the candidate is lefts
 
 # ---------- The AssemblyAI wrapper (speech.py), with a pretend AssemblyAI client ----------
 
+# ---------- Task 8.2.2: the live transcript on the interviewer's page ----------
+
+
+@contextmanager
+def feed(client, session_id: int, auth_headers):
+    """Opens the interviewer's live transcript; gives (websocket, first message)."""
+    with client.websocket_connect(f"/api/ws/interviews/{session_id}/transcript") as ws:
+        ws.send_json({"token": login_token(auth_headers)})
+        yield ws, ws.receive_json()
+
+
+def next_message(ws, kind: str) -> dict:
+    while (message := ws.receive_json())["type"] != kind:
+        pass
+    return message
+
+
+def test_the_live_transcript_starts_with_what_was_said_so_far(client, auth_headers):
+    session_id, _ = live_interview(client, auth_headers)
+    transcription.save_segment(session_id, "interviewer", "Shall we start?", 1_000, 2_000, None)
+    with feed(client, session_id, auth_headers) as (_, first):
+        assert first["type"] == "history" and first["status"] == "live"
+        assert [(s["speaker"], s["text"]) for s in first["segments"]] == [("interviewer", "Shall we start?")]
+
+
+def test_new_lines_reach_the_interviewer_as_they_happen(client, auth_headers):
+    FakeSpeechStream.script = ["I have five years of Python"]
+    session_id, invite = live_interview(client, auth_headers)
+    with feed(client, session_id, auth_headers) as (ws, _):
+        with client.websocket_connect(f"/api/ws/invite/{invite}/audio") as candidate:
+            candidate.receive_json()
+            for _ in range(10):
+                candidate.send_bytes(audio())
+            heard_by_candidate = settle(candidate)
+
+            preview = next_message(ws, "partial")
+            assert (preview["speaker"], preview["text"]) == ("candidate", "I have five y")  # still speaking: not saved
+            line = next_message(ws, "segment")["segment"]
+            assert (line["speaker"], line["text"]) == ("candidate", "I have five years of Python")
+            assert saved(session_id) == [("candidate", "I have five years of Python")]
+    # The candidate's own connection only ever gets status messages, never the transcript (N9).
+    assert {message["type"] for message in heard_by_candidate} <= {"status"}
+
+
+def test_the_live_transcript_is_for_interviewers_only(client, auth_headers):
+    session_id, invite = live_interview(client, auth_headers)
+    for first_message in ({}, {"token": invite}):
+        with client.websocket_connect(f"/api/ws/interviews/{session_id}/transcript") as ws:
+            ws.send_json(first_message)
+            assert closed_with(ws) == transcripts.NOT_SIGNED_IN
+
+
+def test_the_live_transcript_says_when_the_interview_ends(client, auth_headers):
+    session_id, _ = live_interview(client, auth_headers)
+    with feed(client, session_id, auth_headers) as (ws, _):
+        client.post(f"/api/interviews/{session_id}/end", headers=auth_headers)
+        assert next_message(ws, "ended") == {"type": "ended"}
+        ws.send_json({"type": "ping"})
+        assert next_message(ws, "pong") == {"type": "pong"}
 
 class FakeAssemblyAI:
     """Stands in for AssemblyAI's AsyncRealTimeTranscriber."""
