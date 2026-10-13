@@ -7,8 +7,8 @@ import Icon from "../components/Icon";
 import type { JobRow } from "../types";
 import { shortDate } from "../when";
 
-// Every role being hired for, with the state of its pipeline on the card, so nobody has to
-// open a job to find out whether anything is waiting there.
+// Every role being hired for, as a grid of tiles. Each tile carries the state of its own
+// pipeline, so nobody has to open a job to find out whether anything is waiting there.
 export default function JobsPage() {
   const [params, setParams] = useSearchParams();
   const [jobs, setJobs] = useState<JobRow[] | null>(null);
@@ -42,7 +42,7 @@ export default function JobsPage() {
         </div>
       </div>
 
-      <div className="tabs" role="tablist">
+      <div className="tabs glass" role="tablist">
         {[
           { value: "", label: "All" },
           { value: "published", label: "Published" },
@@ -62,12 +62,12 @@ export default function JobsPage() {
       {error && <p className="error">{error}</p>}
 
       {jobs === null ? (
-        <div className="card">
+        <div className="card glass">
           <div className="skeleton" />
           <div className="skeleton" />
         </div>
       ) : jobs.length === 0 ? (
-        <div className="card">
+        <div className="card glass">
           <Empty
             title={status ? "No jobs here" : "No jobs yet"}
             action={
@@ -81,21 +81,20 @@ export default function JobsPage() {
           </Empty>
         </div>
       ) : (
-        <div className="job-grid">
+        <div className="tile-grid">
           {jobs.map((job) => (
-            <div className="job-card" key={job.id}>
-              <div className="row between">
-                <h2>
-                  <Link to={`/jobs/${job.id}`} style={{ textDecoration: "none" }}>
-                    {job.title}
-                  </Link>
-                </h2>
+            <Link className="tile-card" to={`/jobs/${job.id}/candidates`} key={job.id}>
+              <span className="tile-date">
+                {shortDate(job.created_at)}
                 <span className={job.status === "published" ? "badge pass" : "badge"}>
                   {job.status === "published" ? "Published" : "Draft"}
                 </span>
-              </div>
+              </span>
 
-              <div className="chips" style={{ marginBottom: 0 }}>
+              <h2>{job.title}</h2>
+
+              <span className="tile-label">Required skills</span>
+              <div className="chips">
                 {job.required_skills.slice(0, 4).map((skill) => (
                   <span className="chip" key={skill}>
                     {skill}
@@ -107,49 +106,35 @@ export default function JobsPage() {
               </div>
 
               {job.waiting > 0 && (
-                <p className="small" style={{ margin: 0, color: "var(--part)" }}>
+                <p className="tile-flag">
                   {job.waiting} CV{job.waiting === 1 ? "" : "s"} waiting to be screened
                 </p>
               )}
 
-              <div className="job-numbers">
-                <div>
-                  <strong>{job.candidates}</strong>
-                  CVs
+              <div className="tile-foot">
+                <div className="job-numbers">
+                  <div>
+                    <strong>{job.candidates}</strong>
+                    CVs
+                  </div>
+                  <div>
+                    <strong>{job.screened}</strong>
+                    screened
+                  </div>
+                  <div>
+                    <strong>{job.interviews}</strong>
+                    interviews
+                  </div>
+                  <div>
+                    <strong>{job.top_score ?? "—"}</strong>
+                    top score
+                  </div>
                 </div>
-                <div>
-                  <strong>{job.screened}</strong>
-                  screened
-                </div>
-                <div>
-                  <strong>{job.interviews}</strong>
-                  interviews
-                </div>
-                <div>
-                  <strong>{job.top_score ?? "—"}</strong>
-                  top score
-                </div>
-              </div>
-
-              <div className="row" style={{ gap: 8 }}>
-                <Link className="button secondary small" to={`/jobs/${job.id}/candidates`}>
-                  Candidates
-                </Link>
-                <Link className="button quiet small" to={`/jobs/${job.id}`}>
-                  Edit
-                </Link>
-                <Link className="go" to={`/jobs/${job.id}/candidates`} aria-label={`Open ${job.title}`}>
+                <span className="go" aria-hidden="true">
                   <Icon name="forward" />
-                </Link>
-                {job.blog_url && (
-                  <a className="button quiet small" href={job.blog_url} target="_blank" rel="noreferrer">
-                    <Icon name="external" />
-                    Blog post
-                  </a>
-                )}
-
+                </span>
               </div>
-            </div>
+            </Link>
           ))}
         </div>
       )}

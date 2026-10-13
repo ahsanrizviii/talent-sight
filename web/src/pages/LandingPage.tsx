@@ -3,13 +3,31 @@ import { Link, useNavigate } from "react-router-dom";
 
 import { api } from "../api";
 import { isLoggedIn } from "../auth";
-import Arrow from "../components/Arrow";
 import Icon from "../components/Icon";
 import PublicFrame from "../components/PublicFrame";
 import type { SignInOptions } from "../types";
 
-// The first page a visitor sees. It says what the tool does and sends them to log in
-// or to open an account.
+const STEPS = [
+  {
+    title: "Write the job",
+    text: "Describe the role in a few sentences. The AI drafts it against your hiring policies and you approve it.",
+  },
+  {
+    title: "Read every CV",
+    text: "Each one is checked against each requirement, with the line of evidence the AI used, and scored out of 100.",
+  },
+  {
+    title: "Interview in the browser",
+    text: "Video, with the transcript written as it is spoken and kept for whoever decides.",
+  },
+  {
+    title: "Decide on evidence",
+    text: "Scores, requirements and the interview in one place, so the reason for a decision is always in writing.",
+  },
+];
+
+// The first page anyone sees. The whole screen is the dusk scene, with the two things a
+// visitor can do sitting in the middle of it.
 export default function LandingPage() {
   const navigate = useNavigate();
   const [options, setOptions] = useState<SignInOptions | null>(null);
@@ -21,57 +39,54 @@ export default function LandingPage() {
 
   return (
     <PublicFrame>
-      <main className="hero">
-        <div className="hero-grid">
-          <div>
-            <h1 className="display">
-              Hire on evidence,
-              <br />
-              not instinct.
-            </h1>
-            <p className="lead">
-              TalentSight reads every CV against the job you actually wrote, scores each candidate
-              on four dimensions with the reasoning attached, runs the video interview and writes
-              the transcript as it happens.
-            </p>
+      <section className="hero">
+        <h1 className="display">
+          Hire on evidence,
+          <br />
+          not instinct
+        </h1>
+        <p className="lead">
+          TalentSight reads every CV against the job you wrote, scores each candidate with the
+          reasoning attached, and transcribes the interview as it happens.
+        </p>
 
-            <ul className="proof">
-              <li>
-                <Icon name="check" />
-                Every CV checked against every requirement, with the line of evidence the AI used
-              </li>
-              <li>
-                <Icon name="check" />
-                One score out of 100 you can take apart: skills, experience, qualifications, fit
-              </li>
-              <li>
-                <Icon name="check" />
-                Interviews in the browser, transcribed live and kept for whoever decides
-              </li>
-            </ul>
-          </div>
-
-          <div className="auth">
-            <h2>{options?.company ?? "TalentSight"} hiring</h2>
-            <p>For the recruiters and hiring managers on your team.</p>
-            <div style={{ display: "grid", gap: 10, marginTop: 20 }}>
-              <Link className="button arrow wide" to="/login">
-                Log in <Arrow />
-              </Link>
-              {options?.signup_open && (
-                <Link className="button secondary wide" to="/signup">
-                  Create an account
-                </Link>
-              )}
-            </div>
-            <p className="small muted" style={{ marginTop: 16, marginBottom: 0 }}>
-              {options?.signup_open
-                ? "You need the company code from your administrator to open an account."
-                : "Accounts are created by your administrator."}
-            </p>
-          </div>
+        <div className="hero-actions">
+          <Link className="button big" to="/login">
+            Log in
+          </Link>
+          {options?.signup_open !== false && (
+            <Link className="button big ghost" to="/signup">
+              Sign up
+            </Link>
+          )}
         </div>
-      </main>
+
+        <p className="hero-note">
+          {options?.signup_open
+            ? `For the hiring team at ${options.company}. You will need your company code.`
+            : "For the hiring team. Accounts are created by your administrator."}
+        </p>
+      </section>
+
+      <section className="band" id="how-it-works">
+        <div className="band-head">
+          <h2>Four steps, one record</h2>
+          <p>Everything the platform decides is written down and can be read back.</p>
+        </div>
+
+        <div className="tile-grid">
+          {STEPS.map((step, index) => (
+            <article className="tile-card" key={step.title}>
+              <span className="tile-date">Step {index + 1}</span>
+              <h3>{step.title}</h3>
+              <p>{step.text}</p>
+              <span className="go" aria-hidden="true">
+                <Icon name="forward" />
+              </span>
+            </article>
+          ))}
+        </div>
+      </section>
     </PublicFrame>
   );
 }

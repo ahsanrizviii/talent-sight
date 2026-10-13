@@ -96,7 +96,7 @@ export default function InterviewCard({ candidateId, candidateStatus }: Props) {
   if (candidateStatus !== "screened" && !interview) return null;
 
   return (
-    <div className="card">
+    <div className="card glass">
       <h2>Interview</h2>
 
       {interview && (

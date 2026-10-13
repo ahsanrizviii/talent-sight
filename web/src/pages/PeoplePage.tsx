@@ -100,7 +100,7 @@ export default function PeoplePage() {
         </button>
       </div>
 
-      <div className="filters">
+      <div className="filters glass">
         <div className="search">
           <Icon name="search" />
           <input
@@ -167,7 +167,7 @@ export default function PeoplePage() {
 
       {error && <p className="error">{error}</p>}
 
-      <div className="card flush">
+      <div className="card glass flush">
         {rows === null ? (
           <div style={{ padding: 18 }}>
             <div className="skeleton" />

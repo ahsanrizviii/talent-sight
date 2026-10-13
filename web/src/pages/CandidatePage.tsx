@@ -60,7 +60,7 @@ export default function CandidatePage() {
   if (error) return <p className="error">{error}</p>;
   if (!candidate) {
     return (
-      <div className="card">
+      <div className="card glass">
         <div className="skeleton" />
         <div className="skeleton" />
       </div>
@@ -131,7 +131,7 @@ export default function CandidatePage() {
       )}
       {candidate.error && <div className="card notice stop">{candidate.error}</div>}
 
-      <div className="tabs" role="tablist">
+      <div className="tabs glass" role="tablist">
         {TABS.map((item) => (
           <button key={item.value} role="tab" aria-selected={tab === item.value} onClick={() => setTab(item.value)}>
             {item.label}
@@ -143,7 +143,7 @@ export default function CandidatePage() {
         (candidate.score ? (
           <div className="split">
             <ScorePanel score={candidate.score} />
-            <div className="card">
+            <div className="card glass">
               <h2>What the AI read from the CV</h2>
               {!hasProfile ? (
                 <p className="muted">Not screened yet.</p>
@@ -214,7 +214,7 @@ export default function CandidatePage() {
             </div>
           </div>
         ) : (
-          <div className="card">
+          <div className="card glass">
             <p className="muted">
               No score yet. Run the screening for this job and the four dimensions appear here with the
               reasoning behind each one.
@@ -226,7 +226,7 @@ export default function CandidatePage() {
         ))}
 
       {tab === "requirements" && (
-        <div className="card flush">
+        <div className="card glass flush">
           {candidate.verdicts.length === 0 ? (
             <p className="muted" style={{ padding: 18 }}>
               The requirements are checked during screening. Nothing has been checked for this candidate yet.
@@ -268,7 +268,7 @@ export default function CandidatePage() {
         <CvViewer candidateId={candidate.id} filename={candidate.cv_filename} text={candidate.cv_text} />
       )}
 
-      <div className="card">
+      <div className="card glass">
         <div className="row between">
           <div>
             <h2>Delete this candidate</h2>

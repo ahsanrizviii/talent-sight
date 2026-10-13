@@ -1,8 +1,18 @@
-// The animated background: a dusk sky, layered mountains, a forest edge and birds.
-// Everything is drawn in code (SVG + CSS), so there is no image or video to download.
-// "hero" is the full-strength scene for public pages; "calm" darkens it for the app pages.
+// The background of the whole site: a dusk sky over layered ridges that fade into haze,
+// with film grain over the top. It is drawn in code (SVG + CSS), so there is no photograph to
+// download, it stays sharp on any screen, and it is ours.
+//
+// The colours run from slate blue at the top of the sky, through grey, into the warm amber of
+// the last light at the horizon. Each ridge is paler than the one in front of it: that is what
+// makes the distance read as distance.
 
-type Props = { variant?: "hero" | "calm" };
+const SKY = ["#464f5c", "#555c67", "#6e6f71", "#8a7f74", "#a98a69", "#8d6f53"];
+const GLOW = "#e8c097";
+const RIDGE_FAR = ["#868783", "#71706f"];
+const RIDGE_MID = ["#5a5c63", "#44464d", "#33343a"];
+const RIDGE_NEAR = ["#2b2c31", "#1f2024"];
+const GROUND = "#141519";
+const HAZE = "#e6d2bd";
 
 const WIDTH = 1600;
 const HEIGHT = 900;
@@ -86,38 +96,43 @@ const NEAR = range(5, 816, 80, [
   { x: 1370, height: 80, width: 330 },
   { x: 170, height: 50, width: 260 },
 ]);
-const GROUND = groundPath();
+const GROUND_PATH = groundPath();
 const TREES = forest(11);
 
-export default function SkyScene({ variant = "hero" }: Props) {
+export default function SkyScene() {
+  const [sky0, sky1, sky2, sky3, sky4, sky5] = SKY;
+  const [far0, far1] = RIDGE_FAR;
+  const [main0, main1, main2] = RIDGE_MID;
+  const [near0, near1] = RIDGE_NEAR;
+
   return (
-    <div className={`scene scene-${variant}`} aria-hidden="true">
+    <div className="scene" aria-hidden="true">
       <svg className="scene-land" viewBox={`0 0 ${WIDTH} ${HEIGHT}`} preserveAspectRatio="xMidYMax slice">
         <defs>
           <linearGradient id="ts-sky" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0" stopColor="#3d454f" />
-            <stop offset="0.3" stopColor="#59616c" />
-            <stop offset="0.52" stopColor="#7d8189" />
-            <stop offset="0.66" stopColor="#9b8a84" />
-            <stop offset="0.76" stopColor="#a47f6b" />
-            <stop offset="1" stopColor="#6a4c42" />
+            <stop offset="0" stopColor={sky0} />
+            <stop offset="0.3" stopColor={sky1} />
+            <stop offset="0.52" stopColor={sky2} />
+            <stop offset="0.66" stopColor={sky3} />
+            <stop offset="0.76" stopColor={sky4} />
+            <stop offset="1" stopColor={sky5} />
           </linearGradient>
           <radialGradient id="ts-glow" cx="0.5" cy="0.74" r="0.5">
-            <stop offset="0" stopColor="#e6b493" stopOpacity="0.42" />
-            <stop offset="1" stopColor="#e6b493" stopOpacity="0" />
+            <stop offset="0" stopColor={GLOW} stopOpacity="0.5" />
+            <stop offset="1" stopColor={GLOW} stopOpacity="0" />
           </radialGradient>
           <linearGradient id="ts-far" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0" stopColor="#8c7068" />
-            <stop offset="1" stopColor="#5d4a46" />
+            <stop offset="0" stopColor={far0} />
+            <stop offset="1" stopColor={far1} />
           </linearGradient>
           <linearGradient id="ts-main" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0" stopColor="#6b4a40" />
-            <stop offset="0.35" stopColor="#4a3530" />
-            <stop offset="1" stopColor="#241d1f" />
+            <stop offset="0" stopColor={main0} />
+            <stop offset="0.35" stopColor={main1} />
+            <stop offset="1" stopColor={main2} />
           </linearGradient>
           <linearGradient id="ts-near" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0" stopColor="#2e2628" />
-            <stop offset="1" stopColor="#18171a" />
+            <stop offset="0" stopColor={near0} />
+            <stop offset="1" stopColor={near1} />
           </linearGradient>
           <filter id="ts-soft" x="-20%" y="-50%" width="140%" height="200%">
             <feGaussianBlur stdDeviation="26" />
@@ -127,12 +142,12 @@ export default function SkyScene({ variant = "hero" }: Props) {
         <rect width={WIDTH} height={HEIGHT} fill="url(#ts-sky)" />
         <rect width={WIDTH} height={HEIGHT} fill="url(#ts-glow)" />
         <path d={FAR} fill="url(#ts-far)" opacity="0.8" />
-        <ellipse cx="800" cy="705" rx="860" ry="48" fill="#e9d6c8" opacity="0.08" filter="url(#ts-soft)" />
+        <ellipse cx="800" cy="705" rx="860" ry="48" fill={HAZE} opacity="0.16" filter="url(#ts-soft)" />
         <path d={MAIN} fill="url(#ts-main)" />
-        <ellipse cx="760" cy="790" rx="700" ry="40" fill="#d9c2b3" opacity="0.05" filter="url(#ts-soft)" />
+        <ellipse cx="760" cy="790" rx="700" ry="40" fill={HAZE} opacity="0.12" filter="url(#ts-soft)" />
         <path d={NEAR} fill="url(#ts-near)" />
-        <path d={GROUND} fill="#111214" />
-        <path d={TREES} fill="#111214" />
+        <path d={GROUND_PATH} fill={GROUND} />
+        <path d={TREES} fill={GROUND} />
       </svg>
 
       <div className="scene-grain" />

@@ -1,8 +1,18 @@
-// Someone's initials in a coloured circle.
+// Someone's initials in a circle.
 // The colour comes from their name, so the same person is always the same colour, on every
-// page, without anyone having to upload a photo.
+// page, without anyone having to upload a photo. The tones are the dusk ones: sand, clay,
+// amber, slate and moss, kept dark enough for white initials to read on top.
 
-const COLOURS = ["#5b8def", "#9a6cf5", "#f0789b", "#f08b4b", "#13a07a", "#0e9fb5", "#c2557e", "#5a62d8"];
+const COLOURS = [
+  "#7d6a56",
+  "#8a5f4b",
+  "#6f6c5c",
+  "#4f5a62",
+  "#5d6b5c",
+  "#8b6f4e",
+  "#5a5560",
+  "#746253",
+];
 
 function pick(name: string): string {
   let total = 0;
