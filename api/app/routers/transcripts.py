@@ -23,6 +23,7 @@ router = APIRouter(prefix="/api/ws", tags=["transcripts"])
 SIGN_IN_SECONDS = 10  # the interviewer's first message must arrive within this time
 
 # Close codes the browser understands (4000-4999 are free for applications).
+# Two more are in transcription.py: REPLACED (4409) and INTERVIEW_ENDED (4410).
 NOT_SIGNED_IN = 4401
 NOT_FOUND = 4404
 
@@ -90,8 +91,16 @@ async def receive_audio(websocket: WebSocket, session_id: int, speaker: str) -> 
         except Exception:
             pass
 
-    channel = SpeakerChannel(session_id, speaker, tell)
+    async def hang_up(code: int) -> None:
+        """Closes this connection from the server side (replaced by a newer one, or the interview ended)."""
+        try:
+            await websocket.close(code=code)
+        except Exception:
+            pass
+
+    channel = SpeakerChannel(session_id, speaker, tell, hang_up)
     try:
+        await channel.join()
         await websocket.send_json({"type": "ready"})
         while True:
             message = await websocket.receive()

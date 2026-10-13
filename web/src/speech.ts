@@ -12,6 +12,11 @@ import { socketUrl } from "./api";
 const TARGET_RATE = 16000;
 const PIECE_SAMPLES = 1600; // 100 ms at 16 kHz
 const MAX_WAITING_BYTES = 64_000; // about 2 s of audio: if the network is that far behind, skip pieces
+const RETRY_WAIT_SECONDS = [1, 2, 4, 8, 10]; // after a lost connection; the last wait repeats (Task 8.1.3)
+const PING_SECONDS = 25; // a small message now and then keeps the connection open while muted
+// Close codes from the server after which trying again cannot help:
+// 4401 not signed in, 4404 no such interview, 4409 this person connected again elsewhere, 4410 interview ended.
+const FINAL_CLOSE_CODES = [4401, 4404, 4409, 4410];
 
 // The AudioWorklet runs on the browser's audio thread. It averages the microphone's samples
 // (usually 48 000 a second) down to 16 000, converts them to 16-bit numbers and posts a piece every 100 ms.
@@ -56,13 +61,17 @@ registerProcessor("pcm-pieces", PcmPieces);
 // because a browser cannot put a login header on a WebSocket. The candidate's key is the invite link in the path.
 export type SpeechTarget = { path: string; token?: string | null };
 
-// connecting = waiting for the server, on = audio is flowing, off = stopped or refused
+// connecting = waiting for the server, on = audio is flowing, unavailable = the speech service
+// cannot be used right now (the call goes on), off = stopped or refused
 export type SpeechState = "connecting" | "on" | "unavailable" | "off";
 
 export class SpeechSender {
   private socket: WebSocket | null = null;
   private ready = false; // the server accepted us
   private stopped = false;
+  private failures = 0; // lost connections in a row
+  private retryTimer: number | undefined;
+  private pingTimer: number | undefined;
   private context: AudioContext | null = null;
   private worklet: AudioWorkletNode | null = null;
   private source: MediaStreamAudioSourceNode | null = null;
@@ -88,6 +97,8 @@ export class SpeechSender {
 
   stop() {
     this.stopped = true;
+    window.clearTimeout(this.retryTimer);
+    window.clearInterval(this.pingTimer);
     this.room.off(RoomEvent.LocalTrackPublished, this.followMicrophone);
     this.room.off(RoomEvent.LocalTrackUnpublished, this.followMicrophone);
     document.removeEventListener("click", this.wakeAudio);
@@ -100,6 +111,7 @@ export class SpeechSender {
   }
 
   private connect() {
+    if (this.stopped) return;
     this.onState("connecting");
     const socket = new WebSocket(socketUrl(this.target.path));
     socket.binaryType = "arraybuffer";
@@ -110,18 +122,34 @@ export class SpeechSender {
     socket.onmessage = (event) => {
       if (typeof event.data !== "string") return;
       const message = JSON.parse(event.data);
-        if (message.type === "ready") {
+      if (message.type === "ready") {
         this.ready = true;
+        this.failures = 0;
         this.onState("on");
       } else if (message.type === "status") {
         // The server opens the speech service when the first audio arrives, and says how it went.
         this.onState(message.state === "listening" ? "on" : "unavailable");
       }
     };
-    socket.onclose = () => {
+    socket.onclose = (event) => {
+      if (this.socket !== socket) return; // an older connection we already replaced
       this.ready = false;
-      if (!this.stopped) this.onState("off");
+      window.clearInterval(this.pingTimer);
+      if (this.stopped) return;
+      if (FINAL_CLOSE_CODES.includes(event.code)) {
+        this.onState("off");
+        return;
+      }
+      // Lost connection (network, server restart): try again, waiting a little longer each time (Task 8.1.3).
+      const wait = RETRY_WAIT_SECONDS[Math.min(this.failures, RETRY_WAIT_SECONDS.length - 1)];
+      this.failures += 1;
+      this.onState("connecting");
+      this.retryTimer = window.setTimeout(() => this.connect(), wait * 1000);
     };
+    window.clearInterval(this.pingTimer);
+    this.pingTimer = window.setInterval(() => {
+      if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: "ping" }));
+    }, PING_SECONDS * 1000);
   }
 
   private followMicrophone = () => {

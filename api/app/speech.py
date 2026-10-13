@@ -30,6 +30,7 @@ log = logging.getLogger("talentsight")
 SAMPLE_RATE = 16_000  # what the browser sends: 16 000 samples a second, one channel, 16 bits
 CONNECT_SECONDS = 5.0  # how long to wait for the speech service to answer
 STOP_SECONDS = 5.0  # when stopping, how long to wait for the last words
+LASTING_ERRORS = {4001, 4002, 4003}  # wrong key, no credit left, paid-only feature: retrying will not help
 
 
 @dataclass
@@ -45,6 +46,10 @@ class Heard:
 
 class SpeechError(Exception):
     """The speech service cannot be used right now. The message is safe to log (no audio, no words)."""
+
+
+class SpeechNotSetUp(SpeechError):
+    """A setting is missing or wrong, so trying again will not help until .env is fixed."""
 
 
 OnHeard = Callable[[Heard], Awaitable[None]]
@@ -66,11 +71,12 @@ class SpeechStream:
         self.started = False
         self.stopping = False
         self.problem = ""
+        self.problem_code: int | None = None
 
     async def start(self) -> None:
         """Opens the session. Raises SpeechError if that is not possible."""
         if not settings.assemblyai_api_key:
-            raise SpeechError("Speech-to-text is not set up: ASSEMBLYAI_API_KEY is empty.")
+            raise SpeechNotSetUp("Speech-to-text is not set up: ASSEMBLYAI_API_KEY is empty.")
         try:
             parameters = RealTimeParameters(
                 speech_model=settings.stt_model,
@@ -78,7 +84,7 @@ class SpeechStream:
                 sample_rate=SAMPLE_RATE,
             )
         except ValueError:
-            raise SpeechError(f"STT_MODEL '{settings.stt_model}' is not a streaming model AssemblyAI knows.")
+            raise SpeechNotSetUp(f"STT_MODEL '{settings.stt_model}' is not a streaming model AssemblyAI knows.")
 
         self.client = AsyncRealTimeTranscriber(
             RealTimeTranscriberOptions(
@@ -95,6 +101,8 @@ class SpeechStream:
         # A refused or failed connection does not raise: the library reports it through _error.
         await self.client.connect(parameters)
         if self.problem:
+            if self.problem_code in LASTING_ERRORS:
+                raise SpeechNotSetUp(self.problem)
             raise SpeechError(self.problem)
         self.started = True
 
@@ -124,6 +132,7 @@ class SpeechStream:
 
     async def _error(self, client, error: RealTimeError) -> None:
         self.problem = f"{error} (code {error.code})" if error.code else str(error)
+        self.problem_code = error.code
         if self.started and not self.stopping:
             await self.on_closed(self.problem)
 

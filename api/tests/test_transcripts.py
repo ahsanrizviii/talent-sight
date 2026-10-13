@@ -3,6 +3,7 @@
 import asyncio
 import logging
 import re
+import time
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -16,7 +17,8 @@ from app.routers import transcripts
 from app.settings import settings
 from app.speech import Heard, SpeechError
 from app.speech import SpeechStream as RealSpeechStream
-from app.transcription import SpeakerChannel, Timeline, chunk_ms
+from app import transcription
+from app.transcription import INTERVIEW_ENDED, REPLACED, SpeakerChannel, Timeline, chunk_ms
 from tests.fake_speech import FakeSpeechStream
 from tests.test_interviews import fake_video_server, in_hours, make_candidate, schedule, stored_session  # noqa: F401
 
@@ -204,7 +206,7 @@ def test_without_a_speech_key_the_call_goes_on(client, auth_headers, monkeypatch
         assert ws.receive_json() == {"type": "status", "state": "unavailable"}
         ws.send_bytes(audio())  # the connection stays open; the audio is simply not used
         settle(ws)
-    assert channels[0].unavailable
+    assert channels[0].not_set_up
 
 
 def test_the_timeline_follows_the_clock_across_pauses():
@@ -216,6 +218,84 @@ def test_the_timeline_follows_the_clock_across_pauses():
     assert timeline.clock_at(150) == 10_150
     assert timeline.clock_at(250) == 15_250  # after the pause, the clock moved on but the audio did not
 
+# ---------- Task 8.1.3: restarts and reconnections ----------
+
+
+def test_a_stream_that_closes_by_itself_is_reopened(client, auth_headers, channels, caplog):
+    caplog.set_level(logging.INFO)
+    FakeSpeechStream.drop_after_ms = 1000  # every stream "expires" after 1 s of audio
+    session_id, _ = live_interview(client, auth_headers)
+    with client.websocket_connect(f"/api/ws/interviews/{session_id}/audio") as ws:
+        signed_in(ws, auth_headers)
+        for _ in range(25):
+            ws.send_bytes(audio())
+        messages = settle(ws)
+    assert len(FakeSpeechStream.made) == 3  # 1 s + 1 s + 0.5 s
+    assert messages.count({"type": "status", "state": "listening"}) == 3
+    starts = [s["start_ms"] for s in segments_logged(caplog)]
+    assert len(starts) == 2 and starts[0] <= starts[1]  # the second stream's times continue the first's
+    assert channels[0].audio_ms == 2500  # no audio piece was lost on the way
+
+
+def test_a_failed_start_is_tried_again_after_a_short_wait(client, auth_headers, channels, monkeypatch):
+    monkeypatch.setattr(transcription, "RETRY_WAIT_SECONDS", (0.3,))
+    FakeSpeechStream.failures_left = 1
+    session_id, _ = live_interview(client, auth_headers)
+    with client.websocket_connect(f"/api/ws/interviews/{session_id}/audio") as ws:
+        signed_in(ws, auth_headers)
+        ws.send_bytes(audio())
+        assert settle(ws) == [{"type": "status", "state": "unavailable"}]
+        ws.send_bytes(audio())  # still inside the wait: dropped, no new attempt
+        assert settle(ws) == []
+        time.sleep(0.35)
+        ws.send_bytes(audio())
+        assert settle(ws) == [{"type": "status", "state": "listening"}]
+    assert channels[0].audio_ms == 100  # only the piece sent after the restart reached the speech service
+
+
+def test_a_missing_setting_is_not_retried(client, auth_headers, monkeypatch, caplog):
+    monkeypatch.setattr(speech, "SpeechStream", RealSpeechStream)  # the real one, with no key (conftest)
+    monkeypatch.setattr(transcription, "RETRY_WAIT_SECONDS", (0,))
+    session_id, _ = live_interview(client, auth_headers)
+    with client.websocket_connect(f"/api/ws/interviews/{session_id}/audio") as ws:
+        signed_in(ws, auth_headers)
+        for _ in range(5):
+            ws.send_bytes(audio())
+        assert settle(ws) == [{"type": "status", "state": "unavailable"}]
+    attempts = [r for r in caplog.records if getattr(r, "event", "") == "speech_unavailable"]
+    assert len(attempts) == 1
+
+
+def test_a_new_connection_of_the_same_person_replaces_the_old_one(client, auth_headers, channels):
+    session_id, invite = live_interview(client, auth_headers)
+    with client.websocket_connect(f"/api/ws/invite/{invite}/audio") as old:
+        old.receive_json()
+        old.send_bytes(audio())
+        settle(old)
+        with client.websocket_connect(f"/api/ws/invite/{invite}/audio") as new:  # e.g. the candidate refreshed
+            assert new.receive_json() == {"type": "ready"}
+            assert closed_with(old) == REPLACED
+            new.send_bytes(audio())
+            settle(new)
+            assert transcription.live_channels[(session_id, "candidate")] is channels[1]
+    assert transcription.live_channels == {}  # everyone has left
+
+
+def test_ending_the_interview_closes_every_audio_connection(client, auth_headers, channels):
+    session_id, invite = live_interview(client, auth_headers)
+    with client.websocket_connect(f"/api/ws/interviews/{session_id}/audio") as interviewer:
+        signed_in(interviewer, auth_headers)
+        with client.websocket_connect(f"/api/ws/invite/{invite}/audio") as candidate:
+            candidate.receive_json()
+            interviewer.send_bytes(audio())
+            candidate.send_bytes(audio())
+            settle(interviewer)
+            settle(candidate)
+            client.post(f"/api/interviews/{session_id}/end", headers=auth_headers)
+            assert closed_with(interviewer) == INTERVIEW_ENDED
+            assert closed_with(candidate) == INTERVIEW_ENDED
+    assert all(stream.stopped for stream in FakeSpeechStream.made)  # each finished its last sentence
+    assert transcription.live_channels == {}
 
 # ---------- The AssemblyAI wrapper (speech.py), with a pretend AssemblyAI client ----------
 

@@ -7,6 +7,7 @@ class FakeSpeechStream:
     script: list[str] = []  # sentences handed out in order, shared by all streams
     made: list["FakeSpeechStream"] = []  # every stream created, oldest first
     failures_left = 0  # how many starts fail before one works
+    drop_after_ms = 0  # 0 = never close by itself
 
     def __init__(self, on_heard, on_closed):
         self.on_heard = on_heard
@@ -23,6 +24,7 @@ class FakeSpeechStream:
         cls.script = list(script or [])
         cls.made = []
         cls.failures_left = 0
+        cls.drop_after_ms = 0
 
     async def start(self) -> None:
         if FakeSpeechStream.failures_left > 0:
@@ -38,6 +40,9 @@ class FakeSpeechStream:
             await self.on_heard(Heard(self.turn, text, self.turn_start, self.audio_ms, final=True))
             self.turn += 1
             self.turn_start = self.audio_ms
+        if FakeSpeechStream.drop_after_ms and self.audio_ms >= FakeSpeechStream.drop_after_ms and not self.stopped:
+            self.stopped = True
+            await self.on_closed("Session expired (code 3008)")
 
     async def stop(self) -> None:
         self.stopped = True

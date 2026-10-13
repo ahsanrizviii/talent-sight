@@ -1,3 +1,13 @@
+"""Live speech to text for the interview (Module 8).
+
+Each person's browser sends ONLY its own microphone, over its own WebSocket (routers/transcripts.py).
+So every piece of audio already belongs to one known speaker, and no AI has to guess who spoke (Q&A 4).
+
+One SpeakerChannel = one speaker in one interview. It passes the audio to that speaker's own
+speech stream (speech.py) and turns what comes back into times on the interview's clock.
+The audio only passes through memory: it is never written to a file or to the database (Q&A 7, N16).
+"""
+
 import asyncio
 import bisect
 import logging
@@ -18,6 +28,7 @@ MIN_CHUNK_MS = 50
 MAX_CHUNK_MS = 1000
 
 Tell = Callable[[dict], Awaitable[None]]  # sends a short message back to the speaker's browser
+HangUp = Callable[[int], Awaitable[None]]  # closes the speaker's WebSocket with a close code
 
 
 def chunk_ms(chunk: bytes) -> int | None:
@@ -75,60 +86,113 @@ def interview_start_ms(session_id: int) -> int | None:
         return int(session.started_at.timestamp() * 1000)
 
 
+# ---------- Who is connected right now ----------
+
+# Close codes for the browser (4000-4999 are free for applications).
+REPLACED = 4409  # the same person connected again (a refresh, a second tab): the newer connection wins
+INTERVIEW_ENDED = 4410  # the interviewer ended the interview
+
+# One channel per speaker per interview: {(interview id, "interviewer" or "candidate"): channel}
+live_channels: dict[tuple[int, str], "SpeakerChannel"] = {}
+
+# After a failed start, wait this long before trying again (seconds); the last value repeats.
+RETRY_WAIT_SECONDS = (1, 2, 4, 8, 10)
+
+
+def end_interview(session_id: int) -> None:
+    """The interviewer ended the interview: stop listening to everyone in it.
+
+    Called from the normal (non-async) end endpoint, so it hands the work to each channel's
+    event loop and does not wait. Each channel still finishes its last sentence before closing.
+    """
+    for (channel_session, _), channel in list(live_channels.items()):
+        if channel_session == session_id:
+            try:
+                asyncio.run_coroutine_threadsafe(channel.hang_up(INTERVIEW_ENDED), channel.loop)
+            except RuntimeError:  # that event loop has already stopped
+                live_channels.pop((channel.session_id, channel.speaker), None)
+
+
 class SpeakerChannel:
     """The audio of one speaker in one interview, from the moment their browser connects."""
 
-    def __init__(self, session_id: int, speaker: str, tell: Tell):
+    def __init__(self, session_id: int, speaker: str, tell: Tell, hang_up: HangUp):
         self.session_id = session_id
         self.speaker = speaker  # "interviewer" or "candidate", decided by the server
         self.tell = tell
+        self.hang_up = hang_up
+        self.loop = asyncio.get_running_loop()
         self.stream: speech.SpeechStream | None = None
         self.timeline = Timeline()
-        self.unavailable = False  # the speech service could not be used
+        self.not_set_up = False  # a setting is missing: no point trying again
+        self.failures = 0  # failed starts in a row
+        self.retry_at = 0.0  # after a failure, do not try again before this time (seconds)
+        self.streams_opened = 0
         self.started_ms: int | None = None  # the interview's start, the zero point of every timestamp
         self.audio_ms = 0  # how much audio has arrived; only a number, the audio itself is not kept
+
+    async def join(self) -> None:
+        """Becomes THE channel of this speaker. An older connection of the same person is closed."""
+        key = (self.session_id, self.speaker)
+        older = live_channels.get(key)
+        live_channels[key] = self
         log.info(
             "audio stream opened",
-            extra={"event": "audio_opened", "session_id": session_id, "speaker": speaker},
+            extra={"event": "audio_opened", "session_id": self.session_id, "speaker": self.speaker},
         )
+        if older is not None:
+            await older.hang_up(REPLACED)
 
     async def add_audio(self, chunk: bytes) -> None:
         ms = chunk_ms(chunk)
         if ms is None:
             return  # a broken piece is skipped; the next one is fine again
-        if self.stream is None and not self.unavailable:
+        if self.stream is None and not self.not_set_up and time.monotonic() >= self.retry_at:
             await self.open_stream()
         if self.stream is None:
-            return
+            return  # no speech service at the moment: this piece is dropped, the call goes on
         self.timeline.add(ms, now_ms())
         self.audio_ms += ms
         await self.stream.send(chunk)
 
     async def open_stream(self) -> None:
+        """Opens a speech stream: the first one, or a new one after the last one closed (Task 8.1.3)."""
         stream = speech.SpeechStream(self.heard, self.stream_closed)
         try:
             await stream.start()
         except speech.SpeechError as error:
-            self.unavailable = True
+            self.failures += 1
+            self.not_set_up = isinstance(error, speech.SpeechNotSetUp)
+            wait = RETRY_WAIT_SECONDS[min(self.failures, len(RETRY_WAIT_SECONDS)) - 1]
+            self.retry_at = time.monotonic() + wait
             log.warning(
-                f"speech stream could not start: {error}",
+                f"speech stream could not start: {error}" + ("" if self.not_set_up else f" (trying again in {wait} s)"),
                 extra={"event": "speech_unavailable", "session_id": self.session_id, "speaker": self.speaker},
             )
-            await self.tell({"type": "status", "state": "unavailable"})
+            if self.failures == 1:  # tell the browser once, not on every retry
+                await self.tell({"type": "status", "state": "unavailable"})
             return
         self.stream = stream
-        self.timeline = Timeline()  # every new stream counts its audio from zero
+        self.timeline = Timeline()  # every new stream counts its audio from zero; the clock keeps the times continuous
+        self.failures = 0
+        self.streams_opened += 1
+        if self.streams_opened > 1:
+            log.info(
+                "speech stream restarted",
+                extra={"event": "speech_restarted", "session_id": self.session_id, "speaker": self.speaker, "count": self.streams_opened},
+            )
         await self.tell({"type": "status", "state": "listening"})
 
     async def stream_closed(self, reason: str) -> None:
-        """The speech service ended the stream by itself."""
+        """The speech service ended the stream by itself (time limit, network, error).
+
+        Nothing is lost: every final turn is already handled. The next audio piece opens a new stream.
+        """
         self.stream = None
-        self.unavailable = True
         log.warning(
             f"speech stream closed: {reason}",
             extra={"event": "speech_closed", "session_id": self.session_id, "speaker": self.speaker},
         )
-        await self.tell({"type": "status", "state": "unavailable"})
 
     async def heard(self, heard: Heard) -> None:
         if not heard.final:
@@ -156,9 +220,12 @@ class SpeakerChannel:
         return start_ms, end_ms
 
     async def close(self) -> None:
-        if self.stream is not None:
-            await self.stream.stop()  # waits for the last words, so the end of a sentence is not lost
-            self.stream = None
+        """The browser left (or was disconnected). Finishes the last sentence, then forgets this channel."""
+        if live_channels.get((self.session_id, self.speaker)) is self:
+            del live_channels[(self.session_id, self.speaker)]
+        stream, self.stream = self.stream, None
+        if stream is not None:
+            await stream.stop()  # waits for the last words, so the end of a sentence is not lost
         log.info(
             "audio stream closed",
             extra={
