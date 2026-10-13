@@ -21,6 +21,21 @@ class Interviewer(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
+class InterviewerProfile(Base):
+    """The name a hiring team member signed up with (UI refresh).
+
+    A new table, not a new column on `interviewers`: create_all makes new tables but never
+    new columns, so adding a column here would never reach an existing database.
+    """
+
+    __tablename__ = "interviewer_profiles"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    interviewer_id: Mapped[int] = mapped_column(ForeignKey("interviewers.id", ondelete="CASCADE"), unique=True)
+    full_name: Mapped[str] = mapped_column(String(120), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class JobProfile(Base):
 
     __tablename__ = "job_profiles"
@@ -37,6 +52,27 @@ class JobProfile(Base):
     status: Mapped[str] = mapped_column(String(20), default="draft")  
     slug: Mapped[str | None] = mapped_column(String(250), unique=True)  
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class JdChat(Base):
+    """One "Write a job with AI" conversation, kept so the team can read it back (UI refresh).
+
+    The agent's own memory lives in LangGraph's checkpoint tables and is not meant for reading.
+    This table is the human record: who asked for what, what the AI asked back, and which job
+    came out of it.
+    """
+
+    __tablename__ = "jd_chats"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    thread_id: Mapped[str] = mapped_column(String(64), unique=True)
+    title: Mapped[str] = mapped_column(String(200), default="")
+    brief: Mapped[str] = mapped_column(Text, default="")
+    status: Mapped[str] = mapped_column(String(20), default="waiting")  # waiting | done | failed
+    job_id: Mapped[int | None] = mapped_column(ForeignKey("job_profiles.id", ondelete="SET NULL"))
+    messages: Mapped[list] = mapped_column(JSON, default=list)  # [{"role": ..., "text": ..., "at": ...}]
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class PolicyChunk(Base):

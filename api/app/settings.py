@@ -69,6 +69,13 @@ class Settings(BaseSettings):
     real_mail_domains: str = "gmail.com,googlemail.com"  # addresses at these domains get real mail
     real_mail_only_to: str = ""  # optional safety list: if set, ONLY these addresses get real mail
 
+    # Who may open an account (UI refresh).
+    # Your HR people type the code once, when they sign up. Keep SIGNUP_CODE empty to switch
+    # sign-up off completely: then only the accounts you create yourself can log in.
+    company_name: str = "TalentSight"
+    signup_code: str = ""
+    signup_email_domains: str = ""  # optional, e.g. "bjitgroup.com": only these addresses may sign up
+
     # Speech to text (AssemblyAI streaming)
     assemblyai_api_key: str = ""
     stt_model: str = "universal-3-6-pro"
