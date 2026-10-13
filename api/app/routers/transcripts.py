@@ -1,4 +1,5 @@
-"""Live speech to text: the WebSockets that carry each speaker's microphone (Module 8).
+"""Live speech to text (Module 8): the WebSockets that carry each speaker's microphone,
+and the transcript itself for the interviewer.
 
 Two doors, one per role, so the server always knows who is speaking (Q&A 4):
 - the interviewer signs in with their login token, sent as the first message
@@ -10,15 +11,20 @@ The speaker label comes from that key, never from anything the browser says.
 import asyncio
 import json
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect, status
+from pydantic import BaseModel
+from sqlalchemy import select
+from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
-from app.db import SessionLocal
-from app.deps import interviewer_from_token, open_session_for_invite
-from app.models import InterviewSession
+from app.db import SessionLocal, get_db
+from app.deps import current_interviewer, interviewer_from_token, open_session_for_invite
+from app.models import InterviewSession, TranscriptSegment
 from app.transcription import SpeakerChannel
 
 router = APIRouter(prefix="/api/ws", tags=["transcripts"])
+# Normal (non-WebSocket) endpoints: interviewers only. The candidate never sees the transcript (N9).
+pages = APIRouter(prefix="/api", tags=["transcripts"], dependencies=[Depends(current_interviewer)])
 
 SIGN_IN_SECONDS = 10  # the interviewer's first message must arrive within this time
 
@@ -115,3 +121,43 @@ async def receive_audio(websocket: WebSocket, session_id: int, speaker: str) -> 
         pass
     finally:
         await channel.close()
+
+
+
+
+# ---------- The saved transcript (Task 8.2.1) ----------
+
+
+class SegmentOut(BaseModel):
+    id: int
+    speaker: str  # interviewer | candidate
+    text: str
+    start_ms: int  # milliseconds since the interview started (Q&A 31)
+    end_ms: int
+
+
+class TranscriptOut(BaseModel):
+    session_id: int
+    status: str  # scheduled | live | ended
+    segments: list[SegmentOut]
+
+
+def saved_segments(db: Session, session_id: int) -> list[SegmentOut]:
+    """Everything said so far, in time order. Overlapping speech stays as two entries (Q&A 36)."""
+    rows = db.scalars(
+        select(TranscriptSegment)
+        .where(TranscriptSegment.session_id == session_id)
+        .order_by(TranscriptSegment.start_ms, TranscriptSegment.id)
+    )
+    return [
+        SegmentOut(id=row.id, speaker=row.speaker, text=row.text, start_ms=row.start_ms, end_ms=row.end_ms)
+        for row in rows
+    ]
+
+
+@pages.get("/interviews/{session_id}/transcript", response_model=TranscriptOut)
+def get_transcript(session_id: int, db: Session = Depends(get_db)):
+    session = db.get(InterviewSession, session_id)
+    if session is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Interview not found.")
+    return TranscriptOut(session_id=session.id, status=session.status, segments=saved_segments(db, session.id))

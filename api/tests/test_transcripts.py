@@ -9,10 +9,11 @@ from datetime import datetime, timedelta, timezone
 import pytest
 from assemblyai.streaming.v3 import RealTimeError, RealTimeEvents, TerminationEvent, TurnEvent, Word
 from starlette.websockets import WebSocketDisconnect
+from sqlalchemy import select
 
 from app import speech
 from app.db import SessionLocal
-from app.models import InterviewSession
+from app.models import InterviewSession, TranscriptSegment
 from app.routers import transcripts
 from app.settings import settings
 from app.speech import Heard, SpeechError
@@ -296,6 +297,81 @@ def test_ending_the_interview_closes_every_audio_connection(client, auth_headers
             assert closed_with(candidate) == INTERVIEW_ENDED
     assert all(stream.stopped for stream in FakeSpeechStream.made)  # each finished its last sentence
     assert transcription.live_channels == {}
+
+
+# ---------- Task 8.2.1: every finished turn is saved at once ----------
+
+
+def saved(session_id: int) -> list[tuple[str, str]]:
+    with SessionLocal() as db:
+        rows = db.scalars(
+            select(TranscriptSegment)
+            .where(TranscriptSegment.session_id == session_id)
+            .order_by(TranscriptSegment.start_ms, TranscriptSegment.id)
+        )
+        return [(row.speaker, row.text) for row in rows]
+
+
+async def nothing(*args) -> None:
+    pass
+
+
+def test_finished_turns_are_saved_while_the_interview_runs(client, auth_headers):
+    FakeSpeechStream.script = ["Tell me about yourself", "I build APIs in Python"]
+    session_id, invite = live_interview(client, auth_headers)
+    with client.websocket_connect(f"/api/ws/interviews/{session_id}/audio") as interviewer:
+        signed_in(interviewer, auth_headers)
+        with client.websocket_connect(f"/api/ws/invite/{invite}/audio") as candidate:
+            candidate.receive_json()
+            for _ in range(10):
+                interviewer.send_bytes(audio())
+            settle(interviewer)
+            assert saved(session_id) == [("interviewer", "Tell me about yourself")]  # saved before anyone left
+            for _ in range(10):
+                candidate.send_bytes(audio())
+            settle(candidate)
+    # Live previews ("Tell me ab...") are never saved: only the two finished turns.
+    assert saved(session_id) == [("interviewer", "Tell me about yourself"), ("candidate", "I build APIs in Python")]
+
+
+def test_the_same_turn_sent_again_updates_its_row(client, auth_headers):
+    session_id, _ = live_interview(client, auth_headers)
+
+    async def scenario():
+        channel = SpeakerChannel(session_id, "candidate", tell=nothing, hang_up=nothing)
+        channel.timeline.add(1000, received_ms=transcription.now_ms())
+        await channel.heard(Heard(0, "i build apis", 0, 800, final=True))
+        await channel.heard(Heard(0, "I build APIs.", 0, 800, final=True))  # the same turn, with punctuation
+        await channel.heard(Heard(1, "Mostly in Python.", 800, 1000, final=True))
+
+    asyncio.run(scenario())
+    assert saved(session_id) == [("candidate", "I build APIs."), ("candidate", "Mostly in Python.")]
+
+
+def test_the_transcript_is_for_the_interviewer_in_time_order(client, auth_headers):
+    session_id, invite = live_interview(client, auth_headers)
+    transcription.save_segment(session_id, "candidate", "Yes, I can hear you.", 2_000, 3_000, None)
+    transcription.save_segment(session_id, "interviewer", "Can you hear me?", 500, 1_800, None)
+    transcription.save_segment(session_id, "interviewer", "Great.", 2_500, 2_900, None)  # overlaps the candidate (Q&A 36)
+
+    body = client.get(f"/api/interviews/{session_id}/transcript", headers=auth_headers).json()
+    assert body["session_id"] == session_id and body["status"] == "live"
+    assert [(s["speaker"], s["text"], s["start_ms"]) for s in body["segments"]] == [
+        ("interviewer", "Can you hear me?", 500),
+        ("candidate", "Yes, I can hear you.", 2_000),
+        ("interviewer", "Great.", 2_500),
+    ]
+    assert client.get(f"/api/interviews/{session_id}/transcript").status_code == 401  # no login
+    assert client.get(f"/api/interviews/{session_id}/transcript", headers={"Authorization": f"Bearer {invite}"}).status_code == 401
+    assert client.get("/api/interviews/999999/transcript", headers=auth_headers).status_code == 404
+
+
+def test_deleting_a_candidate_deletes_their_transcript(client, auth_headers):
+    session_id, _ = live_interview(client, auth_headers)
+    transcription.save_segment(session_id, "candidate", "Hello.", 0, 500, None)
+    candidate_id = client.get(f"/api/interviews/{session_id}", headers=auth_headers).json()["candidate_id"]
+    assert client.delete(f"/api/candidates/{candidate_id}", headers=auth_headers).status_code == 204
+    assert saved(session_id) == []  # N19: nothing of the candidate is left
 
 # ---------- The AssemblyAI wrapper (speech.py), with a pretend AssemblyAI client ----------
 

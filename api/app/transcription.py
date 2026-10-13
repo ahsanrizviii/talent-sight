@@ -3,8 +3,9 @@
 Each person's browser sends ONLY its own microphone, over its own WebSocket (routers/transcripts.py).
 So every piece of audio already belongs to one known speaker, and no AI has to guess who spoke (Q&A 4).
 
-One SpeakerChannel = one speaker in one interview. It passes the audio to that speaker's own
-speech stream (speech.py) and turns what comes back into times on the interview's clock.
+One SpeakerChannel = one speaker in one interview. One SpeakerChannel = one speaker in one interview. It passes the audio to that speaker's own
+speech stream (speech.py), turns what comes back into times on the interview's clock, and saves
+every finished turn at once (Task 8.2.1), so a dropped connection never loses what was said (Q&A 34).
 The audio only passes through memory: it is never written to a file or to the database (Q&A 7, N16).
 """
 
@@ -16,7 +17,7 @@ from typing import Awaitable, Callable
 
 from app import speech
 from app.db import SessionLocal
-from app.models import InterviewSession
+from app.models import InterviewSession, TranscriptSegment
 from app.speech import SAMPLE_RATE, Heard
 
 log = logging.getLogger("talentsight")
@@ -85,6 +86,19 @@ def interview_start_ms(session_id: int) -> int | None:
             return None
         return int(session.started_at.timestamp() * 1000)
 
+def save_segment(session_id: int, speaker: str, text: str, start_ms: int, end_ms: int, segment_id: int | None) -> int:
+    """Saves one finished turn and returns its id. With segment_id, that row is updated instead:
+    the speech service sometimes sends the same turn again, with punctuation and capitals added."""
+    with SessionLocal() as db:
+        segment = db.get(TranscriptSegment, segment_id) if segment_id else None
+        if segment is None:
+            segment = TranscriptSegment(session_id=session_id, speaker=speaker)
+            db.add(segment)
+        segment.text = text
+        segment.start_ms = start_ms
+        segment.end_ms = end_ms
+        db.commit()
+        return segment.id
 
 # ---------- Who is connected right now ----------
 
@@ -130,6 +144,7 @@ class SpeakerChannel:
         self.streams_opened = 0
         self.started_ms: int | None = None  # the interview's start, the zero point of every timestamp
         self.audio_ms = 0  # how much audio has arrived; only a number, the audio itself is not kept
+        self.saved_turns: dict[int, int] = {}  # turn number in the current stream -> saved segment id
 
     async def join(self) -> None:
         """Becomes THE channel of this speaker. An older connection of the same person is closed."""
@@ -174,6 +189,7 @@ class SpeakerChannel:
             return
         self.stream = stream
         self.timeline = Timeline()  # every new stream counts its audio from zero; the clock keeps the times continuous
+        self.saved_turns = {}  # ...and numbers its turns from zero
         self.failures = 0
         self.streams_opened += 1
         if self.streams_opened > 1:
@@ -196,8 +212,13 @@ class SpeakerChannel:
 
     async def heard(self, heard: Heard) -> None:
         if not heard.final:
-            return  # live previews are shown to the interviewer later (Task 8.2.2)
+            return  # live previews are shown to the interviewer later (Task 8.2.2); they are never saved
         start_ms, end_ms = await self.interview_times(heard)
+        # Saved at once (Task 8.2.1). Everything is transcribed, small talk too (Q&A 16).
+        segment_id = await asyncio.to_thread(
+            save_segment, self.session_id, self.speaker, heard.text, start_ms, end_ms, self.saved_turns.get(heard.turn)
+        )
+        self.saved_turns[heard.turn] = segment_id
         log.info(
             f"speech segment {start_ms}-{end_ms} ms",
             extra={
