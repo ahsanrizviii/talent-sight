@@ -82,7 +82,15 @@ async def candidate_audio(websocket: WebSocket, invite_token: str):
 
 async def receive_audio(websocket: WebSocket, session_id: int, speaker: str) -> None:
     """Passes every audio piece to the speaker's channel until the browser disconnects."""
-    channel = SpeakerChannel(session_id, speaker)
+
+    async def tell(message: dict) -> None:
+        """Sends a short status message to this browser. A browser that has just left is simply skipped."""
+        try:
+            await websocket.send_json(message)
+        except Exception:
+            pass
+
+    channel = SpeakerChannel(session_id, speaker, tell)
     try:
         await websocket.send_json({"type": "ready"})
         while True:
@@ -91,6 +99,9 @@ async def receive_audio(websocket: WebSocket, session_id: int, speaker: str) -> 
                 break
             if message.get("bytes"):
                 await channel.add_audio(message["bytes"])
+            elif message.get("text") and '"ping"' in message["text"]:
+                # Messages are handled in order, so "pong" also means: all audio before it was handled.
+                await tell({"type": "pong"})
     except WebSocketDisconnect:
         pass
     finally:

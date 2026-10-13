@@ -57,7 +57,7 @@ registerProcessor("pcm-pieces", PcmPieces);
 export type SpeechTarget = { path: string; token?: string | null };
 
 // connecting = waiting for the server, on = audio is flowing, off = stopped or refused
-export type SpeechState = "connecting" | "on" | "off";
+export type SpeechState = "connecting" | "on" | "unavailable" | "off";
 
 export class SpeechSender {
   private socket: WebSocket | null = null;
@@ -110,9 +110,12 @@ export class SpeechSender {
     socket.onmessage = (event) => {
       if (typeof event.data !== "string") return;
       const message = JSON.parse(event.data);
-      if (message.type === "ready") {
+        if (message.type === "ready") {
         this.ready = true;
         this.onState("on");
+      } else if (message.type === "status") {
+        // The server opens the speech service when the first audio arrives, and says how it went.
+        this.onState(message.state === "listening" ? "on" : "unavailable");
       }
     };
     socket.onclose = () => {

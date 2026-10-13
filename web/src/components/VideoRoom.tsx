@@ -44,6 +44,7 @@ type Props = {
 const SPEECH_LABELS: Record<SpeechState, string> = {
   connecting: "Speech-to-text: connecting...",
   on: "Speech-to-text is on: what you say is turned into text for the interview.",
+  unavailable: "Speech-to-text is not available right now. The call is not affected.",
   off: "Speech-to-text is off. The call is not affected.",
 };
 
