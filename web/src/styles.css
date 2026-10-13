@@ -518,3 +518,8 @@ input[type="file"]::file-selector-button {
 .panel-dimension-head { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 3px; }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: calc(var(--space) * 1.5); }
 .panel .score-total { font-size: 40px; }
+
+
+/* ---------- Live speech to text (Module 8) ---------- */
+.speech-note { margin: 0; text-align: center; color: var(--color-muted); }
+.speech-note.on::before { content: "●"; color: var(--color-success); margin-right: 6px; }

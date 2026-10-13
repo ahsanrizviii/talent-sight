@@ -32,7 +32,12 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
   }
   return response.json() as Promise<T>;
 }
-
+// Live speech to text (Module 8) uses WebSockets. They go to the same server as the page,
+// with ws:// instead of http:// (or wss:// instead of https://).
+export function socketUrl(path: string): string {
+  const scheme = window.location.protocol === "https:" ? "wss" : "ws";
+  return `${scheme}://${window.location.host}/api${path}`;
+}
 // For files (like a CV): same login token, but the answer is a file, not JSON.
 export async function apiBlob(path: string): Promise<Blob> {
   const headers = new Headers();

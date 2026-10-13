@@ -2,10 +2,13 @@ import { useEffect, useReducer, useRef, useState } from "react";
 import { ConnectionState, DisconnectReason, Room, RoomEvent, Track } from "livekit-client";
 import type { Participant } from "livekit-client";
 import type { JoinInfo } from "../types";
+import { SpeechSender } from "../speech";
+import type { SpeechState, SpeechTarget } from "../speech";
 
 // The video call itself: two tiles and the buttons below them (Tasks 7.2.1 and 7.3.1).
 // The interviewer's page and the candidate's page both use it; they only differ in how
 // they ask the API for a join token (the `join` prop) and in what happens after Leave.
+// With the `speech` prop, this browser's microphone is also sent for live speech to text (Module 8).
 
 // Any of these events can change what we draw, so each one simply redraws the room.
 const REDRAW_EVENTS = [
@@ -35,6 +38,13 @@ type Props = {
   remoteLabel: string; // "Candidate" or "Interviewer": who we are waiting for
   onLeave: () => void; // after the user pressed Leave
   onEnd?: () => void; // interviewer only: the End interview button
+  speech?: SpeechTarget; // where to send this browser's microphone for the transcript (Module 8)
+};
+
+const SPEECH_LABELS: Record<SpeechState, string> = {
+  connecting: "Speech-to-text: connecting...",
+  on: "Speech-to-text is on: what you say is turned into text for the interview.",
+  off: "Speech-to-text is off. The call is not affected.",
 };
 
 function Tile({ participant, label, local }: { participant: Participant | null; label: string; local: boolean }) {
@@ -84,10 +94,12 @@ function Tile({ participant, label, local }: { participant: Participant | null; 
   );
 }
 
-export default function VideoRoom({ join, remoteLabel, onLeave, onEnd }: Props) {
+export default function VideoRoom({ join, remoteLabel, onLeave, onEnd, speech }: Props) {
   const roomRef = useRef<Room | null>(null);
   const joinRef = useRef(join); // the latest join function, without restarting the call when it changes
   joinRef.current = join;
+  const speechRef = useRef(speech); // read once, when the call starts
+  const [speechState, setSpeechState] = useState<SpeechState>("connecting");
   const wanted = useRef({ microphone: true, camera: true }); // what the user switched on, kept across reconnects
   const [phase, setPhase] = useState<"connecting" | "live" | "closed">("connecting");
   const [reconnecting, setReconnecting] = useState(false);
@@ -184,8 +196,13 @@ export default function VideoRoom({ join, remoteLabel, onLeave, onEnd }: Props) 
 
     enter().catch((error) => close((error as Error).message));
 
+    // Live speech to text (Module 8). It follows the microphone by itself, also after a reconnect.
+    const sender = speechRef.current ? new SpeechSender(room, speechRef.current, setSpeechState) : null;
+    sender?.start();
+
     return () => {
       cancelled = true;
+      sender?.stop();
       room.disconnect();
     };
   }, []);
@@ -234,6 +251,13 @@ export default function VideoRoom({ join, remoteLabel, onLeave, onEnd }: Props) 
       </div>
 
       {deviceNote && <p className="error small">{deviceNote}</p>}
+      {speech && phase === "live" && (
+        <p className={`speech-note small ${speechState === "on" ? "on" : "muted"}`}>
+          {speechState === "on" && me && !me.isMicrophoneEnabled
+            ? "Speech-to-text is paused while your microphone is muted."
+            : SPEECH_LABELS[speechState]}
+        </p>
+      )}
       {soundBlocked && (
         <button className="button secondary" onClick={() => room?.startAudio()}>
           Click to turn on the sound
