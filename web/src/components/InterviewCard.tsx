@@ -4,6 +4,13 @@ import type { Interview } from "../types";
 import { Link } from "react-router-dom";
 import SavedTranscript from "./SavedTranscript";
 
+// "localhost" and "127.0.0.1" mean "this computer", so a link containing them is useless to
+// anyone else: their own machine has no TalentSight on it. The card says so rather than
+// letting an interviewer e-mail a link that cannot work.
+function localOnly(url: string): boolean {
+  return /\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0)(:|\/)/.test(url);
+}
+
 // A <input type="datetime-local"> wants "2026-10-12T15:30" in the browser's own time zone.
 function toInputValue(date: Date): string {
   const pad = (n: number) => String(n).padStart(2, "0");
@@ -121,6 +128,12 @@ export default function InterviewCard({ candidateId, candidateStatus }: Props) {
               {copied ? "Copied" : "Copy"}
             </button>
           </div>
+          {localOnly(interview.invite_url) && (
+            <p className="demo-note">
+              This link only opens on this computer, because the site is running on localhost. To invite
+              someone on another device, give the site a public address first: see docs/public-link.md.
+            </p>
+          )}
         </div>
       )}
       {interview?.email_sent === true && <p className="success">Invitation e-mail sent.</p>}

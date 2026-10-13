@@ -32,6 +32,19 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
   }
   return response.json() as Promise<T>;
 }
+// Builds "/path?a=1&b=two" and leaves out anything empty, so the filter bars can pass
+// everything they have without checking each value first.
+export function withQuery(path: string, values: Record<string, string | number | undefined | null>): string {
+  const query = new URLSearchParams();
+  for (const [key, value] of Object.entries(values)) {
+    if (value !== undefined && value !== null && value !== "") {
+      query.set(key, String(value));
+    }
+  }
+  const text = query.toString();
+  return text ? `${path}?${text}` : path;
+}
+
 // Live speech to text (Module 8) uses WebSockets. They go to the same server as the page,
 // with ws:// instead of http:// (or wss:// instead of https://).
 export function socketUrl(path: string): string {
