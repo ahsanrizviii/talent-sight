@@ -131,13 +131,18 @@ export default function InterviewCard({ candidateId, candidateStatus }: Props) {
           {localOnly(interview.invite_url) && (
             <p className="demo-note">
               This link only opens on this computer, because the site is running on localhost. To invite
-              someone on another device, give the site a public address first: see docs/public-link.md.
+              someone on another device, give the site a public address first. The{" "}
+              <Link to="/setup">setup check</Link> shows what is missing.
             </p>
           )}
         </div>
       )}
-      {interview?.email_sent === true && <p className="success">Invitation e-mail sent.</p>}
+      {interview?.email_sent === true && (
+        <p className="success">Invitation e-mail sent, with the interview in the candidate's calendar.</p>
+      )}
       {interview?.email_sent === false && <p className="error">{interview.email_error}</p>}
+      {interview?.calendar_added === true && <p className="success">Added to the company Google Calendar.</p>}
+      {interview?.calendar_added === false && <p className="error">{interview.calendar_error}</p>}
 
       {candidateStatus === "screened" && (interview === null || interview.status !== "live") && (
         <div className="field">

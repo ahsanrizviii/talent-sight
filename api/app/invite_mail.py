@@ -15,7 +15,8 @@ import ssl
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from email.message import EmailMessage
-from email.utils import formataddr
+from email.utils import formataddr, parseaddr
+from urllib.parse import urlparse
 from html import escape
 
 from app.models import Candidate, InterviewSession, JobProfile
@@ -71,7 +72,95 @@ def when_text(moment: datetime) -> str:
     return f"{local:%A, %d %B %Y at %H:%M} (UTC{sign}{abs(minutes) // 60:02d}:{abs(minutes) % 60:02d})"
 
 
-def build_message(session: InterviewSession, candidate: Candidate, job: JobProfile, rescheduled: bool) -> EmailMessage:
+def _ics_escape(text: str) -> str:
+    return text.replace("\\", "\\\\").replace(";", "\\;").replace(",", "\\,").replace("\r", "").replace("\n", "\\n")
+
+
+def _ics_fold(line: str) -> str:
+    """Calendar files may not have lines longer than 75 bytes: longer ones continue on the next line."""
+    raw = line.encode("utf-8")
+    parts = []
+    while len(raw) > 75:
+        cut = 75
+        while cut > 0 and (raw[cut] & 0xC0) == 0x80:  # never cut inside a multi-byte letter
+            cut -= 1
+        parts.append(raw[:cut].decode("utf-8"))
+        raw = b" " + raw[cut:]
+    parts.append(raw.decode("utf-8"))
+    return "\r\n".join(parts)
+
+
+def organizer_address(server: MailServer) -> str:
+    return parseaddr(sender(server))[1] or server.user
+
+
+def calendar_invite(
+    session: InterviewSession,
+    candidate: Candidate,
+    job: JobProfile,
+    server: MailServer,
+    method: str = "REQUEST",
+) -> str:
+    """The candidate's own calendar entry (an .ics file), so the interview lands in Gmail Calendar,
+    Outlook or Apple Calendar on whatever device they use. It carries only the time and their
+    private link. method is REQUEST to add or move the entry, CANCEL to remove it.
+    """
+    start = session.scheduled_at.astimezone(timezone.utc)
+    end = start + timedelta(minutes=settings.interview_minutes)
+    stamp = datetime.now(timezone.utc)
+    company = " ".join(settings.company_name.split())
+    title = " ".join(job.title.split())
+    link = invite_link(session.invite_token)
+    host = urlparse(settings.public_base_url).hostname or "talentsight"
+    cancelled = method == "CANCEL"
+    when = "%Y%m%dT%H%M%SZ"
+    description = (
+        f"Video interview for the {title} position at {company}.\nJoin: {link}\n"
+        f"The link opens {settings.join_early_minutes} minutes before the start. It is made only for you."
+    )
+    lines = [
+        "BEGIN:VCALENDAR",
+        "VERSION:2.0",
+        "PRODID:-//TalentSight//Interviews//EN",
+        "CALSCALE:GREGORIAN",
+        f"METHOD:{method}",
+        "BEGIN:VEVENT",
+        f"UID:interview-{session.id}@{host}",
+        f"DTSTAMP:{stamp:{when}}",
+        # A higher SEQUENCE tells the calendar this replaces the earlier version of the same entry.
+        f"SEQUENCE:{int(stamp.timestamp())}",
+        f"DTSTART:{start:{when}}",
+        f"DTEND:{end:{when}}",
+        f"SUMMARY:{_ics_escape(f'Interview at {company}: {title}')}",
+        f"DESCRIPTION:{_ics_escape(description)}",
+        f"LOCATION:{_ics_escape(link)}",
+        f"URL:{link}",
+        f"STATUS:{'CANCELLED' if cancelled else 'CONFIRMED'}",
+        f"ORGANIZER;CN={_ics_escape(company + ' Hiring')}:mailto:{organizer_address(server)}",
+        f"ATTENDEE;CN={_ics_escape(candidate.name.strip() or candidate.email)};ROLE=REQ-PARTICIPANT;RSVP=FALSE:mailto:{candidate.email.strip()}",
+    ]
+    if not cancelled:
+        lines += [
+            "BEGIN:VALARM",
+            "ACTION:DISPLAY",
+            "DESCRIPTION:Interview starts soon",
+            "TRIGGER:-PT15M",
+            "END:VALARM",
+        ]
+    lines += ["END:VEVENT", "END:VCALENDAR"]
+    return "\r\n".join(_ics_fold(line) for line in lines) + "\r\n"
+
+
+def attach_calendar_invite(message: EmailMessage, ics: str, method: str) -> None:
+    """Added twice, the way Google does it: as an alternative body, so Gmail and Outlook show their
+    own "add to calendar" card, and as invite.ics, for apps that only understand attachments."""
+    message.add_alternative(ics, subtype="calendar", params={"method": method})
+    message.add_attachment(ics.encode("utf-8"), maintype="application", subtype="ics", filename="invite.ics")
+
+
+def build_message(
+    session: InterviewSession, candidate: Candidate, job: JobProfile, rescheduled: bool, server: MailServer
+) -> EmailMessage:
     title = " ".join(job.title.split())  # one line: no line break can sneak into the subject
     company = " ".join(settings.company_name.split())
     greeting = f"Hello {candidate.name.strip()}," if candidate.name.strip() else "Hello,"
@@ -100,6 +189,28 @@ def build_message(session: InterviewSession, candidate: Candidate, job: JobProfi
         f"<p>{escape(rules)}</p><p>Good luck!<br>{escape(signature)}</p>",
         subtype="html",
     )
+    attach_calendar_invite(message, calendar_invite(session, candidate, job, server), "REQUEST")
+    return message
+
+
+def build_cancellation(session: InterviewSession, candidate: Candidate, job: JobProfile, server: MailServer) -> EmailMessage:
+    """Tells the candidate the interview will not happen, and removes it from their calendar."""
+    title = " ".join(job.title.split())
+    company = " ".join(settings.company_name.split())
+    greeting = f"Hello {candidate.name.strip()}," if candidate.name.strip() else "Hello,"
+    when = when_text(session.scheduled_at)
+    text = (
+        f"The video interview with {company} for the {title} position, planned for {when}, has been cancelled. "
+        "The link you were sent no longer works. If a new time is agreed, you will get a new e-mail."
+    )
+    signature = f"The {company} hiring team"
+
+    message = EmailMessage()
+    message["Subject"] = f"Interview cancelled: {title} at {company}"
+    message["To"] = candidate.email.strip()
+    message.set_content(f"{greeting}\n\n{text}\n\n{signature}\n")
+    message.add_alternative(f"<p>{escape(greeting)}</p><p>{escape(text)}</p><p>{escape(signature)}</p>", subtype="html")
+    attach_calendar_invite(message, calendar_invite(session, candidate, job, server, method="CANCEL"), "CANCEL")
     return message
 
 
@@ -119,8 +230,11 @@ def deliver(message: EmailMessage, server: MailServer) -> None:
         smtp.send_message(message)
 
 
-def send_invite(session: InterviewSession, candidate: Candidate, job: JobProfile, rescheduled: bool = False) -> str:
-    """Sends the invitation. Returns "" when it was sent, otherwise a short reason. Never raises."""
+def _send(session: InterviewSession, candidate: Candidate, job: JobProfile, make, what: str) -> str:
+    """Builds and sends one message. Returns "" when sent, otherwise a short reason. Never raises.
+
+    make(server) builds the message once the mail server is known.
+    """
     address = candidate.email.strip()
     server = mail_server()
     if not address:
@@ -131,28 +245,83 @@ def send_invite(session: InterviewSession, candidate: Candidate, job: JobProfile
         reason = "E-mail is not set up (SMTP_HOST is empty). Copy the link and send it yourself."
     else:
         try:
-            message = build_message(session, candidate, job, rescheduled)
+            message = make(server)
             message["From"] = sender(server)
             deliver(message, server)
         except smtplib.SMTPAuthenticationError as error:
             log.warning(
-                "invite e-mail refused the login",
+                f"{what} e-mail refused the login",
                 exc_info=error,
                 extra={"event": "invite_email_failed", "session_id": session.id, "candidate_id": candidate.id},
             )
             return "The mail server refused the login. Check SMTP_USER and SMTP_PASSWORD, then send it again."
         except (OSError, smtplib.SMTPException, ValueError) as error:
             log.warning(
-                "invite e-mail failed",
+                f"{what} e-mail failed",
                 exc_info=error,
                 extra={"event": "invite_email_failed", "session_id": session.id, "candidate_id": candidate.id},
             )
             return "The e-mail could not be sent. Copy the link and send it yourself."
         log.info(
-            "invite e-mail sent",
+            f"{what} e-mail sent",
             extra={"event": "invite_email_sent", "session_id": session.id, "candidate_id": candidate.id, "via": server.host},
         )
         return ""
 
-    log.warning("invite e-mail not sent", extra={"event": "invite_email_skipped", "session_id": session.id, "reason": reason})
+    log.warning(f"{what} e-mail not sent", extra={"event": "invite_email_skipped", "session_id": session.id, "reason": reason})
     return reason
+
+
+def send_invite(session: InterviewSession, candidate: Candidate, job: JobProfile, rescheduled: bool = False) -> str:
+    """Sends the invitation. Returns "" when it was sent, otherwise a short reason. Never raises."""
+    return _send(session, candidate, job, lambda server: build_message(session, candidate, job, rescheduled, server), "invite")
+
+
+def send_cancellation(session: InterviewSession, candidate: Candidate, job: JobProfile) -> str:
+    """Tells the candidate their interview was cancelled. Returns "" when sent, otherwise a reason."""
+    return _send(session, candidate, job, lambda server: build_cancellation(session, candidate, job, server), "cancellation")
+
+
+def check_login(server: MailServer) -> str:
+    """For the setup page: connects and logs in without sending anything. Returns "" when it works."""
+    try:
+        context = ssl.create_default_context()
+        if server.port == 465:
+            smtp = smtplib.SMTP_SSL(server.host, server.port, timeout=10, context=context)
+        else:
+            smtp = smtplib.SMTP(server.host, server.port, timeout=10)
+        with smtp:
+            if server.port != 465:
+                smtp.starttls(context=context)
+            if server.user:
+                smtp.login(server.user, server.password)
+    except smtplib.SMTPAuthenticationError:
+        return "The mail server refused the login. Check SMTP_USER and SMTP_PASSWORD."
+    except (OSError, smtplib.SMTPException):
+        return "The mail server could not be reached. Check SMTP_HOST and SMTP_PORT."
+    return ""
+
+
+def send_test(address: str) -> str:
+    """One plain test message, so the hiring team can see an e-mail really arrives. "" = sent."""
+    server = mail_server()
+    if server is None:
+        return "E-mail is not set up (SMTP_HOST is empty)."
+    if not EMAIL_SHAPE.match(address.strip()):
+        return "That e-mail address looks wrong."
+    company = " ".join(settings.company_name.split())
+    message = EmailMessage()
+    message["Subject"] = f"Test e-mail from {company} TalentSight"
+    message["To"] = address.strip()
+    message["From"] = sender(server)
+    message.set_content(
+        "This is a test. If you can read it, interview invitations sent from TalentSight reach real inboxes.\n\n"
+        "If it arrived in spam, mark it as not spam: candidates' invitations will then arrive normally too.\n"
+    )
+    try:
+        deliver(message, server)
+    except smtplib.SMTPAuthenticationError:
+        return "The mail server refused the login. Check SMTP_USER and SMTP_PASSWORD."
+    except (OSError, smtplib.SMTPException):
+        return "The mail server could not be reached. Check SMTP_HOST and SMTP_PORT."
+    return ""

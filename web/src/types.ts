@@ -144,6 +144,8 @@ export type Interview = {
   invite_url: string;
   email_sent: boolean | null; // null = no e-mail was tried in this answer
   email_error: string;
+  calendar_added: boolean | null; // null = Google Calendar is off or was not tried in this answer
+  calendar_error: string;
   duration_seconds: number | null; // null until the interview has ended
   participants: { role: "interviewer" | "candidate"; joined_at: string; left_at: string | null }[];
 
@@ -265,3 +267,13 @@ export type ChatSummary = {
 export type ChatMessage = { role: "recruiter" | "assistant"; text: string; at: string };
 
 export type ChatHistory = ChatSummary & { brief: string; lines: ChatMessage[] };
+
+// One line of the setup check: does this part of an interview really work?
+export type SetupCheck = {
+  key: string;
+  label: string;
+  ok: boolean;
+  detail: string;
+  fix: string; // what to change when it does not work; empty when it does
+  optional: boolean; // the app works without it, but a company will usually want it
+};

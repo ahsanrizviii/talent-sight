@@ -66,6 +66,12 @@ class Settings(BaseSettings):
     public_base_url: str = "http://localhost:8080"  # the address candidates open; used in invite links
     interview_utc_offset_minutes: int = 360  # the time zone shown in e-mails: 360 = UTC+06:00 (Dhaka)
 
+    # Google Calendar: every scheduled interview is put on this calendar of the Google account the
+    # refresh token belongs to. "primary" = that account's own calendar. Empty = switched off.
+    # The token needs the calendar.events scope: see docs/google-calendar.md.
+    google_calendar_id: str = ""
+    interview_minutes: int = 60  # how long the calendar entry and the invitation say the interview lasts
+
     # Older names for the same Gmail login, still read so an existing .env keeps working.
     gmail_user: str = ""
     gmail_app_password: str = ""
