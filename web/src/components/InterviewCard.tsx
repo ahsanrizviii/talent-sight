@@ -130,9 +130,8 @@ export default function InterviewCard({ candidateId, candidateStatus }: Props) {
           </div>
           {localOnly(interview.invite_url) && (
             <p className="demo-note">
-              This link only opens on this computer, because the site is running on localhost. To invite
-              someone on another device, give the site a public address first. The{" "}
-              <Link to="/setup">setup check</Link> shows what is missing.
+            This link only opens on this computer, because the site is running on localhost. To invite
+            someone on another device, set PUBLIC_BASE_URL to the site's public https address.
             </p>
           )}
         </div>

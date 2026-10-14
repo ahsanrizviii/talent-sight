@@ -14,7 +14,6 @@ import JoinPage from "./pages/JoinPage";
 import LandingPage from "./pages/LandingPage";
 import LoginPage from "./pages/LoginPage";
 import PeoplePage from "./pages/PeoplePage";
-import SetupPage from "./pages/SetupPage";
 import VideoTestPage from "./pages/VideoTestPage";
 
 export default function App() {
@@ -40,7 +39,6 @@ export default function App() {
           <Route path="/candidates/:id" element={<CandidatePage />} />
           <Route path="/interviews" element={<InterviewsPage />} />
           <Route path="/interview/:id" element={<InterviewRoomPage />} />
-          <Route path="/setup" element={<SetupPage />} />
           <Route path="/jd-chat" element={<JdChatPage />} />
           <Route path="/jd-chat/:threadId" element={<JdChatPage />} />
           <Route path="/prototype/video" element={<VideoTestPage />} />

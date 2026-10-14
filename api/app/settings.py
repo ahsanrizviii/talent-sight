@@ -68,7 +68,6 @@ class Settings(BaseSettings):
 
     # Google Calendar: every scheduled interview is put on this calendar of the Google account the
     # refresh token belongs to. "primary" = that account's own calendar. Empty = switched off.
-    # The token needs the calendar.events scope: see docs/google-calendar.md.
     google_calendar_id: str = ""
     interview_minutes: int = 60  # how long the calendar entry and the invitation say the interview lasts
 

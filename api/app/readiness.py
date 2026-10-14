@@ -51,10 +51,10 @@ def check_public_link(probe: bool) -> dict:
     if not url.lower().startswith("https://"):
         return _result("link", label, False,
                        "The link is not https. Browsers refuse the camera and microphone on a page that is not https.",
-                       "Set PUBLIC_BASE_URL to your public https address (see docs/public-link.md).")
+                       "Set PUBLIC_BASE_URL to your public https address.")
     if _is_local(url):
         return _result("link", label, False, "The link points at this computer, so nobody else can open it.",
-                       "Set PUBLIC_BASE_URL to your public https address (see docs/public-link.md).")
+                       "Set PUBLIC_BASE_URL to your public https address.")
     if probe and not _reaches(f"{url.rstrip('/')}/api/health", lambda status: status == 200):
         return _result("link", label, False, f"{url} did not answer. The tunnel or the domain is down, or it points at another site.",
                        "Start the tunnel (or fix the domain) and check PUBLIC_BASE_URL.")
@@ -70,7 +70,7 @@ def check_video(probe: bool) -> dict:
                        "Set LIVEKIT_URL, LIVEKIT_SERVER_URL, LIVEKIT_API_KEY and LIVEKIT_API_SECRET to a hosted LiveKit project.")
     if _is_local(url):
         return _result("video", label, False, "The video server is on this computer only.",
-                       "Use a hosted LiveKit project (see docs/public-link.md).")
+                       "Use a hosted LiveKit project.")
     if probe and not _reaches("https://" + url[len("wss://"):]):
         return _result("video", label, False, "The video server did not answer.", "Check LIVEKIT_URL and your internet connection.")
     return _result("video", label, True, "Candidates connect straight to the video server." + (" It answers." if probe else ""))
@@ -80,11 +80,11 @@ def check_calendar(probe: bool) -> dict:
     label = "Google Calendar"
     if not calendar_events.enabled():
         return _result("calendar", label, False, "Not connected: interviews are not added to a calendar.",
-                       "Set GOOGLE_CALENDAR_ID=primary and give the Google token the calendar permission (docs/google-calendar.md).",
+                       "Set GOOGLE_CALENDAR_ID=primary and give the Google token the calendar permission.",
                        optional=True)
     if probe:
         works, detail = calendar_events.check_access()
-        return _result("calendar", label, works, detail, "Make a new Google token with the calendar.events permission (docs/google-calendar.md).", optional=True)
+        return _result("calendar", label, works, detail, "Make a new Google token with the calendar.events permission.", optional=True)
     return _result("calendar", label, True, "Interviews are added to the company calendar.", optional=True)
 
 

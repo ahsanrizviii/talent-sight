@@ -54,8 +54,7 @@ export default function DashboardPage() {
         <div className="card notice">
           <div>
             <strong>Not ready to invite candidates yet.</strong>{" "}
-            Still to set up: {missing.map((check) => check.label).join(", ")}.{" "}
-            <Link to="/setup">Open the setup check</Link>
+            Still to set up: {missing.map((check) => check.label).join(", ")}.
           </div>
         </div>
       )}

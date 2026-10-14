@@ -79,7 +79,6 @@ def _refused(response: httpx.Response) -> GoogleError:
             )
         return GoogleError(
             "Google Calendar refused the request. The Google token needs the calendar.events permission "
-            "(see docs/google-calendar.md)."
         )
     if response.status_code == 404:
         return GoogleError("Google Calendar was not found. Check GOOGLE_CALENDAR_ID.")
