@@ -17,6 +17,7 @@ from app.routers import (
     jd_chat,
     jobs,
     public,
+    setup,
     transcripts,
     workspace,
 )
@@ -85,3 +86,4 @@ app.include_router(interviews.router)
 app.include_router(transcripts.router)
 app.include_router(transcripts.pages)
 app.include_router(workspace.router)
+app.include_router(setup.router)

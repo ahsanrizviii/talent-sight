@@ -216,3 +216,19 @@ class Assessment(Base):
     overall_position: Mapped[str] = mapped_column(String(30))
     report: Mapped[dict] = mapped_column(JSON, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class CalendarEvent(Base):
+    """The Google Calendar entry of one interview, kept so that moving or cancelling the interview
+    changes that same entry instead of leaving a stale one behind.
+
+    A table of its own rather than a column on interview_sessions: create_all makes new tables
+    but never adds columns to existing ones.
+    """
+
+    __tablename__ = "calendar_events"
+
+    session_id: Mapped[int] = mapped_column(ForeignKey("interview_sessions.id", ondelete="CASCADE"), primary_key=True)
+    event_id: Mapped[str] = mapped_column(String(255))
+    calendar_id: Mapped[str] = mapped_column(String(255))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

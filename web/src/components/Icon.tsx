@@ -17,9 +17,11 @@ export type IconName =
   | "check"
   | "external"
   | "download"
-  | "plus";
+  | "plus"
+  | "settings";
 
 const PATHS: Record<IconName, string> = {
+  settings: "M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0M16 4v4M10 10v4M18 16v4",
   dashboard: "M3 3h7v7H3zM14 3h7v4h-7zM14 11h7v10h-7zM3 14h7v7H3z",
   jobs: "M3 7h18v13H3zM8 7V4h8v3",
   people: "M16 20v-1a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v1M9.5 7.5a3 3 0 1 0 0 .01M17 11l2 2 4-4",

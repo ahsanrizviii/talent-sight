@@ -11,7 +11,7 @@ from pydantic import BaseModel, field_validator
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app import invite_mail, livekit_service, participants, transcription
+from app import calendar_events, invite_mail, livekit_service, participants, transcription
 from app.db import get_db
 from app.deps import current_interviewer
 from app.models import Candidate, Interviewer, InterviewSession, JobProfile
@@ -65,6 +65,8 @@ class SessionOut(BaseModel):
     invite_url: str  # the candidate's private link; only the logged-in interviewer ever sees it
     email_sent: bool | None = None  # None = no e-mail was tried in this answer
     email_error: str = ""
+    calendar_added: bool | None = None  # None = Google Calendar is off or was not tried in this answer
+    calendar_error: str = ""
 
 
 class JoinOut(BaseModel):
@@ -95,8 +97,11 @@ def find_session(db: Session, session_id: int) -> InterviewSession:
     return session
 
 
-def to_out(db: Session, session: InterviewSession, mail_error: str | None = None) -> SessionOut:
-    """mail_error: None = no e-mail was tried, "" = it was sent, anything else = why it was not."""
+def to_out(
+    db: Session, session: InterviewSession, mail_error: str | None = None, calendar_error: str | None = None
+) -> SessionOut:
+    """mail_error: None = no e-mail was tried, "" = it was sent, anything else = why it was not.
+    calendar_error: the same three states for the Google Calendar entry."""
     candidate = db.get(Candidate, session.candidate_id)
     job = db.get(JobProfile, candidate.job_profile_id)
     return SessionOut(
@@ -117,6 +122,8 @@ def to_out(db: Session, session: InterviewSession, mail_error: str | None = None
         invite_url=invite_mail.invite_link(session.invite_token),
         email_sent=None if mail_error is None else mail_error == "",
         email_error=mail_error or "",
+        calendar_added=None if calendar_error is None else calendar_error == "",
+        calendar_error=calendar_error or "",
     )
 
 
@@ -125,6 +132,13 @@ def send_invite_for(db: Session, session: InterviewSession, rescheduled: bool = 
     candidate = db.get(Candidate, session.candidate_id)
     job = db.get(JobProfile, candidate.job_profile_id)
     return invite_mail.send_invite(session, candidate, job, rescheduled)
+
+
+def calendar_for(db: Session, session: InterviewSession) -> str | None:
+    """Puts the interview on Google Calendar, or moves its entry. None = Calendar is off. Never raises."""
+    candidate = db.get(Candidate, session.candidate_id)
+    job = db.get(JobProfile, candidate.job_profile_id)
+    return calendar_events.add_or_move(db, session, candidate, job)
 
 
 def video_join(session: InterviewSession, identity: str, name: str, role: str) -> JoinOut:
@@ -170,8 +184,8 @@ def schedule_interview(candidate_id: int, body: ScheduleIn, db: Session = Depend
     )
     db.add(session)
     db.commit()
-    # A failed e-mail never blocks the interview: the answer says why, and the link can be copied.
-    return to_out(db, session, send_invite_for(db, session))
+    # A failed e-mail or calendar entry never blocks the interview: the answer says why, and the link can be copied.
+    return to_out(db, session, send_invite_for(db, session), calendar_for(db, session))
 
 
 @router.get("/candidates/{candidate_id}/interview", response_model=SessionOut | None)
@@ -200,7 +214,7 @@ def reschedule_interview(session_id: int, body: ScheduleIn, db: Session = Depend
     session.scheduled_at = body.scheduled_at
     session.invite_expires_at = expiry_for(body.scheduled_at)
     db.commit()
-    return to_out(db, session, send_invite_for(db, session, rescheduled=True))
+    return to_out(db, session, send_invite_for(db, session, rescheduled=True), calendar_for(db, session))
 
 
 @router.post("/interviews/{session_id}/invite", response_model=SessionOut)
@@ -244,10 +258,17 @@ def end_interview(session_id: int, db: Session = Depends(get_db)):
     """Ends the interview (or cancels one that never started) and closes its room."""
     session = find_session(db, session_id)
     if session.status != "ended":
+        cancelled_before_start = session.status == "scheduled"
         session.status = "ended"
         session.ended_at = utcnow()
         participants.close_all(db, session.id, session.ended_at)
         db.commit()
         livekit_service.close_room(session.id)
         transcription.end_interview(session.id)  # stop live speech to text for both speakers (Module 8)
+        if cancelled_before_start:
+            # The candidate was told about this interview, so tell them it is off, and clear both calendars.
+            candidate = db.get(Candidate, session.candidate_id)
+            job = db.get(JobProfile, candidate.job_profile_id)
+            mail_error = invite_mail.send_cancellation(session, candidate, job)
+            return to_out(db, session, mail_error, calendar_events.remove(db, session))
     return to_out(db, session)

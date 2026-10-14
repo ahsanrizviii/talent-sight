@@ -219,3 +219,86 @@ def test_a_wrong_password_says_so(client, auth_headers):
     assert body["email_sent"] is False
     assert "refused the login" in body["email_error"]
     assert "bad password" not in str(body)
+
+
+# ---------- The candidate's own calendar invitation ----------
+
+
+def calendar_parts(message):
+    return [part for part in message.walk() if part.get_content_type() == "text/calendar"]
+
+
+def invite_text(message) -> str:
+    return calendar_parts(message)[0].get_content()
+
+
+def unfolded(text: str) -> list[str]:
+    """The calendar's lines with continuation lines joined back on, the way a calendar app reads them."""
+    lines: list[str] = []
+    for line in text.splitlines():
+        if line.startswith(" ") and lines:
+            lines[-1] += line[1:]
+        else:
+            lines.append(line)
+    return lines
+
+
+def test_the_email_carries_a_calendar_invitation_for_the_candidate(client, auth_headers):
+    session = schedule(client, auth_headers, make_candidate()).json()
+    message = FakeSMTP.sent[0]
+    parts = calendar_parts(message)
+    assert len(parts) == 1  # the body Gmail and Outlook read to show their own "add to calendar" card
+    assert parts[0].get_param("method") == "REQUEST"
+    assert [part.get_filename() for part in message.iter_attachments()] == ["invite.ics"]  # for apps that read attachments
+
+    text = invite_text(message)
+    token = stored_session(session["id"]).invite_token
+    assert text.startswith("BEGIN:VCALENDAR")
+    assert "METHOD:REQUEST" in text and "STATUS:CONFIRMED" in text
+    assert f"{settings.public_base_url}/join/{token}" in "".join(unfolded(text))  # their own private link
+    flat = "".join(unfolded(text))
+    assert "ATTENDEE;CN=Maya Rahman" in flat and "mailto:maya@example.com" in flat
+    assert "DTSTART:" in text and "DTEND:" in text and "BEGIN:VALARM" in text
+
+
+def test_calendar_lines_never_run_past_75_bytes(client, auth_headers):
+    schedule(client, auth_headers, make_candidate())
+    text = invite_text(FakeSMTP.sent[0])
+    assert all(len(line.encode("utf-8")) <= 75 for line in text.splitlines())
+    assert any(line.startswith("DESCRIPTION:") and "Join:" in line for line in unfolded(text))  # nothing lost by folding
+
+
+def test_a_moved_interview_replaces_the_earlier_calendar_entry(client, auth_headers):
+    session = schedule(client, auth_headers, make_candidate()).json()
+    client.patch(f"/api/interviews/{session['id']}", json={"scheduled_at": in_hours(6)}, headers=auth_headers)
+    first, second = (unfolded(invite_text(FakeSMTP.sent[i])) for i in (0, 1))
+    field = lambda lines, name: next(line for line in lines if line.startswith(name + ":"))  # noqa: E731
+    assert field(first, "UID") == field(second, "UID")  # the same entry...
+    assert int(field(second, "SEQUENCE")[9:]) >= int(field(first, "SEQUENCE")[9:])  # ...marked as the newer version
+    assert field(first, "DTSTART") != field(second, "DTSTART")  # at its new time
+
+
+def test_cancelling_tells_the_candidate_and_removes_their_calendar_entry(client, auth_headers):
+    session = schedule(client, auth_headers, make_candidate()).json()
+    body = client.post(f"/api/interviews/{session['id']}/end", headers=auth_headers).json()
+    assert body["email_sent"] is True
+    cancel = FakeSMTP.sent[1]
+    assert cancel["Subject"].startswith("Interview cancelled")
+    assert calendar_parts(cancel)[0].get_param("method") == "CANCEL"
+    text = invite_text(cancel)
+    assert "METHOD:CANCEL" in text and "STATUS:CANCELLED" in text
+    assert "BEGIN:VALARM" not in text
+
+
+def test_ending_an_interview_that_ran_sends_no_cancellation(client, auth_headers):
+    session = schedule(client, auth_headers, make_candidate()).json()
+    client.post(f"/api/interviews/{session['id']}/join", headers=auth_headers)  # it starts: status live
+    client.post(f"/api/interviews/{session['id']}/end", headers=auth_headers)
+    assert len(FakeSMTP.sent) == 1  # only the original invitation
+
+
+def test_the_calendar_invitation_holds_no_scores_either(client, auth_headers):
+    schedule(client, auth_headers, make_candidate())
+    text = invite_text(FakeSMTP.sent[0]).lower()
+    for secret in ("score", "rank", "overall", "excluded", "unmet"):
+        assert secret not in text

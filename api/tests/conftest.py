@@ -61,6 +61,7 @@ def no_real_mail(monkeypatch):
     monkeypatch.setattr(settings, "smtp_user", "")
     monkeypatch.setattr(settings, "smtp_password", "")
     monkeypatch.setattr(settings, "mail_from", "")
+    monkeypatch.setattr(settings, "google_calendar_id", "")  # tests must never touch a real calendar
     monkeypatch.setattr(settings, "gmail_user", "")
     monkeypatch.setattr(settings, "gmail_app_password", "")
 
