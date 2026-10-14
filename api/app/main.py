@@ -8,7 +8,18 @@ from app.agents.jd_agent import get_jd_agent
 from app.db import init_db
 from app.knowledge import load_policies
 from app.logging_setup import setup_logging
-from app.routers import auth, candidates, health, interviews, invites, jd_chat, jobs, public, transcripts
+from app.routers import (
+    auth,
+    candidates,
+    health,
+    interviews,
+    invites,
+    jd_chat,
+    jobs,
+    public,
+    transcripts,
+    workspace,
+)
 from app.screening import mark_interrupted_runs
 from app.seed import seed_interviewer
 
@@ -73,3 +84,4 @@ app.include_router(candidates.router)
 app.include_router(interviews.router)
 app.include_router(transcripts.router)
 app.include_router(transcripts.pages)
+app.include_router(workspace.router)

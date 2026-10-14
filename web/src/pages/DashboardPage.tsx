@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 
 import { api } from "../api";
 import Avatar from "../components/Avatar";
+import CountUp from "../components/CountUp";
 import Empty from "../components/Empty";
 import Icon from "../components/Icon";
 import StageBadge from "../components/StageBadge";
@@ -45,7 +46,7 @@ export default function DashboardPage() {
       </div>
 
       <div className="framed">
-        <div className="card hero-card">
+        <div className="card glass hero-card">
           <div>
             <h2>{data ? `${data.passed_screening} candidates are through screening` : "Your hiring, right now"}</h2>
             <p className="lead">
@@ -55,30 +56,30 @@ export default function DashboardPage() {
             </p>
           </div>
           <div className={data?.average_score ? "big-stat" : "big-stat none"}>
-            <strong>{data?.average_score ?? "—"}</strong>
+            <strong>{data ? <CountUp value={data.average_score} decimals={1} /> : "—"}</strong>
             <span>average score, out of 100</span>
           </div>
         </div>
       </div>
 
       <div className="stats">
-        <Link className="stat" to="/jobs">
-          <div className="stat-value">{data?.jobs_open ?? "—"}</div>
+        <Link className="stat glass" to="/jobs">
+          <div className="stat-value">{data ? <CountUp value={data.jobs_open} /> : "—"}</div>
           <div className="stat-label">Jobs open</div>
           <div className="stat-note">{data ? `${data.jobs_total} in total` : " "}</div>
         </Link>
-        <Link className="stat" to="/candidates">
-          <div className="stat-value">{data?.candidates_total ?? "—"}</div>
+        <Link className="stat glass" to="/candidates">
+          <div className="stat-value">{data ? <CountUp value={data.candidates_total} /> : "—"}</div>
           <div className="stat-label">Candidates</div>
           <div className="stat-note">{data ? `${data.passed_screening} passed screening` : " "}</div>
         </Link>
-        <Link className="stat" to="/candidates?stage=new">
-          <div className="stat-value">{data?.waiting_to_screen ?? "—"}</div>
+        <Link className="stat glass" to="/candidates?stage=new">
+          <div className="stat-value">{data ? <CountUp value={data.waiting_to_screen} /> : "—"}</div>
           <div className="stat-label">Waiting to screen</div>
           <div className="stat-note">{data?.waiting_to_screen ? "Needs a screening run" : "Nothing waiting"}</div>
         </Link>
-        <Link className="stat" to="/interviews">
-          <div className="stat-value">{data?.interviews_upcoming ?? "—"}</div>
+        <Link className="stat glass" to="/interviews">
+          <div className="stat-value">{data ? <CountUp value={data.interviews_upcoming} /> : "—"}</div>
           <div className="stat-label">Interviews ahead</div>
           <div className="stat-note">{data ? `${data.interviews_done} already done` : " "}</div>
         </Link>
@@ -86,7 +87,7 @@ export default function DashboardPage() {
 
       <div className="board">
         <div>
-          <div className="card">
+          <div className="card glass">
             <div className="card-head">
               <h2>Where everyone is</h2>
               <Link className="small" to="/candidates">
@@ -112,7 +113,7 @@ export default function DashboardPage() {
             )}
           </div>
 
-          <div className="card">
+          <div className="card glass">
             <div className="card-head">
               <h2>Leading candidates</h2>
               <Link className="small" to="/candidates?sort=score">
@@ -144,7 +145,7 @@ export default function DashboardPage() {
         </div>
 
         <div>
-          <div className="card">
+          <div className="card glass">
             <div className="card-head">
               <h2>Needs you</h2>
             </div>
@@ -164,7 +165,7 @@ export default function DashboardPage() {
             )}
           </div>
 
-          <div className="card">
+          <div className="card glass">
             <div className="card-head">
               <h2>Next interviews</h2>
               <Link className="small" to="/interviews">

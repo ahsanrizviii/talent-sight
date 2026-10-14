@@ -55,19 +55,27 @@ class Settings(BaseSettings):
     join_early_minutes: int = 15  # a candidate can join this long before the start time
     invite_hours_after: int = 24  # an invite link stops working this long after the start time
 
-    # E-mail (Module 7). In development every message goes to Mailpit, a fake inbox at http://localhost:8025
-    smtp_host: str = "mailpit"  # leave empty to switch e-mail off
-    smtp_port: int = 1025
-    mail_from: str = "TalentSight <interviews@talentsight.local>"
+    # E-mail (Module 7): every invitation goes to the candidate's real address through the
+    # company's own mail server. Works with Gmail, Google Workspace, Microsoft 365 or any SMTP server.
+    # Leave SMTP_HOST empty to switch e-mail off: the interviewer then copies the link by hand.
+    smtp_host: str = ""  # e.g. smtp.gmail.com or smtp.office365.com
+    smtp_port: int = 587  # 587 = STARTTLS (the usual), 465 = SSL from the first byte
+    smtp_user: str = ""  # the mailbox that sends, e.g. hiring@yourcompany.com
+    smtp_password: str = ""  # for Gmail: a 16-letter App Password, NOT the normal password
+    mail_from: str = ""  # e.g. "BJIT Hiring <hiring@bjit.com>"; empty = the SMTP_USER address
     public_base_url: str = "http://localhost:8080"  # the address candidates open; used in invite links
     interview_utc_offset_minutes: int = 360  # the time zone shown in e-mails: 360 = UTC+06:00 (Dhaka)
 
-    # Real e-mail through Gmail, for real addresses only. Everything else still goes to Mailpit.
-    # Leave GMAIL_USER empty to keep ALL mail in Mailpit (the safe default, also used by the tests).
-    gmail_user: str = ""  # the Gmail address that sends, e.g. talentsight.demo@gmail.com
-    gmail_app_password: str = ""  # a 16-letter Gmail App Password, NOT the normal password
-    real_mail_domains: str = "gmail.com,googlemail.com"  # addresses at these domains get real mail
-    real_mail_only_to: str = ""  # optional safety list: if set, ONLY these addresses get real mail
+    # Older names for the same Gmail login, still read so an existing .env keeps working.
+    gmail_user: str = ""
+    gmail_app_password: str = ""
+
+    # Who may open an account (UI refresh).
+    # Your HR people type the code once, when they sign up. Keep SIGNUP_CODE empty to switch
+    # sign-up off completely: then only the accounts you create yourself can log in.
+    company_name: str = "TalentSight"
+    signup_code: str = ""
+    signup_email_domains: str = ""  # optional, e.g. "bjitgroup.com": only these addresses may sign up
 
     # Speech to text (AssemblyAI streaming)
     assemblyai_api_key: str = ""

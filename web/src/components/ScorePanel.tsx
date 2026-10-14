@@ -12,7 +12,7 @@ function tone(overall: number): string {
 
 export default function ScorePanel({ score }: { score: ScoreBreakdown }) {
   return (
-    <div className="card">
+    <div className="card glass">
       <div className="score-head">
         <div>
           <h2>Score</h2>

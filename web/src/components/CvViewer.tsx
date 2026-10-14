@@ -46,7 +46,7 @@ export default function CvViewer({
   }
 
   return (
-    <div className="card">
+    <div className="card glass">
       <div className="card-head">
         <div>
           <h2>Original CV</h2>

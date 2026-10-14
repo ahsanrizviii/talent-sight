@@ -1,4 +1,4 @@
-"""Tests for the invite link and e-mail (Task 7.1.3). A fake mail server replaces Mailpit."""
+"""Tests for the invite link and e-mail (Task 7.1.3). A fake mail server stands in for the real one."""
 
 import smtplib
 from datetime import datetime, timedelta, timezone
@@ -20,17 +20,21 @@ class FakeSMTP:
     sent: list = []
     servers: list = []
     logins: list = []
+    tls: list = []
     fail = False
+    refuse_login = False
 
-    def __init__(self, host, port, timeout=None):
+    def __init__(self, host, port, timeout=None, context=None):
         if FakeSMTP.fail:
             raise ConnectionRefusedError("mail server is down")
-        FakeSMTP.servers.append(host)
+        FakeSMTP.servers.append((host, port))
 
     def starttls(self, context=None):
-        pass
+        FakeSMTP.tls.append("starttls")
 
     def login(self, user, password):
+        if FakeSMTP.refuse_login:
+            raise smtplib.SMTPAuthenticationError(535, b"bad password")
         FakeSMTP.logins.append(user)
 
     def __enter__(self):
@@ -45,9 +49,15 @@ class FakeSMTP:
 
 @pytest.fixture(autouse=True)
 def fake_mail_server(monkeypatch):
-    FakeSMTP.sent, FakeSMTP.servers, FakeSMTP.logins, FakeSMTP.fail = [], [], [], False
-    monkeypatch.setattr(settings, "smtp_host", "mailpit")
+    FakeSMTP.sent, FakeSMTP.servers, FakeSMTP.logins, FakeSMTP.tls = [], [], [], []
+    FakeSMTP.fail, FakeSMTP.refuse_login = False, False
+    monkeypatch.setattr(settings, "smtp_host", "smtp.example.com")
+    monkeypatch.setattr(settings, "smtp_port", 587)
+    monkeypatch.setattr(settings, "smtp_user", "hiring@example.com")
+    monkeypatch.setattr(settings, "smtp_password", "app-password")
+    monkeypatch.setattr(settings, "company_name", "BJIT")
     monkeypatch.setattr(smtplib, "SMTP", FakeSMTP)
+    monkeypatch.setattr(smtplib, "SMTP_SSL", FakeSMTP)
 
 
 def set_email(candidate_id: int, address: str) -> None:
@@ -150,44 +160,62 @@ def test_expired_and_unknown_links_are_refused(client, auth_headers):
     assert client.get(f"/api/invite/{token}").status_code == 404
     assert client.get("/api/invite/made-up-token").status_code == 404
 
-    
 
-# ---------- Real Gmail for real addresses, Mailpit for everything else ----------
+# ---------- One real mail server for every address ----------
 
 
-@pytest.fixture
-def gmail_on(monkeypatch):
+def test_every_address_goes_to_the_company_mail_server(client, auth_headers):
+    candidate_id = make_candidate()
+    set_email(candidate_id, "maya.rahman@outlook.com")  # not Gmail: it must still be really sent
+    assert schedule(client, auth_headers, candidate_id).json()["email_sent"] is True
+    assert FakeSMTP.servers == [("smtp.example.com", 587)]
+    assert FakeSMTP.tls == ["starttls"]  # encrypted before the password is sent
+    assert FakeSMTP.logins == ["hiring@example.com"]
+
+
+def test_the_email_comes_from_the_company(client, auth_headers):
+    schedule(client, auth_headers, make_candidate())
+    message = FakeSMTP.sent[0]
+    assert message["From"] == "BJIT Hiring <hiring@example.com>"
+    assert message["Subject"] == "Interview invitation: Backend Developer at BJIT"
+    assert "The BJIT hiring team" in message.get_body(("plain",)).get_content()
+
+
+def test_mail_from_can_be_chosen(client, auth_headers, monkeypatch):
+    monkeypatch.setattr(settings, "mail_from", "BJIT Careers <careers@example.com>")
+    schedule(client, auth_headers, make_candidate())
+    assert FakeSMTP.sent[0]["From"] == "BJIT Careers <careers@example.com>"
+
+
+def test_port_465_is_encrypted_from_the_start(client, auth_headers, monkeypatch):
+    monkeypatch.setattr(settings, "smtp_port", 465)
+    schedule(client, auth_headers, make_candidate())
+    assert FakeSMTP.servers == [("smtp.example.com", 465)]
+    assert FakeSMTP.tls == []  # SSL from the first byte: no STARTTLS step
+
+
+def test_an_older_env_with_only_gmail_settings_still_sends(client, auth_headers, monkeypatch):
+    monkeypatch.setattr(settings, "smtp_host", "")
+    monkeypatch.setattr(settings, "smtp_user", "")
     monkeypatch.setattr(settings, "gmail_user", "talentsight.demo@gmail.com")
     monkeypatch.setattr(settings, "gmail_app_password", "test-app-password")
-
-
-def test_a_gmail_address_gets_a_real_email_through_gmail(client, auth_headers, gmail_on):
-    candidate_id = make_candidate()
-    set_email(candidate_id, "maya.rahman@gmail.com")
-    assert schedule(client, auth_headers, candidate_id).json()["email_sent"] is True
-    assert FakeSMTP.servers == ["smtp.gmail.com"]
+    assert schedule(client, auth_headers, make_candidate()).json()["email_sent"] is True
+    assert FakeSMTP.servers == [("smtp.gmail.com", 587)]
     assert FakeSMTP.logins == ["talentsight.demo@gmail.com"]
-    assert FakeSMTP.sent[0]["From"] == "TalentSight <talentsight.demo@gmail.com>"
 
 
-def test_a_made_up_address_still_goes_to_mailpit(client, auth_headers, gmail_on):
-    schedule(client, auth_headers, make_candidate())  # maya@example.com
-    assert FakeSMTP.servers == ["mailpit"]
-    assert FakeSMTP.logins == []
+def test_without_a_mail_server_the_link_is_copied_by_hand(client, auth_headers, monkeypatch):
+    monkeypatch.setattr(settings, "smtp_host", "")
+    body = schedule(client, auth_headers, make_candidate()).json()
+    assert body["email_sent"] is False
+    assert "not set up" in body["email_error"]
+    assert body["invite_url"]
+    assert FakeSMTP.sent == []
 
 
-def test_without_gmail_settings_everything_stays_in_mailpit(client, auth_headers):
-    candidate_id = make_candidate()
-    set_email(candidate_id, "maya.rahman@gmail.com")
-    schedule(client, auth_headers, candidate_id)
-    assert FakeSMTP.servers == ["mailpit"]
-
-
-def test_the_safety_list_limits_real_mail_to_chosen_people(client, auth_headers, gmail_on, monkeypatch):
-    monkeypatch.setattr(settings, "real_mail_only_to", "me@gmail.com")
-    first, second = make_candidate(), make_candidate(name="Other Person")
-    set_email(first, "me@gmail.com")
-    set_email(second, "stranger@gmail.com")
-    schedule(client, auth_headers, first)
-    schedule(client, auth_headers, second)
-    assert FakeSMTP.servers == ["smtp.gmail.com", "mailpit"]  # the stranger only reaches Mailpit
+def test_a_wrong_password_says_so(client, auth_headers):
+    FakeSMTP.refuse_login = True
+    body = schedule(client, auth_headers, make_candidate()).json()
+    assert body["email_sent"] is False
+    assert "refused the login" in body["email_error"]
+    assert "bad password" not in str(body)

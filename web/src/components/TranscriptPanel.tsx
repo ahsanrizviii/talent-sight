@@ -95,7 +95,7 @@ export default function TranscriptPanel({ sessionId, candidateName }: { sessionI
   const segments = [...lines.values()].sort((a, b) => a.start_ms - b.start_ms || a.id - b.id);
 
   return (
-    <section className="card transcript">
+    <section className="card glass transcript">
       <div className="transcript-head">
         <h2>Transcript</h2>
         <span className={`transcript-state ${state}`}>{STATE_LABELS[state]}</span>

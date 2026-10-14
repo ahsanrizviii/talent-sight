@@ -61,7 +61,7 @@ export default function JoinPage() {
 
   return (
     <>
-      <SkyScene variant="calm" />
+      <SkyScene />
       <header className="topbar">
         <span className="brand">TalentSight</span>
       </header>

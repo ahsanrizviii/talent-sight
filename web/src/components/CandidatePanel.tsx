@@ -16,15 +16,15 @@ export default function CandidatePanel({ candidateId }: { candidateId: number })
       .catch((err) => setError(err.message));
   }, [candidateId]);
 
-  if (error) return <aside className="card panel"><p className="error small">{error}</p></aside>;
-  if (!candidate) return <aside className="card panel"><p className="muted small">Loading profile...</p></aside>;
+  if (error) return <aside className="card glass panel"><p className="error small">{error}</p></aside>;
+  if (!candidate) return <aside className="card glass panel"><p className="muted small">Loading profile...</p></aside>;
 
   const profile = candidate.profile;
   const roles = (profile.work_history ?? []).slice(0, 2);
   const degree = profile.education?.[0];
 
   return (
-    <aside className="card panel">
+    <aside className="card glass panel">
       <h2>{candidate.name || candidate.cv_filename}</h2>
       <p className="muted small">{candidate.email || "No e-mail"}</p>
       <p className="muted small">{candidate.phone || "No phone number"}</p>

@@ -134,7 +134,7 @@ export default function CandidatesPage() {
 
       {job && <JobPipeline job={job} candidates={candidates} />}
 
-      <div className="card">
+      <div className="card glass">
         <h2>Add CVs</h2>
         <form className="row" onSubmit={upload}>
           <input type="file" multiple accept=".pdf,.docx" onChange={(event) => setFiles(event.target.files)} aria-label="CV files" />
@@ -175,7 +175,7 @@ export default function CandidatesPage() {
         {message && <p className="success">{message}</p>}
       </div>
 
-      <div className="tabs" role="tablist">
+      <div className="tabs glass" role="tablist">
         <button role="tab" aria-selected={tab === "ranked"} onClick={() => setTab("ranked")}>
           Shortlist ({ranked.length})
         </button>
@@ -187,7 +187,7 @@ export default function CandidatesPage() {
         </button>
       </div>
 
-      <div className="card flush">
+      <div className="card glass flush">
         {shown.length === 0 ? (
           <Empty title={tab === "ranked" ? "No shortlist yet" : "Nothing here"}>
             {tab === "ranked"

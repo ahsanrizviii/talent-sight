@@ -30,7 +30,7 @@ function splitPolicy(policy: string): { source: string; text: string } {
 
 function PolicySources({ policies }: { policies: string[] }) {
   return (
-    <div className="card">
+    <div className="card glass">
       <h2>Company policy used</h2>
       <p className="muted small">
         The AI searched the company's hiring policies, found these paragraphs, and wrote the draft to follow them.
@@ -63,7 +63,7 @@ function PastChat({ threadId }: { threadId: string }) {
   }, [threadId]);
 
   if (error) return <p className="error">{error}</p>;
-  if (!chat) return <div className="card"><div className="skeleton" /><div className="skeleton" /></div>;
+  if (!chat) return <div className="card glass"><div className="skeleton" /><div className="skeleton" /></div>;
 
   return (
     <>
@@ -92,7 +92,7 @@ function PastChat({ threadId }: { threadId: string }) {
         </div>
       </div>
 
-      <div className="card">
+      <div className="card glass">
         <div className="chat-log">
           {chat.lines.map((line, index) => (
             <div className={`chat-line ${line.role}`} key={index}>
@@ -159,7 +159,7 @@ export default function JdChatPage() {
       </div>
 
       {messages.length > 0 && (
-        <div className="card">
+        <div className="card glass">
           <div className="chat-log">
             {messages.map((message, index) => (
               <div className={`chat-line ${message.from === "you" ? "recruiter" : "assistant"}`} key={index}>
@@ -173,7 +173,7 @@ export default function JdChatPage() {
       )}
 
       {waitingForApproval && chat.draft && (
-        <div className="card">
+        <div className="card glass">
           <JobPostView {...chat.draft} />
           <p className="muted small">
             Scoring weights: technical skills {chat.draft.weights.technical_skills}%, experience{" "}
@@ -207,7 +207,7 @@ export default function JdChatPage() {
           Write another job
         </button>
       ) : (
-        <div className="card">
+        <div className="card glass">
           <div className="field">
             <label htmlFor="message">
               {!chat ? "Your brief" : waitingForApproval ? "Or ask for changes" : "Your answer"}
@@ -224,7 +224,7 @@ export default function JdChatPage() {
         </div>
       )}
 
-      <div className="card flush">
+      <div className="card glass flush">
         <div className="card-head">
           <h2>Earlier chats</h2>
           <span className="result-count">{past.length}</span>
