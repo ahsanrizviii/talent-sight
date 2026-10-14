@@ -1,0 +1,66 @@
+/* Styles for the setup check page only. Kept in their own file so the main stylesheet stays as it is. */
+
+/* ---------------------------------------------------------------- the setup check */
+
+.check {
+  display: flex;
+  gap: 15px;
+  align-items: flex-start;
+  padding: 19px 22px;
+  border-bottom: 1px solid var(--line-2);
+}
+
+.check:last-child {
+  border-bottom: 0;
+}
+
+.check h3 {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-bottom: 3px;
+}
+
+.check p {
+  font-size: 14px;
+}
+
+.check-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  flex: none;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.check-mark.ok {
+  color: var(--met);
+  border-color: rgba(140, 199, 162, 0.5);
+  background: rgba(140, 199, 162, 0.14);
+}
+
+.check-mark.bad {
+  color: var(--unmet);
+  border-color: rgba(224, 147, 143, 0.5);
+  background: rgba(224, 147, 143, 0.14);
+}
+
+.check-mark.off {
+  color: var(--ink-3);
+  background: var(--glass-2);
+}
+
+/* What to change, set apart from the explanation so it is the thing the eye finds. */
+.check-fix {
+  margin-top: 7px;
+  padding: 9px 13px;
+  border-radius: var(--radius-s);
+  border-left: 3px solid var(--amber-line);
+  background: var(--amber-wash);
+  color: var(--ink-2);
+}

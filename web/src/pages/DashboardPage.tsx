@@ -7,7 +7,7 @@ import CountUp from "../components/CountUp";
 import Empty from "../components/Empty";
 import Icon from "../components/Icon";
 import StageBadge from "../components/StageBadge";
-import type { Me, Overview } from "../types";
+import type { Me, Overview, SetupCheck } from "../types";
 import { shortDateTime, untilText } from "../when";
 
 // Where the hiring team starts the day: how the pipeline stands, what needs doing,
@@ -16,8 +16,13 @@ export default function DashboardPage() {
   const [data, setData] = useState<Overview | null>(null);
   const [me, setMe] = useState<Me | null>(null);
   const [error, setError] = useState("");
+  const [missing, setMissing] = useState<SetupCheck[]>([]);
 
   useEffect(() => {
+    // probe=false only reads the settings, so the dashboard stays instant.
+    api<SetupCheck[]>("/setup/checks?probe=false")
+      .then((checks) => setMissing(checks.filter((check) => !check.ok && !check.optional)))
+      .catch(() => undefined);
     api<Overview>("/workspace/overview").then(setData).catch((err) => setError(err.message));
     api<Me>("/auth/me").then(setMe).catch(() => undefined);
   }, []);
@@ -44,6 +49,16 @@ export default function DashboardPage() {
           </Link>
         </div>
       </div>
+
+      {missing.length > 0 && (
+        <div className="card notice">
+          <div>
+            <strong>Not ready to invite candidates yet.</strong>{" "}
+            Still to set up: {missing.map((check) => check.label).join(", ")}.{" "}
+            <Link to="/setup">Open the setup check</Link>
+          </div>
+        </div>
+      )}
 
       <div className="framed">
         <div className="card glass hero-card">

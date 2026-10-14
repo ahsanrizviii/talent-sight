@@ -75,6 +75,11 @@ docker compose up -d
 
 ## 4. Check it
 
+The quickest check: account menu (top right), **Setup check**. It connects to your public address and
+your video server from the server's side and tells you which of them a candidate could not reach.
+
+Then the manual check:
+
 1. Open your `https://….trycloudflare.com` address in a browser and log in. The site should look
    exactly as it does on localhost.
 2. Schedule an interview for a candidate whose e-mail address is one you can open on your phone.
