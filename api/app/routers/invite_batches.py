@@ -1,11 +1,10 @@
 """Inviting the top candidates of a job in one go (after screening).
 
-1. PLAN (nothing is saved): HR asks for the top N of the ranked shortlist, or picks people by hand
-   in the order they want them interviewed. The planner gives each one a free slot (working days,
-   interview hours, no holidays, no clashes). On the page HR can still move people up or down.
-2. SEND: HR checks the plan, may untick people, and presses Send. Every interview is created at once;
-   the e-mails and calendar entries then go out one by one in the background, and the page shows
-   how far it got. A failed e-mail never undoes the interview: HR can copy the link by hand.
+HR gives two things: the first interview day and how many of the best-ranked candidates to invite.
+The planner gives each one a free 1-hour slot (working days, interview hours, no holidays, no clashes),
+the interviews are created at once, and the e-mails and calendar entries then go out one by one in the
+background. The page shows how far it got. A failed e-mail never undoes the interview: HR can retry it
+or copy the link by hand.
 """
 
 import logging
@@ -17,7 +16,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app import invite_mail, planner, schedule_rules, scheduling
+from app import holiday_calendar, planner, schedule_rules, scheduling
 from app.db import SessionLocal, get_db
 from app.deps import current_interviewer
 from app.models import Candidate, Interviewer, InterviewSession, InviteBatch, InviteDelivery, JobProfile
@@ -40,21 +39,9 @@ def utcnow() -> datetime:
 # ---------- What goes in and out ----------
 
 
-class PlanIn(BaseModel):
-    top: int | None = Field(default=None, ge=1, le=MAX_BATCH)  # the top N of the shortlist ...
-    candidate_ids: list[int] | None = Field(default=None, min_length=1, max_length=MAX_BATCH)  # ... or these people, in this order
-    start_date: date | None = None  # the first day slots may be on; empty = tomorrow
-    duration_minutes: int | None = Field(default=None, ge=10, le=240)  # empty = the length on the Settings page
-
-
-class PlannedSlot(BaseModel):
-    candidate_id: int
-    rank: int
-    name: str
-    email: str
-    overall: float | None
-    scheduled_at: datetime
-    email_ok: bool  # False: no address or a wrong-looking one, so the link must be sent by hand
+class InviteTopIn(BaseModel):
+    top: int = Field(ge=1, le=MAX_BATCH)  # how many of the best-ranked candidates to invite
+    start_date: date  # the first day interviews may be on
 
 
 class SkippedCandidate(BaseModel):
@@ -64,25 +51,6 @@ class SkippedCandidate(BaseModel):
     reason: str
 
 
-class PlanOut(BaseModel):
-    ranked_total: int  # how many passed screening
-    asked: int  # how many people were asked for
-    slots: list[PlannedSlot]
-    skipped: list[SkippedCandidate]  # already invited or interviewed
-    not_placed: int  # no free slot within a year (only with very large numbers)
-    rules: dict
-
-
-class SendItem(BaseModel):
-    candidate_id: int
-    scheduled_at: datetime
-
-
-class SendIn(BaseModel):
-    items: list[SendItem] = Field(min_length=1, max_length=MAX_BATCH)
-    duration_minutes: int | None = Field(default=None, ge=10, le=240)
-
-
 class DeliveryOut(BaseModel):
     session_id: int
     candidate_id: int
@@ -90,7 +58,7 @@ class DeliveryOut(BaseModel):
     email: str
     scheduled_at: datetime
     duration_minutes: int
-    interview_status: str  # scheduled | live | ended: only a scheduled one can still be moved
+    interview_status: str  # scheduled | live | ended
     status: str  # queued | sent | failed
     error: str
     calendar_error: str
@@ -106,6 +74,17 @@ class BatchOut(BaseModel):
     deliveries: list[DeliveryOut]
 
 
+class InviteInfo(BaseModel):
+    holidays_ahead: int  # public holidays from today on that the planner skips
+    calendar_problem: str  # "" = the holiday calendar was read fine
+
+
+class InviteTopOut(BaseModel):
+    batch: BatchOut | None  # None when nobody could be invited
+    skipped: list[SkippedCandidate]  # already invited or interviewed: not invited again
+    not_placed: int  # no free slot within a year (only with very large numbers)
+
+
 # ---------- Helpers ----------
 
 
@@ -114,15 +93,6 @@ def find_job(db: Session, job_id: int) -> JobProfile:
     if job is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Job not found.")
     return job
-
-
-def load_rules(db: Session, minutes: int | None = None) -> planner.Rules:
-    """The rules from the Settings page, for this batch's interview length."""
-    try:
-        rules = schedule_rules.current(db)
-        return planner.with_length(rules, minutes) if minutes else rules
-    except planner.PlanError as problem:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(problem))
 
 
 def already_invited(db: Session, candidate_id: int) -> str:
@@ -160,76 +130,7 @@ def batch_out(db: Session, batch: InviteBatch) -> BatchOut:
     )
 
 
-# ---------- 1. Plan ----------
-
-
-@router.get("/{job_id}/invite-plan/rules")
-def planning_rules(job_id: int, db: Session = Depends(get_db)) -> dict:
-    """The rules the planner follows, shown on the page so HR knows what to expect."""
-    find_job(db, job_id)
-    rules = load_rules(db)
-    now = utcnow()
-    upcoming = scheduling.days_off(db, now, now + timedelta(days=365), rules)
-    return {**rules.describe(), "holidays_ahead": len(upcoming)}
-
-
-@router.post("/{job_id}/invite-plan", response_model=PlanOut)
-def make_plan(job_id: int, body: PlanIn, db: Session = Depends(get_db)):
-    """Who would be invited, and when. Saves nothing."""
-    find_job(db, job_id)
-    if (body.top is None) == (body.candidate_ids is None):
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Choose either the top N or the people to invite.")
-    rules = load_rules(db, body.duration_minutes)
-
-    ranked = [row for row in list_candidates(job_id, db) if row.status == "screened"]
-    if body.top is not None:
-        wanted = ranked[: body.top]
-    else:
-        by_id = {row.id: row for row in ranked}
-        missing = [cid for cid in body.candidate_ids if cid not in by_id]
-        if missing:
-            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Only candidates of this job who passed screening can be invited.")
-        if len(set(body.candidate_ids)) != len(body.candidate_ids):
-            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "A candidate is listed twice.")
-        wanted = [by_id[cid] for cid in body.candidate_ids]  # HR's own order: the first gets the earliest slot
-
-    chosen, skipped = [], []
-    for row in wanted:
-        reason = already_invited(db, row.id)
-        if reason:
-            skipped.append(SkippedCandidate(candidate_id=row.id, rank=row.rank or 0, name=row.name or row.cv_filename, reason=reason))
-        else:
-            chosen.append(row)
-
-    now = utcnow()
-    first_day = body.start_date or (now.astimezone(rules.zone) + timedelta(days=1)).date()
-    earliest = max(datetime.combine(first_day, datetime.min.time(), rules.zone), now + LEAD_TIME)
-    off = scheduling.days_off(db, earliest, earliest + timedelta(days=planner.MAX_DAYS_AHEAD), rules)
-    starts = planner.plan(len(chosen), earliest, scheduling.booked(db), off, rules)
-
-    slots = [
-        PlannedSlot(
-            candidate_id=row.id,
-            rank=row.rank or 0,
-            name=row.name or row.cv_filename,
-            email=row.email,
-            overall=row.overall,
-            scheduled_at=start,
-            email_ok=bool(invite_mail.EMAIL_SHAPE.match(row.email.strip())),
-        )
-        for row, start in zip(chosen, starts)
-    ]
-    return PlanOut(
-        ranked_total=len(ranked),
-        asked=len(wanted),
-        slots=slots,
-        skipped=skipped,
-        not_placed=len(chosen) - len(slots),
-        rules=rules.describe(),
-    )
-
-
-# ---------- 2. Send ----------
+# ---------- Sending ----------
 
 
 def deliver_batch(batch_id: int) -> None:
@@ -257,60 +158,60 @@ def deliver_batch(batch_id: int) -> None:
         log.info("invite batch done", extra={"event": "invite_batch_done", "batch_id": batch_id, "count": len(waiting)})
 
 
-@router.post("/{job_id}/invite-batches", response_model=BatchOut, status_code=status.HTTP_201_CREATED)
-def send_invitations(
+@router.get("/{job_id}/invite-info", response_model=InviteInfo)
+def invite_info(job_id: int, db: Session = Depends(get_db)):
+    """Shown in the invite pop-up: the holidays the planner will skip, or a warning when the holiday
+    calendar was not read, so HR never books a holiday without knowing."""
+    find_job(db, job_id)
+    today = utcnow().astimezone(schedule_rules.current(db).zone).date()
+    ahead, problem = holiday_calendar.calendar_status(db, today)
+    return InviteInfo(holidays_ahead=ahead, calendar_problem=problem)
+
+
+@router.post("/{job_id}/invite-top", response_model=InviteTopOut, status_code=status.HTTP_201_CREATED)
+def invite_top(
     job_id: int,
-    body: SendIn,
+    body: InviteTopIn,
     background: BackgroundTasks,
     db: Session = Depends(get_db),
     interviewer: Interviewer = Depends(current_interviewer),
 ):
-    """Books every interview of the checked plan, then e-mails them in the background.
-    Every time is checked again first: the plan may be a few minutes old."""
+    """Invites the top N candidates of the ranking, starting on start_date. Everyone gets a free
+    1-hour slot in ranking order (the best-ranked gets the earliest), then the e-mails go out."""
     find_job(db, job_id)
-    rules = load_rules(db, body.duration_minutes)
-    minutes = int(rules.length.total_seconds() // 60)
+    rules = schedule_rules.current(db)
     now = utcnow()
-    busy = scheduling.booked(db)
-    seen: set[int] = set()
-    problems: list[str] = []
-    times = [item.scheduled_at for item in body.items if item.scheduled_at.tzinfo is not None] or [now]
-    days_off = scheduling.days_off(db, min(times), max(times), rules)
+    if body.start_date < now.astimezone(rules.zone).date():
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "The first interview day cannot be in the past.")
 
-    for item in body.items:
-        candidate = db.get(Candidate, item.candidate_id)
-        label = (candidate.name or candidate.cv_filename) if candidate else f"Candidate {item.candidate_id}"
-        if item.scheduled_at.tzinfo is None:
-            problems.append(f"{label}: the time has no time zone.")
-            continue
-        if candidate is None or candidate.job_profile_id != job_id or candidate.status != "screened":
-            problems.append(f"{label}: not a screened candidate of this job.")
-            continue
-        if item.candidate_id in seen:
-            problems.append(f"{label}: listed twice.")
-            continue
-        seen.add(item.candidate_id)
-        reason = already_invited(db, candidate.id) or planner.slot_problem(item.scheduled_at, busy, days_off, rules, now)
+    ranked = [row for row in list_candidates(job_id, db) if row.status == "screened"]
+    if not ranked:
+        raise HTTPException(status.HTTP_409_CONFLICT, "No candidate of this job has passed screening yet.")
+
+    chosen, skipped = [], []
+    for row in ranked[: body.top]:
+        reason = already_invited(db, row.id)
         if reason:
-            problems.append(f"{label}: {reason}")
-            continue
-        busy.append((item.scheduled_at, item.scheduled_at + rules.length))  # the next one must not clash with this one
+            skipped.append(SkippedCandidate(candidate_id=row.id, rank=row.rank or 0, name=row.name or row.cv_filename, reason=reason))
+        else:
+            chosen.append(row)
 
-    if problems:
-        raise HTTPException(
-            status.HTTP_409_CONFLICT,
-            "Nothing was sent, because the plan is out of date. Please make the plan again. " + " ".join(problems[:5]),
-        )
+    earliest = max(datetime.combine(body.start_date, datetime.min.time(), rules.zone), now + LEAD_TIME)
+    off = scheduling.days_off(db, earliest, earliest + timedelta(days=planner.MAX_DAYS_AHEAD), rules)
+    starts = planner.plan(len(chosen), earliest, scheduling.booked(db), off, rules)
+    if not starts:
+        return InviteTopOut(batch=None, skipped=skipped, not_placed=len(chosen))
 
-    batch = InviteBatch(job_profile_id=job_id, created_by=interviewer.id, total=len(body.items))
+    minutes = int(rules.length.total_seconds() // 60)
+    batch = InviteBatch(job_profile_id=job_id, created_by=interviewer.id, total=len(starts))
     db.add(batch)
     db.flush()
-    for item in body.items:
+    for row, start in zip(chosen, starts):
         session = InterviewSession(
-            candidate_id=item.candidate_id,
-            scheduled_at=item.scheduled_at,
+            candidate_id=row.id,
+            scheduled_at=start,
             invite_token=new_invite_token(),
-            invite_expires_at=expiry_for(item.scheduled_at),
+            invite_expires_at=expiry_for(start),
             duration_minutes=minutes,
         )
         db.add(session)
@@ -318,9 +219,9 @@ def send_invitations(
         db.add(InviteDelivery(batch_id=batch.id, session_id=session.id))
     db.commit()  # every interview exists before a single e-mail goes out
 
-    log.info("invite batch created", extra={"event": "invite_batch_created", "batch_id": batch.id, "count": len(body.items)})
+    log.info("invite batch created", extra={"event": "invite_batch_created", "batch_id": batch.id, "count": len(starts)})
     background.add_task(deliver_batch, batch.id)
-    return batch_out(db, batch)
+    return InviteTopOut(batch=batch_out(db, batch), skipped=skipped, not_placed=len(chosen) - len(starts))
 
 
 @router.get("/{job_id}/invite-batches/latest", response_model=BatchOut | None)

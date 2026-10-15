@@ -9,7 +9,8 @@ import StageBadge, { stageLabel } from "../components/StageBadge";
 import type { JobRow, PersonRow, Stage } from "../types";
 import { shortDate } from "../when";
 
-const STAGES: Stage[] = ["new", "screened", "interview", "interviewed", "excluded", "problem"];
+// Only the shortlist is listed: people sent an interview invitation, and people already interviewed.
+const STAGES: Stage[] = ["interview", "interviewed"];
 
 const SORTS = [
   { value: "score", label: "Highest score" },
@@ -18,8 +19,8 @@ const SORTS = [
   { value: "job", label: "Job" },
 ];
 
-// Every candidate the company has, in one table. This is the page that answers
-// "where is that person I spoke to last week" without remembering which job they applied for.
+// The shortlist of every job in one table: everyone who was sent an interview invitation, and everyone
+// already interviewed. Everyone else is on the job's own ranking page.
 export default function PeoplePage() {
   const [params, setParams] = useSearchParams();
   const [rows, setRows] = useState<PersonRow[] | null>(null);
@@ -60,29 +61,38 @@ export default function PeoplePage() {
       .catch((err) => setError(err.message));
   }, [filters]);
 
+  // Downloads exactly the rows on screen, so a filtered list downloads only what the filters keep.
   function downloadCsv() {
-    const head = ["Name", "E-mail", "Job", "Stage", "Score", "Met", "Partly met", "Unmet", "Source", "Added"];
+    const head = ["Name", "E-mail", "Job", "Rank", "Stage", "Score", "Met", "Partly met", "Unmet", "Interview", "Source", "Added"];
     const body = (rows ?? []).map((row) => [
       row.name,
       row.email,
       row.job_title,
+      row.rank ?? "",
       stageLabel(row.stage),
       row.overall ?? "",
       row.met,
       row.partially_met,
       row.unmet,
+      row.interview_at ? new Date(row.interview_at).toLocaleString() : "",
       row.source === "google_form" ? "Google Form" : "Upload",
       shortDate(row.created_at),
     ]);
     const csv = [head, ...body]
       .map((line) => line.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(","))
-      .join("\n");
+      .join("\r\n");
 
+    // The "\uFEFF" at the start tells Excel the file is UTF-8, so names like "Sébastien" or Bangla names show correctly.
+    const url = URL.createObjectURL(new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8" }));
     const link = document.createElement("a");
-    link.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
-    link.download = `talentsight-candidates-${new Date().toISOString().slice(0, 10)}.csv`;
+    link.href = url;
+    link.download = `talentsight-shortlist-${new Date().toISOString().slice(0, 10)}.csv`;
+    // The link must be on the page for Firefox to follow it, and the file address must stay valid
+    // until the browser has started the download. Freeing it at once is what cancelled the download.
+    document.body.appendChild(link);
     link.click();
-    URL.revokeObjectURL(link.href);
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 10_000);
   }
 
   const filtered = Object.entries(filters).some(([key, value]) => value && key !== "sort");
@@ -92,7 +102,7 @@ export default function PeoplePage() {
       <div className="page-head">
         <div>
           <h1>Candidates</h1>
-          <p>Everyone who applied, across every job.</p>
+          <p>The shortlist: everyone sent an interview invitation, across every job.</p>
         </div>
         <button className="button secondary" type="button" onClick={downloadCsv} disabled={!rows?.length}>
           <Icon name="download" />
@@ -175,10 +185,10 @@ export default function PeoplePage() {
             <div className="skeleton" />
           </div>
         ) : rows.length === 0 ? (
-          <Empty title={filtered ? "Nothing matches those filters" : "No candidates yet"}>
+          <Empty title={filtered ? "Nothing matches those filters" : "Nobody is shortlisted yet"}>
             {filtered
               ? "Try a wider search, or clear the filters."
-              : "Open a job and upload CVs, or import the applications from your Google Form."}
+              : "Open a job, screen the CVs and invite the top candidates. Everyone you invite appears here."}
           </Empty>
         ) : (
           <table>

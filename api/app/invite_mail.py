@@ -52,7 +52,7 @@ def mail_server() -> MailServer | None:
 
 
 def sender(server: MailServer) -> str:
-    """The From line. MAIL_FROM when it is set, otherwise the sender name from the Settings page
+    """The From line. MAIL_FROM when it is set, otherwise the sender name from the company set-up
     and the mailbox that logs in.
 
     Gmail and Microsoft 365 only send as the mailbox that logged in (or an alias of it), so the
@@ -64,7 +64,7 @@ def sender(server: MailServer) -> str:
 
 
 def reply_to() -> str:
-    """Where a candidate's reply goes: the contact person from the Settings page, if one is set."""
+    """Where a candidate's reply goes: the contact person from the company set-up, if one is set."""
     details = company_profile.current()
     if not details.contact_email:
         return ""

@@ -1,7 +1,8 @@
-"""Who the company is: the name and contact that appear in e-mails, calendars and the careers page.
+"""Who the company is: the name and contact that appear in e-mails and calendar entries.
 
 TalentSight is sold to many companies, so none of this is written into the code. It is kept in the
-company_profile table and edited on the Settings page. Anything left empty falls back to .env.
+company_profile table and filled in once, by the first person who signs up (the sign-up form asks
+for it). Until then, anything empty falls back to .env.
 """
 
 import re
@@ -47,13 +48,34 @@ def current(db: Session | None = None) -> Company:
         return _from_row(own.get(CompanyProfile, 1))
 
 
+def is_set_up(db: Session) -> bool:
+    """True once the company details were filled in (at the first sign-up). After that, the sign-up
+    form no longer asks for them."""
+    row = db.get(CompanyProfile, 1)
+    return row is not None and bool(row.company_name.strip())
+
+
+def is_set_up_now() -> bool:
+    """is_set_up() with its own database session."""
+    with SessionLocal() as own:
+        return is_set_up(own)
+
+
+def problem_with(company_name: str, contact_email: str) -> str:
+    """What is wrong with these details, or "" when they can be saved."""
+    if not one_line(company_name):
+        return "Please enter your company's name."
+    if contact_email.strip() and not EMAIL_SHAPE.match(contact_email.strip()):
+        return "The contact e-mail address looks wrong."
+    return ""
+
+
 def save(db: Session, company_name: str, sender_name: str, contact_name: str, contact_email: str) -> Company:
     """Stores the company details. Raises ValueError with a readable message when something is wrong."""
     contact_email = contact_email.strip()
-    if not one_line(company_name):
-        raise ValueError("Please enter the company name.")
-    if contact_email and not EMAIL_SHAPE.match(contact_email):
-        raise ValueError("The contact e-mail address looks wrong.")
+    problem = problem_with(company_name, contact_email)
+    if problem:
+        raise ValueError(problem)
     row = db.get(CompanyProfile, 1) or CompanyProfile(id=1)
     row.company_name = one_line(company_name)[:120]
     row.sender_name = one_line(sender_name)[:120]

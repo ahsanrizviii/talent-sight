@@ -1,4 +1,5 @@
 import logging
+import threading
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
@@ -6,6 +7,7 @@ from fastapi.responses import JSONResponse
 
 from app.agents.jd_agent import get_jd_agent
 from app.db import init_db
+from app.holiday_calendar import load_holiday_calendars
 from app.knowledge import load_policies
 from app.logging_setup import setup_logging
 from app.routers import (
@@ -13,14 +15,12 @@ from app.routers import (
     candidates,
     company,
     health,
-    holidays,
     interviews,
     invite_batches,
     invites,
     jd_chat,
     jobs,
     public,
-    schedule_settings,
     setup,
     transcripts,
     workspace,
@@ -39,6 +39,9 @@ async def lifespan(app: FastAPI):
     seed_interviewer()
     load_policies()
     mark_interrupted_runs()
+    # The holiday calendar PDF(s) in knowledge/holidays: reading one (OCR + AI) takes about a minute,
+    # so it runs in the background and the API is ready straight away. Files read before are skipped.
+    threading.Thread(target=load_holiday_calendars, name="holiday-calendars", daemon=True).start()
 
     # Build the agent now: this also creates LangGraph's checkpoint tables. Doing it
     # here, before any request, matters: creating those tables waits until no other
@@ -92,6 +95,4 @@ app.include_router(transcripts.pages)
 app.include_router(workspace.router)
 app.include_router(setup.router)
 app.include_router(company.router)
-app.include_router(holidays.router)
 app.include_router(invite_batches.router)
-app.include_router(schedule_settings.router)

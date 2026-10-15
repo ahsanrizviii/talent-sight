@@ -3,11 +3,9 @@ import { api, withQuery } from "../api";
 import type { Interview } from "../types";
 
 // Moving one interview to another time, for example when the candidate asks for it.
-// It suggests free times that follow every rule, warns when a chosen time breaks one
-// (weekend, holiday, outside the hours, a clash), and e-mails the candidate the new time.
-// The private link stays the same.
-
-const LENGTHS = [30, 45, 60, 90];
+// Every interview lasts 1 hour. It suggests free times that follow every rule, warns when a
+// chosen time breaks one (weekend, holiday, outside the hours, a clash), and e-mails the
+// candidate the new time. The private link stays the same.
 
 function toInputValue(date: Date): string {
   const pad = (n: number) => String(n).padStart(2, "0");
@@ -20,14 +18,12 @@ const slotText = (iso: string) =>
 type Props = {
   sessionId: number;
   currentAt: string;
-  durationMinutes: number;
   onMoved: (interview: Interview) => void;
   onClose?: () => void;
 };
 
-export default function RescheduleBox({ sessionId, currentAt, durationMinutes, onMoved, onClose }: Props) {
+export default function RescheduleBox({ sessionId, currentAt, onMoved, onClose }: Props) {
   const [when, setWhen] = useState(() => toInputValue(new Date(currentAt)));
-  const [minutes, setMinutes] = useState(durationMinutes);
   const [free, setFree] = useState<string[] | null>(null);
   const [problem, setProblem] = useState("");
   const [busy, setBusy] = useState(false);
@@ -38,17 +34,17 @@ export default function RescheduleBox({ sessionId, currentAt, durationMinutes, o
   useEffect(() => {
     if (!when) return;
     const timer = window.setTimeout(() => {
-      api<{ problem: string }>(withQuery(`/interviews/${sessionId}/time-check`, { at: new Date(when).toISOString(), duration_minutes: minutes }))
+      api<{ problem: string }>(withQuery(`/interviews/${sessionId}/time-check`, { at: new Date(when).toISOString() }))
         .then((answer) => setProblem(answer.problem))
         .catch(() => setProblem(""));
     }, 300);
     return () => window.clearTimeout(timer);
-  }, [when, minutes, sessionId]);
+  }, [when, sessionId]);
 
   async function suggest() {
     setError("");
     try {
-      setFree(await api<string[]>(withQuery(`/interviews/${sessionId}/free-times`, { count: 6, duration_minutes: minutes, start: new Date().toISOString() })));
+      setFree(await api<string[]>(withQuery(`/interviews/${sessionId}/free-times`, { count: 6, start: new Date().toISOString() })));
     } catch (err) {
       setError((err as Error).message);
     }
@@ -62,7 +58,7 @@ export default function RescheduleBox({ sessionId, currentAt, durationMinutes, o
     try {
       const moved = await api<Interview>(`/interviews/${sessionId}`, {
         method: "PATCH",
-        body: JSON.stringify({ scheduled_at: new Date(when).toISOString(), duration_minutes: minutes }),
+        body: JSON.stringify({ scheduled_at: new Date(when).toISOString() }),
       });
       setResult(moved.email_sent === false ? `Moved. The e-mail was not sent: ${moved.email_error}` : "Moved. The candidate was e-mailed the new time.");
       onMoved(moved);
@@ -79,16 +75,6 @@ export default function RescheduleBox({ sessionId, currentAt, durationMinutes, o
         <div className="field">
           <label htmlFor={`move-${sessionId}`}>New date and time</label>
           <input id={`move-${sessionId}`} type="datetime-local" value={when} onChange={(event) => setWhen(event.target.value)} />
-        </div>
-        <div className="field">
-          <label htmlFor={`length-${sessionId}`}>Length</label>
-          <select id={`length-${sessionId}`} value={minutes} onChange={(event) => setMinutes(Number(event.target.value))}>
-            {[...new Set([...LENGTHS, durationMinutes])].sort((a, b) => a - b).map((m) => (
-              <option key={m} value={m}>
-                {m} minutes
-              </option>
-            ))}
-          </select>
         </div>
       </div>
 

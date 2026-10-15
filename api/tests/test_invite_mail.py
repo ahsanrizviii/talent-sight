@@ -364,12 +364,3 @@ def test_settings_show_the_real_from_line(client, auth_headers):
     body = save_company(client, auth_headers).json()
     assert body["sending_address"] == "hiring@example.com"
     assert body["from_line"] == "WellDev Hiring <hiring@example.com>"  # the default sender name
-
-
-def test_the_preview_sends_nothing(client, auth_headers):
-    save_company(client, auth_headers)
-    preview = client.get("/api/company/email-preview", headers=auth_headers).json()
-    assert preview["subject"].startswith("Invitation for Interview at WellDev")
-    assert "Join your interview" in preview["html"]
-    assert client.get("/api/company/email-preview?kind=cancel", headers=auth_headers).json()["subject"].startswith("Interview cancelled")
-    assert FakeSMTP.sent == []

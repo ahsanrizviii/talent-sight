@@ -26,6 +26,10 @@ class SignupRequest(BaseModel):
     email: str = Field(min_length=3, max_length=255)
     password: str = Field(min_length=1, max_length=200)
     company_code: str = Field(default="", max_length=120)
+    # The company's name and contact e-mail. Asked only on the very first sign-up (while the company
+    # is not set up yet); ignored after that, so a later sign-up can never change them.
+    company_name: str = Field(default="", max_length=120)
+    contact_email: str = Field(default="", max_length=255)
 
 
 class LoginResponse(BaseModel):
@@ -42,31 +46,44 @@ class Me(BaseModel):
 
 
 class SignInOptions(BaseModel):
-    """What the login page needs before anyone has logged in."""
+    """What the login page needs before anyone has logged in. It never includes the company name."""
 
-    company: str
     signup_open: bool
     email_domains: list[str] = []
+    company_setup_needed: bool = False  # True: the sign-up form also asks for the company's details
 
 
 @router.get("/options", response_model=SignInOptions)
 def sign_in_options():
     """Public: tells the login page whether to offer the Create account tab."""
     return SignInOptions(
-        company=company_profile.current().name,
         signup_open=accounts.signup_is_open(),
         email_domains=accounts.allowed_domains(),
+        company_setup_needed=not company_profile.is_set_up_now(),
     )
 
 
 @router.post("/signup", response_model=LoginResponse, status_code=status.HTTP_201_CREATED)
 def signup(body: SignupRequest, db: Session = Depends(get_db)):
-    """Opens an account for someone on the hiring team, then logs them straight in."""
+    """Opens an account for someone on the hiring team, then logs them straight in.
+    The very first sign-up also sets up the company (its name and contact e-mail)."""
+    first = not company_profile.is_set_up(db)
+    if first:
+        # Checked before the account is made, so a mistake here never leaves a half-done sign-up.
+        problem = company_profile.problem_with(body.company_name, body.contact_email)
+        if not problem and not body.contact_email.strip():
+            problem = "Please enter a contact e-mail for your company."
+        if problem:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, problem)
     try:
         interviewer = accounts.create_account(db, body.full_name, body.email, body.password, body.company_code)
     except accounts.SignupRefused as refused:
         log.info("signup refused", extra={"event": "signup_refused"})
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(refused))
+    if first:
+        # The sender name candidates see becomes "<company> Hiring".
+        company_profile.save(db, body.company_name, "", "", body.contact_email)
+        log.info("company set up at first sign-up", extra={"event": "company_setup"})
 
     log.info("account created", extra={"event": "signup_ok"})
     return LoginResponse(access_token=create_access_token(interviewer.id))

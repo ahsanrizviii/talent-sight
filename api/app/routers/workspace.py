@@ -32,6 +32,7 @@ router = APIRouter(prefix="/api/workspace", tags=["workspace"], dependencies=[De
 
 # Where a candidate stands. One word per candidate, so a whole pipeline can be read down a column.
 STAGES = ("new", "screened", "excluded", "interview", "interviewed", "problem")
+SHORTLISTED = ("interview", "interviewed")  # sent an interview invitation (booked), or already interviewed
 
 LATE_MINUTES = 15  # a few minutes late is normal; after this, a scheduled interview "did not start"
 FORGOTTEN_MINUTES = 60  # a live interview this long past its planned end was most likely never ended
@@ -313,13 +314,15 @@ def all_candidates(
     db: Session = Depends(get_db),
     q: str = Query("", max_length=120, description="name, e-mail, file or job"),
     job_id: int | None = None,
-    stage: str = Query("", description="one of: " + ", ".join(STAGES)),
+    stage: str = Query("", description="one of: " + ", ".join(SHORTLISTED)),
     source: str = Query("", description="upload or google_form"),
     min_score: float | None = Query(None, ge=0, le=100),
     sort: str = Query("score", description="score, name, added or job"),
 ):
-    """Every candidate the company has, narrowed down however the recruiter wants."""
-    rows = people_rows(db)
+    """The shortlist: every candidate who was sent an interview invitation (and those already
+    interviewed), across every job, narrowed down however the recruiter wants. Everyone else is
+    seen on the job's own ranking page."""
+    rows = [r for r in people_rows(db) if r.stage in SHORTLISTED]
     if q.strip():
         rows = [r for r in rows if matches(r, q)]
     if job_id is not None:

@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 
 import { api } from "../api";
 import Empty from "../components/Empty";
 import Icon from "../components/Icon";
+import InviteDialog from "../components/InviteDialog";
 import JobPipeline from "../components/JobPipeline";
 import type { CandidateRow, ChatSummary, ImportResult, Job, JobVisit, ScreeningRun, UploadResult } from "../types";
 
@@ -29,7 +30,7 @@ export default function CandidatesPage() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [visit, setVisit] = useState<JobVisit | null>(null);
-  const navigate = useNavigate();
+  const [inviting, setInviting] = useState(false);
   const wasRunning = useRef(false);
 
   const load = useCallback(async () => {
@@ -59,16 +60,16 @@ export default function CandidatesPage() {
       .catch(() => undefined); // the notice is a nice-to-have: never block the page for it
   }, [id]);
 
-  // When a screening that was running on this page finishes, go straight to the ranking and
-  // the "invite the top candidates" step: that is what comes next.
+  // When a screening that was running on this page finishes, the ranking pops up with the
+  // "invite the top candidates" inputs: that is what comes next.
   useEffect(() => {
     if (run?.status === "running") {
       wasRunning.current = true;
     } else if (wasRunning.current && run?.status === "done") {
       wasRunning.current = false;
-      if (candidates.some((c) => c.status === "screened")) navigate(`/jobs/${id}/invite`);
+      if (candidates.some((c) => c.status === "screened")) setInviting(true);
     }
-  }, [run?.status, candidates, id, navigate]);
+  }, [run?.status, candidates]);
 
   useEffect(() => {
     if (run?.status !== "running") return;
@@ -143,9 +144,9 @@ export default function CandidatesPage() {
         </div>
         <div className="row">
           {ranked.length > 0 && (
-            <Link className="button" to={`/jobs/${id}/invite`}>
+            <button className="button" type="button" onClick={() => setInviting(true)}>
               Invite top candidates
-            </Link>
+            </button>
           )}
           <Link className="button secondary" to={`/jobs/${id}`}>
             Edit the job
@@ -178,6 +179,10 @@ export default function CandidatesPage() {
       )}
 
       {job && <JobPipeline job={job} candidates={candidates} />}
+
+      {inviting && id && (
+        <InviteDialog jobId={id} ranked={ranked} onClose={() => setInviting(false)} onSent={() => load().catch(() => undefined)} />
+      )}
 
       <div className="card glass">
         <h2>Add CVs</h2>

@@ -4,7 +4,8 @@
 - check_time(): why one exact time cannot be used ("It is a holiday."), or "" when it can.
 - free_times(): the next free slots from a given moment.
 
-The rules come from the Settings page (schedule_rules), the days off from the holiday list.
+The rules are fixed (schedule_rules.py); the days off come from the holiday list, which is read
+from the calendar PDF in the knowledge folder.
 """
 
 from datetime import date, datetime, timedelta, timezone
@@ -37,15 +38,15 @@ def days_off(db: Session, first: datetime, last: datetime, rules: planner.Rules)
     return holiday_calendar.days_off(db, first.astimezone(rules.zone).date(), last.astimezone(rules.zone).date())
 
 
-def check_time(db: Session, start: datetime, minutes: int, exclude_session_id: int | None = None) -> str:
+def check_time(db: Session, start: datetime, exclude_session_id: int | None = None) -> str:
     """Why this exact time breaks the rules (weekend, holiday, outside hours, clash, past), or ""."""
-    rules = planner.with_length(schedule_rules.current(db), minutes)
+    rules = schedule_rules.current(db)
     return planner.slot_problem(start, booked(db, exclude_session_id), days_off(db, start, start, rules), rules, utcnow())
 
 
-def free_times(db: Session, earliest: datetime, count: int, minutes: int, exclude_session_id: int | None = None) -> list[datetime]:
-    """The next `count` free slots from `earliest`, following every rule."""
-    rules = planner.with_length(schedule_rules.current(db), minutes)
+def free_times(db: Session, earliest: datetime, count: int, exclude_session_id: int | None = None) -> list[datetime]:
+    """The next `count` free 1-hour slots from `earliest`, following every rule."""
+    rules = schedule_rules.current(db)
     earliest = max(earliest, utcnow())
     off = days_off(db, earliest, earliest + timedelta(days=planner.MAX_DAYS_AHEAD), rules)
     return planner.plan(count, earliest, booked(db, exclude_session_id), off, rules)

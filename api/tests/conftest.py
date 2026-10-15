@@ -67,6 +67,20 @@ def no_real_mail(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def no_real_holiday_calendar(monkeypatch, tmp_path):
+    """autouse = applied to every test. Tests must never read the real calendar PDF at start-up
+    (that would run OCR and call the AI): the holiday folder is an empty folder."""
+    from app import holiday_calendar, main
+
+    folder = tmp_path / "holidays"
+    folder.mkdir()
+    monkeypatch.setattr(holiday_calendar, "HOLIDAY_FOLDER", folder)
+    # The start-up reading runs in a background thread; in tests it is switched off, so it can never
+    # race a test that reads the folder itself. Tests call load_holiday_calendars() directly.
+    monkeypatch.setattr(main, "load_holiday_calendars", lambda force=False: [])
+
+
+@pytest.fixture(autouse=True)
 def no_real_mail_writer(monkeypatch):
     """autouse = applied to every test. Tests must never call the real AI to write an e-mail:
     the AI is "down", so e-mails use the fixed wording. Tests of the AI wording fake it themselves."""

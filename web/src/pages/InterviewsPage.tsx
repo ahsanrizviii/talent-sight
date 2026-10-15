@@ -193,7 +193,6 @@ export default function InterviewsPage() {
                         <RescheduleBox
                           sessionId={row.id}
                           currentAt={row.scheduled_at}
-                          durationMinutes={row.duration_minutes}
                           onMoved={() => setReload((n) => n + 1)}
                           onClose={() => setMoving(null)}
                         />

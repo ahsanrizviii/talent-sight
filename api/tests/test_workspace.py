@@ -94,37 +94,46 @@ def get(client, headers, path: str):
     return response.json()
 
 
-# ---------- Candidates across every job ----------
+# ---------- Candidates across every job: the shortlist ----------
 
 
-def test_every_candidate_of_every_job_is_in_one_list(client, auth_headers):
+def shortlisted(candidate_id: int, status: str = "scheduled") -> int:
+    """Sends this candidate an interview invitation (a booked interview), so they are on the shortlist."""
+    return make_interview(candidate_id, status=status)
+
+
+def test_only_shortlisted_candidates_are_listed(client, auth_headers):
     backend = make_job("Backend Developer")
     designer = make_job("Product Designer")
-    make_candidate(backend, "Maya Rahman", score=82)
-    make_candidate(designer, "Arif Khan", score=61)
+    shortlisted(make_candidate(backend, "Maya Rahman", score=82))
+    shortlisted(make_candidate(designer, "Arif Khan", score=61), status="ended")
+    make_candidate(backend, "Not Invited", score=95)  # passed screening, never invited
+    make_candidate(backend, "Rafi Islam", status="excluded")
+    make_candidate(backend, "Tanvir Ahmed", status="uploaded")
 
     rows = get(client, auth_headers, "/api/workspace/candidates")
     assert [row["name"] for row in rows] == ["Maya Rahman", "Arif Khan"]  # best score first
+    assert {row["stage"] for row in rows} == {"interview", "interviewed"}
     assert {row["job_title"] for row in rows} == {"Backend Developer", "Product Designer"}
 
 
 def test_the_list_can_be_narrowed_by_job_stage_source_and_score(client, auth_headers):
     backend = make_job("Backend Developer")
     designer = make_job("Product Designer")
-    make_candidate(backend, "Maya Rahman", score=82)
-    make_candidate(backend, "Tanvir Ahmed", status="uploaded", source="google_form")
-    make_candidate(designer, "Arif Khan", score=61)
+    shortlisted(make_candidate(backend, "Maya Rahman", score=82))
+    shortlisted(make_candidate(backend, "Tanvir Ahmed", score=55, source="google_form"), status="ended")
+    shortlisted(make_candidate(designer, "Arif Khan", score=61))
 
     assert len(get(client, auth_headers, f"/api/workspace/candidates?job_id={backend}")) == 2
-    assert len(get(client, auth_headers, "/api/workspace/candidates?stage=new")) == 1
+    assert len(get(client, auth_headers, "/api/workspace/candidates?stage=interviewed")) == 1
     assert len(get(client, auth_headers, "/api/workspace/candidates?source=google_form")) == 1
     assert len(get(client, auth_headers, "/api/workspace/candidates?min_score=70")) == 1
 
 
 def test_searching_finds_a_candidate_by_name_e_mail_or_job(client, auth_headers):
     backend = make_job("Backend Developer")
-    make_candidate(backend, "Maya Rahman", score=82)
-    make_candidate(backend, "Arif Khan", score=61)
+    shortlisted(make_candidate(backend, "Maya Rahman", score=82))
+    shortlisted(make_candidate(backend, "Arif Khan", score=61))
 
     assert [r["name"] for r in get(client, auth_headers, "/api/workspace/candidates?q=maya")] == ["Maya Rahman"]
     assert [r["name"] for r in get(client, auth_headers, "/api/workspace/candidates?q=arif@example.com")] == ["Arif Khan"]
@@ -134,23 +143,22 @@ def test_searching_finds_a_candidate_by_name_e_mail_or_job(client, auth_headers)
 def test_each_candidate_carries_their_stage_rank_and_interview(client, auth_headers):
     job = make_job("Backend Developer")
     first = make_candidate(job, "Maya Rahman", score=82)
-    make_candidate(job, "Arif Khan", score=61)
-    make_candidate(job, "Rafi Islam", status="excluded")
+    second = make_candidate(job, "Arif Khan", score=61)
     make_interview(first, status="ended", lines=4)
+    shortlisted(second)
 
     rows = {row["name"]: row for row in get(client, auth_headers, "/api/workspace/candidates")}
     assert rows["Maya Rahman"]["rank"] == 1
     assert rows["Maya Rahman"]["stage"] == "interviewed"
     assert rows["Maya Rahman"]["transcript_lines"] == 4
     assert rows["Arif Khan"]["rank"] == 2
-    assert rows["Arif Khan"]["stage"] == "screened"
-    assert rows["Rafi Islam"]["stage"] == "excluded"
+    assert rows["Arif Khan"]["stage"] == "interview"
 
 
 def test_sorting_by_name_added_or_job(client, auth_headers):
     job = make_job("Backend Developer")
-    make_candidate(job, "Zara Noor", score=50)
-    make_candidate(job, "Abir Das", score=90)
+    shortlisted(make_candidate(job, "Zara Noor", score=50))
+    shortlisted(make_candidate(job, "Abir Das", score=90))
 
     by_name = [r["name"] for r in get(client, auth_headers, "/api/workspace/candidates?sort=name")]
     assert by_name == ["Abir Das", "Zara Noor"]
@@ -258,7 +266,7 @@ def test_a_cancelled_interview_does_not_count_as_held(client, auth_headers):
     body = get(client, auth_headers, "/api/workspace/overview")
     assert body["interviews_done"] == 0
     assert body["funnel"][-1]["value"] == 0
-    assert get(client, auth_headers, "/api/workspace/candidates")[0]["stage"] == "screened"
+    assert get(client, auth_headers, "/api/workspace/candidates") == []  # back to screened: no longer on the shortlist
 
 
 def test_the_dashboard_says_what_to_do_next(client, auth_headers):

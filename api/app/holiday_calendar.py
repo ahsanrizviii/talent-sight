@@ -1,5 +1,9 @@
 """Public holidays, with RAG over the government's holiday calendar PDF.
 
+Where the calendar comes from: put the PDF in api/knowledge/holidays/ and rebuild. When the API starts,
+load_holiday_calendars() reads every PDF there that it has not read before (in the background, so the
+API is not held up), and saves the public holidays it finds. The list is also written to the log.
+
 How a PDF becomes a holiday list:
 1. Plain code takes the text out of the file (the same reader as for CVs). The government
    calendar is printed in Bangla with an old font, so its text layer is unreadable: then the page
@@ -11,14 +15,22 @@ How a PDF becomes a holiday list:
    piece after each one, then the pieces closest in meaning to "public holiday dates" by vector
    search. The keyword part matters because the embedding model only knows English.
 4. GENERATION: only those pieces go to the AI, which lists each holiday as date + name.
-5. A person checks the list and presses Save. Nothing is saved before that.
+   The Bangla government calendar has a fixed layout: one paragraph per kind of holiday, each
+   starting with its heading ("সাধারণ ছুটি" = general, "নির্বাহী আদেশে সরকারি ছুটি" = executive order,
+   "ঐচ্ছিক ছুটি" = optional). For that calendar, plain code finds the two public paragraphs and every
+   date written in them; the AI gets one paragraph at a time and gives each holiday its English name.
+   The dates that are saved are the ones the code found in the text, so a date the AI leaves out
+   (a long list is easy to cut short) or makes up can never change the list.
+5. Only the public holidays are saved (optional ones, and ones only for some districts, are not).
+   A newer calendar for the same year replaces the holidays read from the older one.
 
-The stored pieces also answer questions in the "Ask about holidays" box (retrieve, then answer).
-
+Weekends are not in the PDF list: Saturday and Sunday are fixed in settings (WORK_DAYS).
 Why the planner does not ask the AI directly: it checks hundreds of possible times, and every
-answer must be exact and the same each time. So it only reads the checked, saved list.
+answer must be exact and the same each time. So it only reads the saved list.
 """
 
+import hashlib
+import logging
 import re
 import tempfile
 from datetime import date
@@ -27,18 +39,25 @@ from typing import Literal
 
 import pytesseract
 from pydantic import BaseModel, Field
-from sqlalchemy import delete, select
+from sqlalchemy import delete, extract, select
 from sqlalchemy.orm import Session
 
 from app import knowledge
 from app.cv_text import CVReadError, pdf_ocr, pdf_text, tidy
 from app.llm import LLMUnavailable, ask_llm
-from app.models import Holiday, HolidayChunk
+from app.db import SessionLocal
+from app.models import Holiday, HolidayChunk, HolidaySource
+
+log = logging.getLogger("talentsight")
+
+HOLIDAY_FOLDER = Path(__file__).resolve().parent.parent / "knowledge" / "holidays"
+# Part of each file's fingerprint: when the way calendars are read improves, raising this number makes
+# every calendar be read again at the next start, with no command to remember.
+READER_VERSION = "2"
 
 MAX_PDF_BYTES = 10 * 1024 * 1024
 CHUNK_CHARS = 600  # one piece: a few lines of the calendar
 CHUNKS_FOR_LIST = 15  # how many pieces the AI reads when it lists the holidays
-CHUNKS_FOR_QUESTION = 5  # how many pieces it reads to answer a question
 LIST_QUERY = "public holiday dates and names; general holidays; executive order holidays; optional holidays"
 HOLIDAY_WORDS = ("holiday", "ছুটি")  # "ছুটি" is Bangla for holiday
 MONTHS = (
@@ -46,6 +65,17 @@ MONTHS = (
     "জানুয়ারি", "ফেব্রুয়ারি", "মার্চ", "এপ্রিল", "জুন", "জুলাই", "আগস্ট", "সেপ্টেম্বর", "অক্টোবর", "নভেম্বর", "ডিসেম্বর",
 )  # "May" / "মে" are left out: they are too short and match ordinary words
 BANGLA_DIGITS = str.maketrans("০১২৩৪৫৬৭৮৯", "0123456789")
+BANGLA_MONTHS = {
+    "জানুয়ারি": 1, "ফেব্রুয়ারি": 2, "মার্চ": 3, "এপ্রিল": 4, "মে": 5, "জুন": 6,
+    "জুলাই": 7, "আগস্ট": 8, "সেপ্টেম্বর": 9, "অক্টোবর": 10, "নভেম্বর": 11, "ডিসেম্বর": 12,
+}
+# "২১ মার্চ": a day number, then an English-calendar month written in Bangla. The Bangla-calendar date
+# in brackets ("০৭ চৈত্র") uses other month names, so it never matches.
+BANGLA_DATE = re.compile(
+    r"(?<![০-৯0-9])([০-৯0-9]{1,2})\s+(" + "|".join(sorted(BANGLA_MONTHS, key=len, reverse=True)) + r")(?![\u0980-\u09FF])"
+)
+PUBLIC_HEADINGS = ("সাধারণ", "নির্বাহী")  # general holiday, executive-order holiday
+ONLY_SOME_PLACES = "শুধু"  # "only" (for example "only for the three hill districts")
 
 
 class HolidayReadError(ValueError):
@@ -65,10 +95,6 @@ class FoundHolidays(BaseModel):
     holidays: list[FoundHoliday]
 
 
-class HolidayAnswer(BaseModel):
-    answer: str = Field(description="A short answer in plain English, or a clear 'I could not find that'")
-
-
 HOLIDAY_PROMPT = (
     "You read parts of an official public holiday calendar and list its holidays. Give one entry per DAY: "
     "a holiday that lasts several days (for example 9-11 April, or '19, 20 and 22 March') becomes one entry "
@@ -83,13 +109,6 @@ HOLIDAY_PROMPT = (
     "ignore the date in brackets. Give the names in English. Ignore rows of calendar numbers."
 )
 
-ASK_PROMPT = (
-    "You answer questions about public holidays for a hiring team. Use ONLY the saved holiday list and "
-    "the calendar excerpts you are given. If the answer is not there, say you could not find it. "
-    "Give dates with the weekday, for example 'Wednesday, 16 December 2026'. Keep the answer short."
-)
-
-
 class Proposed(BaseModel):
     day: date
     name: str
@@ -98,6 +117,8 @@ class Proposed(BaseModel):
 
 class ReadResult(BaseModel):
     source: str
+    year: int | None
+    note: str = ""  # set when the list is right but incomplete in some way (read again next start)
     chunks_stored: int
     chunks_used: int
     holidays: list[Proposed]
@@ -201,12 +222,12 @@ def holiday_pieces(db: Session, source: str) -> list[HolidayChunk]:
     return sorted(chosen, key=lambda chunk: chunk.id)  # back in the document's own order, easier for the AI
 
 
-# ---------- 4. Generation, then 5. a person checks ----------
+# ---------- 4. Generation ----------
 
 
 def read_pdf(db: Session, data: bytes, filename: str) -> ReadResult:
     """Stores the PDF's pieces, finds the ones about holiday dates, and has the AI list the holidays.
-    Only PROPOSES: nothing goes into the holiday list here. Raises HolidayReadError."""
+    Saves nothing in the holiday list itself (load_file does that). Raises HolidayReadError."""
     if not data.startswith(b"%PDF"):
         raise HolidayReadError("Please upload the holiday calendar as a PDF file.")
     if len(data) > MAX_PDF_BYTES:
@@ -222,11 +243,86 @@ def read_pdf(db: Session, data: bytes, filename: str) -> ReadResult:
     found = holiday_pieces(db, source)
     year = calendar_year(text)
     heading = f"This calendar is for the year {year}.\n\n" if year else ""
+
+    public = public_sections(text)
+    if public and year is not None:
+        holidays, note = read_bangla_calendar(public, year, heading)
+        return ReadResult(source=source, year=year, note=note, chunks_stored=len(chunks), chunks_used=len(found), holidays=holidays)
+
     try:
         answer = ask_llm(HOLIDAY_PROMPT, heading + "\n\n".join(chunk.text for chunk in found), FoundHolidays)
     except LLMUnavailable as error:
         raise HolidayReadError(str(error)) from error
-    return ReadResult(source=source, chunks_stored=len(chunks), chunks_used=len(found), holidays=clean(answer.holidays))
+    return ReadResult(source=source, year=year, chunks_stored=len(chunks), chunks_used=len(found), holidays=clean(answer.holidays))
+
+
+# ---------- The Bangla government calendar: headings and dates found by code ----------
+
+
+def public_sections(text: str) -> list[str]:
+    """The paragraphs of public holidays (general and executive order) in the Bangla calendar.
+    A paragraph starts at a line whose beginning says "ছুটি" (holiday) and runs to the next such line.
+    Returns [] for a calendar without these headings (then the normal AI reading is used)."""
+    sections: list[tuple[bool, list[str]]] = []
+    current: list[str] | None = None
+    for line in text.splitlines():
+        start = line[:40]
+        if line.startswith("টীকা"):  # "Note:" at the end of the list
+            current = None
+        elif "ছুটি" in start:
+            current = [line]
+            sections.append((any(word in start for word in PUBLIC_HEADINGS), current))
+        elif current is not None:
+            current.append(line)
+    return ["\n".join(lines) for is_public, lines in sections if is_public]
+
+
+def dates_in(section: str, year: int) -> list[tuple[date, str]]:
+    """Every holiday date written in one paragraph, with the Bangla name that follows it.
+    Leaves out holidays only for some places ("শুধু ..." = only for ...)."""
+    matches = list(BANGLA_DATE.finditer(section))
+    found: list[tuple[date, str]] = []
+    for index, match in enumerate(matches):
+        until = matches[index + 1].start() if index + 1 < len(matches) else len(section)
+        after = section[match.end() : until]
+        if ONLY_SOME_PLACES in after[:160]:
+            continue
+        try:
+            day = date(year, BANGLA_MONTHS[match.group(2)], int(match.group(1).translate(BANGLA_DIGITS)))
+        except ValueError:
+            continue  # an OCR slip such as "৩২ মার্চ"
+        name = after.split(")", 1)[1] if ")" in after else ""
+        name = re.split(r"[|।৷]", name)[0].strip(" -_*\n")
+        name = re.sub(r"\s+[0-9]+$", "", name)  # OCR often reads the "।" at the end as "1"
+        found.append((day, " ".join(name.split())[:80]))
+    # "১৯ মার্চ, ২০ মার্চ এবং ২২ মার্চ (...)-ঈদ-উল-ফিতর": the name follows only the last date of the group.
+    for index in range(len(found) - 2, -1, -1):
+        if not found[index][1]:
+            found[index] = (found[index][0], found[index + 1][1])
+    return found
+
+
+def read_bangla_calendar(sections: list[str], year: int, heading: str) -> tuple[list[Proposed], str]:
+    """The public holidays of the Bangla calendar. The dates come from the text (dates_in); the AI,
+    one paragraph at a time, gives the English names. Returns the list and a note ("" when all is well)."""
+    by_day: dict[date, str] = {}
+    for section in sections:
+        for day, name in dates_in(section, year):
+            by_day.setdefault(day, name)
+    english: list[FoundHoliday] = []
+    note = ""
+    for section in sections:
+        try:
+            answer = ask_llm(HOLIDAY_PROMPT, heading + "Every holiday below is a public holiday.\n\n" + section, FoundHolidays)
+            english.extend(answer.holidays)
+        except LLMUnavailable:
+            note = "The AI was not available, so some holiday names are in Bangla. The dates are complete."
+    names = {item.day: item.name for item in clean(english)}
+    extra = sorted(set(names) - set(by_day))
+    if extra:
+        log.info(f"holiday calendar: {len(extra)} dates from the AI are not in the text and were left out", extra={"event": "holiday_dates_dropped"})
+    holidays = [Proposed(day=day, name=names.get(day) or by_day[day] or "Public holiday", kind="public") for day in sorted(by_day)]
+    return holidays, note
 
 
 def clean(found: list[FoundHoliday]) -> list[Proposed]:
@@ -249,36 +345,7 @@ def clean(found: list[FoundHoliday]) -> list[Proposed]:
     return [by_day[day] for day in sorted(by_day)]
 
 
-def ask(db: Session, question: str) -> tuple[str, list[HolidayChunk]]:
-    """Answers a question about holidays: retrieves the closest pieces of the calendar, then asks
-    the AI with those pieces and the saved list. Returns the answer and the pieces it read."""
-    pieces = search(db, question, CHUNKS_FOR_QUESTION)
-    saved = db.scalars(select(Holiday).order_by(Holiday.day)).all()
-    saved_text = "\n".join(f"{h.day:%A, %d %B %Y}: {h.name}" for h in saved) or "(none saved yet)"
-    excerpts = "\n\n".join(f"[{p.source}]\n{p.text}" for p in pieces) or "(no calendar uploaded yet)"
-    prompt = f"Saved holiday list:\n{saved_text}\n\nCalendar excerpts:\n{excerpts}\n\nQuestion: {question}"
-    try:
-        answer = ask_llm(ASK_PROMPT, prompt, HolidayAnswer)
-    except LLMUnavailable as error:
-        raise HolidayReadError(str(error)) from error
-    return answer.answer, pieces
-
-
-def documents(db: Session) -> list[tuple[str, int]]:
-    """Which calendar PDFs are stored, and in how many pieces."""
-    rows = db.execute(select(HolidayChunk.source, HolidayChunk.id)).all()
-    counts: dict[str, int] = {}
-    for source, _ in rows:
-        counts[source] = counts.get(source, 0) + 1
-    return sorted(counts.items())
-
-
-def remove_document(db: Session, source: str) -> None:
-    db.execute(delete(HolidayChunk).where(HolidayChunk.source == source))
-    db.commit()
-
-
-# ---------- The checked list the planner uses ----------
+# ---------- 5. The saved list the planner uses ----------
 
 
 def save_many(db: Session, items: list[tuple[date, str]], source: str) -> int:
@@ -296,6 +363,72 @@ def save_many(db: Session, items: list[tuple[date, str]], source: str) -> int:
     return added
 
 
+def calendar_status(db: Session, today: date) -> tuple[int, str]:
+    """For the invite pop-up: how many public holidays from today are on the list, and what is wrong
+    with the calendar, if anything ("" = fine). So an empty or failed calendar is never silent."""
+    ahead = len(db.scalars(select(Holiday.id).where(Holiday.day >= today)).all())
+    sources = db.scalars(select(HolidaySource)).all()
+    if not sources:
+        return ahead, "No holiday calendar has been read yet. Put the PDF in api/knowledge/holidays and restart the API."
+    problems = [f"{s.file_name}: {s.error}" for s in sources if s.error]
+    return ahead, " ".join(problems)
+
+
 def days_off(db: Session, first: date, last: date) -> set[date]:
     """Every holiday between first and last (both included): the planner skips these days."""
     return set(db.scalars(select(Holiday.day).where(Holiday.day >= first, Holiday.day <= last)))
+
+
+def load_file(db: Session, path: Path, force: bool = False) -> str:
+    """Reads one calendar PDF and saves its public holidays. Returns what happened, for the log.
+    A file read before (same name and same contents) is skipped unless force is True."""
+    data = path.read_bytes()
+    fingerprint = hashlib.sha256(data + READER_VERSION.encode()).hexdigest()
+    record = db.scalar(select(HolidaySource).where(HolidaySource.file_name == path.name))
+    if record is not None and record.sha256 == fingerprint and not record.error and not force:
+        return f"{path.name}: already read"
+    record = record or HolidaySource(file_name=path.name, sha256=fingerprint)
+    record.sha256 = fingerprint
+    try:
+        result = read_pdf(db, data, path.name)
+    except HolidayReadError as problem:
+        record.error = str(problem)[:500]
+        db.add(record)
+        db.commit()
+        log.warning(f"holiday calendar {path.name} could not be read: {problem}", extra={"event": "holiday_calendar_failed"})
+        return f"{path.name}: {problem}"
+
+    public = [h for h in result.holidays if h.kind == "public"]
+    if not public:
+        record.error = "No public holidays were found in this calendar."
+        db.add(record)
+        db.commit()
+        log.warning(f"holiday calendar {path.name}: no public holidays found", extra={"event": "holiday_calendar_failed"})
+        return f"{path.name}: no public holidays found"
+    if result.year is not None:
+        # A new calendar for this year replaces what an older one said: remove the old PDF days first.
+        db.execute(delete(Holiday).where(Holiday.source == "pdf", extract("year", Holiday.day) == result.year))
+    save_many(db, [(h.day, h.name) for h in public], source="pdf")
+    record.year, record.holidays_found, record.error = result.year, len(public), result.note
+    db.add(record)
+    db.commit()
+    listing = "; ".join(f"{h.day:%a %d %b %Y} {h.name}" for h in public) or "none"
+    log.info(f"holiday calendar {path.name}: {len(public)} public holidays saved: {listing}", extra={"event": "holiday_calendar_read"})
+    return f"{path.name}: {len(public)} public holidays saved"
+
+
+def load_holiday_calendars(force: bool = False) -> list[str]:
+    """Reads every PDF in the knowledge/holidays folder that has not been read yet.
+    Called once at start-up, in the background. Never raises: a problem is logged and tried again
+    at the next start."""
+    if not HOLIDAY_FOLDER.is_dir():
+        return []
+    results = []
+    for path in sorted(HOLIDAY_FOLDER.glob("*.pdf")):
+        try:
+            with SessionLocal() as db:
+                results.append(load_file(db, path, force))
+        except Exception as error:  # a broken file must never stop the API
+            log.warning(f"holiday calendar {path.name} failed", exc_info=error, extra={"event": "holiday_calendar_failed"})
+            results.append(f"{path.name}: failed ({type(error).__name__})")
+    return results

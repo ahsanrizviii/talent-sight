@@ -29,7 +29,6 @@ export default function InterviewCard({ candidateId, candidateStatus }: Props) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
-  const [minutes, setMinutes] = useState<number | "">(""); // "" = the length on the Settings page
   const [moving, setMoving] = useState(false);
 
   useEffect(() => {
@@ -41,12 +40,12 @@ export default function InterviewCard({ candidateId, candidateStatus }: Props) {
 
   const active = interview !== null && interview.status !== "ended";
 
-  // Booking a new interview. Moving one that is already booked is done by RescheduleBox.
+  // Booking a new interview (always 1 hour). Moving one that is already booked is done by RescheduleBox.
   async function save() {
     setBusy(true);
     setError("");
     try {
-      const body = JSON.stringify({ scheduled_at: new Date(when).toISOString(), duration_minutes: minutes || null });
+      const body = JSON.stringify({ scheduled_at: new Date(when).toISOString() });
       setInterview(await api<Interview>(`/candidates/${candidateId}/interview`, { method: "POST", body }));
     } catch (err) {
       setError((err as Error).message);
@@ -132,7 +131,6 @@ export default function InterviewCard({ candidateId, candidateStatus }: Props) {
           <RescheduleBox
             sessionId={interview.id}
             currentAt={interview.scheduled_at}
-            durationMinutes={interview.duration_minutes}
             onMoved={(moved) => setInterview(moved)}
             onClose={() => setMoving(false)}
           />
@@ -145,17 +143,6 @@ export default function InterviewCard({ candidateId, candidateStatus }: Props) {
           <div className="field">
             <label htmlFor="interview-time">{interview ? "New date and time" : "Date and time"}</label>
             <input id="interview-time" type="datetime-local" value={when} onChange={(event) => setWhen(event.target.value)} />
-          </div>
-          <div className="field">
-            <label htmlFor="interview-length">Length</label>
-            <select id="interview-length" value={minutes} onChange={(event) => setMinutes(event.target.value ? Number(event.target.value) : "")}>
-              <option value="">As in Settings</option>
-              {[30, 45, 60, 90].map((m) => (
-                <option key={m} value={m}>
-                  {m} minutes
-                </option>
-              ))}
-            </select>
           </div>
         </div>
       )}
