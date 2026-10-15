@@ -6,12 +6,13 @@ from sqlalchemy.orm import Session
 
 from app import participants
 from app.db import get_db
-from app.deps import session_from_invite
+from app.deps import not_an_interviewer, session_from_invite
 from app.models import Candidate, InterviewSession, JobProfile
 from app.routers.interviews import JoinOut, video_join
 from app.settings import settings
 
-router = APIRouter(prefix="/api/invite", tags=["candidate"])
+# Every candidate endpoint refuses a signed-in interviewer (they have their own room page).
+router = APIRouter(prefix="/api/invite", tags=["candidate"], dependencies=[Depends(not_an_interviewer)])
 
 
 class InviteInfo(BaseModel):

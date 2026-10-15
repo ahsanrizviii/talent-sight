@@ -7,7 +7,7 @@ import type { InviteInfo, JoinInfo } from "../types";
 
 // The candidate's page, opened from the link in the e-mail (Task 7.2.2).
 // No account and no menu: the private link is the only key, and the page shows nothing but the interview.
-type Stage = "loading" | "invalid" | "ready" | "in" | "ended";
+type Stage = "loading" | "invalid" | "interviewer" | "ready" | "in" | "ended";
 
 export default function JoinPage() {
   const { token } = useParams();
@@ -22,7 +22,9 @@ export default function JoinPage() {
         setInfo(await api<InviteInfo>(`/invite/${token}`));
         setStage("ready");
         if (afterLeaving) setNote("You left the interview. You can come back while it is still open.");
-      } catch {
+      } catch (error) {
+        // 403 here means this browser is signed in as an interviewer: the link is only for the candidate.
+        if ((error as { status?: number }).status === 403) return setStage("interviewer");
         // After leaving, a refused link means the interviewer ended it. Before, it was never valid.
         setStage(afterLeaving ? "ended" : "invalid");
       }
@@ -72,6 +74,19 @@ export default function JoinPage() {
           <div className="card">
             <h1>This link is not valid</h1>
             <p className="muted">The invite link is wrong, has expired, or the interview has ended. Please contact the person who invited you.</p>
+          </div>
+        )}
+
+        {stage === "interviewer" && (
+          <div className="card">
+            <h1>This link is for the candidate</h1>
+            <p className="muted">
+              You are signed in to TalentSight as an interviewer. Whoever opens this link joins as the candidate, so it is
+              closed to you. Open the interview from your Interviews page to join as the interviewer.
+            </p>
+            <a className="button" href="/interviews">
+              Go to my interviews
+            </a>
           </div>
         )}
 

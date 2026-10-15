@@ -17,3 +17,7 @@ def init_db() -> None:
     with engine.begin() as connection:
         connection.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
     Base.metadata.create_all(engine)
+    # create_all makes new tables but never new columns, so a column added to an existing table
+    # is added here by hand. "IF NOT EXISTS" makes it safe to run at every start.
+    with engine.begin() as connection:
+        connection.execute(text("ALTER TABLE interview_sessions ADD COLUMN IF NOT EXISTS duration_minutes INTEGER"))

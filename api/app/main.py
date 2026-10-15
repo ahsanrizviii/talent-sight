@@ -11,12 +11,16 @@ from app.logging_setup import setup_logging
 from app.routers import (
     auth,
     candidates,
+    company,
     health,
+    holidays,
     interviews,
+    invite_batches,
     invites,
     jd_chat,
     jobs,
     public,
+    schedule_settings,
     setup,
     transcripts,
     workspace,
@@ -87,3 +91,7 @@ app.include_router(transcripts.router)
 app.include_router(transcripts.pages)
 app.include_router(workspace.router)
 app.include_router(setup.router)
+app.include_router(company.router)
+app.include_router(holidays.router)
+app.include_router(invite_batches.router)
+app.include_router(schedule_settings.router)

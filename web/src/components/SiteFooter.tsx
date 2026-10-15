@@ -5,8 +5,8 @@ import { api } from "../api";
 import type { SignInOptions } from "../types";
 
 // The foot of every page. Only the company's hiring team uses this site (candidates only ever see
-// their own interview link), so the foot is a quick way around the workspace and nothing else:
-// no candidate links, no contact addresses, no placeholder legal pages.
+// their own interview link), so the foot is one slim band: the name on the left, the workspace
+// links in a single line on the right, and the copyright under them.
 const LINKS = [
   { label: "Dashboard", to: "/" },
   { label: "Jobs", to: "/jobs" },
@@ -35,14 +35,13 @@ export default function SiteFooter() {
           <p>Hire on evidence, not instinct.</p>
         </div>
 
-        <div className="foot-column">
-          <h2>Workspace</h2>
+        <nav className="foot-links" aria-label="Workspace">
           {LINKS.map((link) => (
             <Link key={link.to} to={link.to}>
               {link.label}
             </Link>
           ))}
-        </div>
+        </nav>
       </div>
 
       <div className="foot-bottom">

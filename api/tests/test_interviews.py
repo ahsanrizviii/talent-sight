@@ -8,7 +8,7 @@ from sqlalchemy import select
 
 from app import livekit_service
 from app.db import SessionLocal
-from app.models import Candidate, InterviewSession, JobProfile
+from app.models import Candidate, InterviewSession, JobProfile, SessionParticipant
 from app.settings import settings
 
 SECRET = "test-secret-that-is-at-least-32-characters-long"
@@ -150,6 +150,30 @@ def test_candidate_joins_with_the_link_only(client, auth_headers):
     assert claims["video"]["room"] == f"interview-{session['id']}"
     assert claims["sub"].startswith("candidate-")
     assert client.post("/api/invite/not-a-real-token/join").status_code == 404
+
+
+def test_an_interviewer_cannot_use_the_candidate_link(client, auth_headers):
+    """Whoever uses the link enters as the candidate, so a signed-in interviewer is refused."""
+    session = schedule(client, auth_headers, make_candidate(), in_hours(0.1)).json()
+    token = stored_session(session["id"]).invite_token
+    for response in (
+        client.get(f"/api/invite/{token}", headers=auth_headers),
+        client.post(f"/api/invite/{token}/join", headers=auth_headers),
+        client.post(f"/api/invite/{token}/leave", headers=auth_headers),
+    ):
+        assert response.status_code == 403
+        assert "only for the candidate" in response.json()["detail"]
+    with SessionLocal() as db:  # nobody was recorded as joining or leaving
+        assert db.scalar(select(SessionParticipant).where(SessionParticipant.session_id == session["id"])) is None
+
+
+def test_an_old_or_broken_login_does_not_block_the_candidate(client, auth_headers):
+    """A candidate's browser may still hold an expired login from somewhere. That must not lock them out."""
+    session = schedule(client, auth_headers, make_candidate(), in_hours(0.1)).json()
+    token = stored_session(session["id"]).invite_token
+    junk = {"Authorization": "Bearer not-a-real-login"}
+    assert client.get(f"/api/invite/{token}", headers=junk).status_code == 200
+    assert client.post(f"/api/invite/{token}/join", headers=junk).status_code == 200
 
 
 def test_video_server_down_gives_a_clear_message(client, auth_headers, monkeypatch):

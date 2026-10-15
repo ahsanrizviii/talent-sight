@@ -52,6 +52,27 @@ def interviewer_from_token(db: Session, token: str) -> Interviewer | None:
     return db.get(Interviewer, int(payload["sub"]))
 
 
+INTERVIEWER_ON_CANDIDATE_LINK = (
+    "You are signed in as an interviewer. This link is only for the candidate. "
+    "Open the interview from your Interviews page instead."
+)
+
+
+def not_an_interviewer(
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
+    db: Session = Depends(get_db),
+) -> None:
+    """Keeps interviewers off the candidate's private link.
+
+    The link is the candidate's key: whoever uses it enters the room AS the candidate.
+    If a signed-in interviewer opened it, they would take the candidate's place (and the
+    page closing would even mark the candidate as gone). So a valid interviewer login on
+    these endpoints is refused. A missing or expired login is fine: candidates have none.
+    """
+    if credentials is not None and interviewer_from_token(db, credentials.credentials) is not None:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, INTERVIEWER_ON_CANDIDATE_LINK)
+
+
 def open_session_for_invite(db: Session, invite_token: str) -> InterviewSession | None:
     """The interview behind an invite link, or None if the link is unknown, ended or expired."""
     session = db.scalar(

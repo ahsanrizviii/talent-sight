@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     # Language model
     groq_api_key: str = ""
     llm_model: str = "openai/gpt-oss-120b"
+    ai_mail: bool = True  # the AI writes the wording of invitation e-mails; false = always the fixed wording
 
     # Public careers page (Module 4)
     careers_email: str = "careers@talentsight.local"
@@ -54,6 +55,12 @@ class Settings(BaseSettings):
     # Interviews (Module 7)
     join_early_minutes: int = 15  # a candidate can join this long before the start time
     invite_hours_after: int = 24  # an invite link stops working this long after the start time
+
+    # Inviting many candidates at once: the planner books slots only inside these hours, on these
+    # days, with a gap after each interview. Times are in the interview time zone (below).
+    interview_windows: str = "09:00-12:00,14:00-17:00"
+    interview_gap_minutes: int = 15
+    work_days: str = "Mon,Tue,Wed,Thu,Fri"  # Saturday and Sunday off
 
     # E-mail (Module 7): every invitation goes to the candidate's real address through the
     # company's own mail server. Works with Gmail, Google Workspace, Microsoft 365 or any SMTP server.

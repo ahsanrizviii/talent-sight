@@ -7,13 +7,17 @@ import CandidatesPage from "./pages/CandidatesPage";
 import DashboardPage from "./pages/DashboardPage";
 import InterviewRoomPage from "./pages/InterviewRoomPage";
 import InterviewsPage from "./pages/InterviewsPage";
+import InvitePage from "./pages/InvitePage";
 import JdChatPage from "./pages/JdChatPage";
+import JobCvsPage from "./pages/JobCvsPage";
 import JobFormPage from "./pages/JobFormPage";
+import JobPostPage from "./pages/JobPostPage";
 import JobsPage from "./pages/JobsPage";
 import JoinPage from "./pages/JoinPage";
 import LandingPage from "./pages/LandingPage";
 import LoginPage from "./pages/LoginPage";
 import PeoplePage from "./pages/PeoplePage";
+import SettingsPage from "./pages/SettingsPage";
 import VideoTestPage from "./pages/VideoTestPage";
 
 export default function App() {
@@ -35,10 +39,14 @@ export default function App() {
           <Route path="/jobs/new" element={<JobFormPage />} />
           <Route path="/jobs/:id" element={<JobFormPage />} />
           <Route path="/jobs/:id/candidates" element={<CandidatesPage />} />
+          <Route path="/jobs/:id/post" element={<JobPostPage />} />
+          <Route path="/jobs/:id/cvs" element={<JobCvsPage />} />
+          <Route path="/jobs/:id/invite" element={<InvitePage />} />
           <Route path="/candidates" element={<PeoplePage />} />
           <Route path="/candidates/:id" element={<CandidatePage />} />
           <Route path="/interviews" element={<InterviewsPage />} />
           <Route path="/interview/:id" element={<InterviewRoomPage />} />
+          <Route path="/settings" element={<SettingsPage />} />
           <Route path="/jd-chat" element={<JdChatPage />} />
           <Route path="/jd-chat/:threadId" element={<JdChatPage />} />
           <Route path="/prototype/video" element={<VideoTestPage />} />

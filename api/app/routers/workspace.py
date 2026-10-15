@@ -16,6 +16,7 @@ from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app import schedule_rules
 from app.db import get_db
 from app.deps import current_interviewer
 from app.models import (
@@ -31,6 +32,10 @@ router = APIRouter(prefix="/api/workspace", tags=["workspace"], dependencies=[De
 
 # Where a candidate stands. One word per candidate, so a whole pipeline can be read down a column.
 STAGES = ("new", "screened", "excluded", "interview", "interviewed", "problem")
+
+LATE_MINUTES = 15  # a few minutes late is normal; after this, a scheduled interview "did not start"
+FORGOTTEN_MINUTES = 60  # a live interview this long past its planned end was most likely never ended
+RECENT_DAYS = 14  # interviews held in this many days are listed for review on the dashboard
 
 
 def utcnow() -> datetime:
@@ -76,7 +81,10 @@ class InterviewRow(BaseModel):
     ended_at: datetime | None
     duration_seconds: int | None
     transcript_lines: int = 0
+    overall: float | None = None  # the candidate's score, so interviews can be sorted by it
+    duration_minutes: int = 0  # how long it is booked for
     overdue: bool = False  # the start time has passed and nobody ever joined
+    forgotten: bool = False  # still live long after it should have finished: nobody pressed End
 
 
 class JobRow(BaseModel):
@@ -107,19 +115,41 @@ class FunnelStep(BaseModel):
     value: int
 
 
+class JobProgress(BaseModel):
+    """One open job on the dashboard: how far its hiring has got, and the next thing to do for it."""
+
+    id: int
+    title: str
+    days_open: int  # days since the job was created
+    candidates: int
+    waiting: int  # CVs not screened yet
+    passed: int  # passed screening
+    invited: int  # an interview is booked or was held
+    interviewed: int  # the interview really took place
+    leader_id: int | None = None  # the best candidate of this job
+    leader_name: str = ""
+    leader_score: float | None = None
+    next_step: str
+    next_link: str
+
+
 class Overview(BaseModel):
     jobs_open: int
     jobs_total: int
     candidates_total: int
     waiting_to_screen: int
     passed_screening: int
+    ready_total: int  # passed screening, no interview booked or held yet
     interviews_upcoming: int
-    interviews_done: int
-    average_score: float | None
+    interviews_week: int  # booked in the next 7 days
+    interviews_done: int  # really held (a cancelled interview does not count)
     funnel: list[FunnelStep]
     todo: list[TodoItem]
+    next_interview: InterviewRow | None
     upcoming: list[InterviewRow]
-    top_candidates: list[PersonRow]
+    jobs: list[JobProgress]
+    ready_to_invite: list[PersonRow]
+    recent_interviews: list[InterviewRow]
 
 
 # ---------- Loading the pieces, once each ----------
@@ -156,11 +186,19 @@ def latest_interviews(db: Session) -> dict[int, InterviewSession]:
     return newest
 
 
+def held(session: InterviewSession) -> bool:
+    """True if the interview really took place. A cancelled interview ends without ever starting."""
+    return session.status == "ended" and session.started_at is not None
+
+
 def stage_of(candidate: Candidate, session: InterviewSession | None) -> str:
     if candidate.status in ("unreadable", "failed"):
         return "problem"
-    if session is not None:
-        return "interviewed" if session.status == "ended" else "interview"
+    if session is not None and session.status in ("scheduled", "live"):
+        return "interview"
+    if session is not None and held(session):
+        return "interviewed"
+    # No interview, or only a cancelled one: the candidate is back where screening left them.
     if candidate.status == "excluded":
         return "excluded"
     if candidate.status == "screened":
@@ -227,7 +265,11 @@ def interview_rows(db: Session) -> list[InterviewRow]:
         .join(JobProfile, Candidate.job_profile_id == JobProfile.id)
     ).all()
     lines = transcript_lines(db)
+    totals = scores(db)
     now = utcnow()
+    late = timedelta(minutes=LATE_MINUTES)
+    default = schedule_rules.default_minutes(db)
+    planned_end = lambda session: timedelta(minutes=schedule_rules.minutes_of(session, default) + FORGOTTEN_MINUTES)  # noqa: E731
     return [
         InterviewRow(
             id=session.id,
@@ -241,7 +283,10 @@ def interview_rows(db: Session) -> list[InterviewRow]:
             ended_at=session.ended_at,
             duration_seconds=seconds_between(session),
             transcript_lines=lines.get(session.id, 0),
-            overdue=session.status == "scheduled" and session.scheduled_at < now,
+            overall=totals.get(candidate.id),
+            duration_minutes=schedule_rules.minutes_of(session, default),
+            overdue=session.status == "scheduled" and session.scheduled_at + late < now,
+            forgotten=session.status == "live" and (session.started_at or session.scheduled_at) + planned_end(session) < now,
         )
         for session, candidate, job_title in triples
     ]
@@ -291,16 +336,30 @@ def all_candidates(
 # ---------- Interviews across every job ----------
 
 
+INTERVIEW_SORTS = {
+    "soonest": (lambda r: r.scheduled_at, False),
+    "latest": (lambda r: r.scheduled_at, True),
+    "candidate": (lambda r: (r.candidate_name.lower(), r.scheduled_at), False),
+    "job": (lambda r: (r.job_title.lower(), r.scheduled_at), False),
+    "score": (lambda r: (-(r.overall if r.overall is not None else -1), r.scheduled_at), False),
+    "state": (lambda r: ({"live": 0, "scheduled": 1, "ended": 2}.get(r.status, 3), r.scheduled_at), False),
+}
+
+
 @router.get("/interviews", response_model=list[InterviewRow])
 def all_interviews(
     db: Session = Depends(get_db),
     state: str = Query("all", description="upcoming, live, past or all"),
     q: str = Query("", max_length=120),
+    job_id: int | None = None,
+    sort: str = Query("", description="soonest, latest, candidate, job, score or state; empty = the usual order"),
 ):
     rows = interview_rows(db)
     if q.strip():
         words = q.lower().split()
         rows = [r for r in rows if all(w in f"{r.candidate_name} {r.job_title}".lower() for w in words)]
+    if job_id is not None:
+        rows = [r for r in rows if r.job_id == job_id]
     if state == "upcoming":
         rows = [r for r in rows if r.status == "scheduled"]
     elif state == "live":
@@ -308,7 +367,10 @@ def all_interviews(
     elif state == "past":
         rows = [r for r in rows if r.status == "ended"]
 
-    # Coming up: soonest first. Already over: most recent first.
+    if sort in INTERVIEW_SORTS:
+        key, newest_first = INTERVIEW_SORTS[sort]
+        return sorted(rows, key=key, reverse=newest_first)
+    # The usual order. Coming up: soonest first. Already over: most recent first.
     if state == "past":
         return sorted(rows, key=lambda r: r.scheduled_at, reverse=True)
     return sorted(rows, key=lambda r: (r.status == "ended", r.scheduled_at))
@@ -356,9 +418,72 @@ def all_jobs(db: Session = Depends(get_db), status: str = Query("", description=
 # ---------- The dashboard ----------
 
 
+def job_progress(job: JobRow, mine: list[PersonRow]) -> JobProgress:
+    """One open job: how far its hiring has got, and the one step that moves it forward."""
+    passed = [p for p in mine if p.status == "screened"]
+    booked = [p for p in mine if p.stage == "interview"]
+    interviewed = [p for p in mine if p.stage == "interviewed"]
+    ready = sorted((p for p in mine if p.stage == "screened"), key=lambda p: p.rank or 999)
+    leader = min(passed, key=lambda p: p.rank or 999, default=None)
+
+    if not mine:
+        step, link = "Add CVs", f"/jobs/{job.id}/candidates"
+    elif job.waiting:
+        step, link = f"Screen {job.waiting} CV{'s' if job.waiting > 1 else ''}", f"/jobs/{job.id}/candidates"
+    elif not passed:
+        step, link = "See why nobody passed", f"/jobs/{job.id}/candidates"
+    elif ready and not booked and not interviewed:
+        step, link = f"Invite {ready[0].name}", f"/candidates/{ready[0].id}"
+    elif booked:
+        step, link = "See the booked interviews", "/interviews"
+    elif ready:
+        step, link = f"Invite {ready[0].name}", f"/candidates/{ready[0].id}"
+    else:
+        step, link = "Review the interviews", "/interviews"
+
+    return JobProgress(
+        id=job.id,
+        title=job.title,
+        days_open=max(0, (utcnow() - job.created_at).days),
+        candidates=len(mine),
+        waiting=job.waiting,
+        passed=len(passed),
+        invited=len(booked) + len(interviewed),
+        interviewed=len(interviewed),
+        leader_id=leader.id if leader else None,
+        leader_name=leader.name if leader else "",
+        leader_score=leader.overall if leader else None,
+        next_step=step,
+        next_link=link,
+    )
+
+
 def build_todo(jobs: list[JobRow], people: list[PersonRow], interviews: list[InterviewRow]) -> list[TodoItem]:
-    """What is worth doing next. Each line says what to do and goes straight to the page that does it."""
+    """What is worth doing next, most urgent first. Each line goes straight to the page that does it."""
     todo: list[TodoItem] = []
+
+    # An interview nobody ended keeps the candidate's link open, so it comes first.
+    for interview in interviews:
+        if interview.forgotten:
+            todo.append(
+                TodoItem(
+                    text=f"The interview with {interview.candidate_name} was never ended",
+                    action="End it",
+                    to=f"/candidates/{interview.candidate_id}",
+                    tone="warn",
+                )
+            )
+
+    for interview in interviews:
+        if interview.overdue:
+            todo.append(
+                TodoItem(
+                    text=f"The interview with {interview.candidate_name} did not start",
+                    action="Reschedule",
+                    to=f"/candidates/{interview.candidate_id}",
+                    tone="warn",
+                )
+            )
 
     for job in jobs:
         if job.waiting:
@@ -370,14 +495,14 @@ def build_todo(jobs: list[JobRow], people: list[PersonRow], interviews: list[Int
                 )
             )
 
-    for interview in interviews:
-        if interview.overdue:
+    for job in jobs:
+        problems = sum(1 for p in people if p.job_id == job.id and p.stage == "problem")
+        if problems:
             todo.append(
                 TodoItem(
-                    text=f"The interview with {interview.candidate_name} did not start",
-                    action="Open it",
-                    to="/interviews",
-                    tone="warn",
+                    text=f"{problems} CV{'s' if problems > 1 else ''} for {job.title} could not be screened",
+                    action="Check them",
+                    to=f"/jobs/{job.id}/candidates",
                 )
             )
 
@@ -387,7 +512,7 @@ def build_todo(jobs: list[JobRow], people: list[PersonRow], interviews: list[Int
             todo.append(
                 TodoItem(
                     text=f"{person.name} leads {person.job_title} with no interview booked",
-                    action="Schedule one",
+                    action="Review",
                     to=f"/candidates/{person.id}",
                 )
             )
@@ -403,19 +528,34 @@ def build_todo(jobs: list[JobRow], people: list[PersonRow], interviews: list[Int
 
 @router.get("/overview", response_model=Overview)
 def overview(db: Session = Depends(get_db)):
-    """The numbers and the short to-do list on the dashboard."""
+    """Everything on the dashboard: what to do now, the next interviews, and how far each job has got."""
     jobs = job_rows(db)
     people = people_rows(db)
     interviews = interview_rows(db)
+    now = utcnow()
 
-    marked = [p.overall for p in people if p.overall is not None]
-    interviewed = sum(1 for p in people if p.stage == "interviewed")
-    upcoming = [i for i in interviews if i.status in ("scheduled", "live")]
-    upcoming.sort(key=lambda i: i.scheduled_at)
+    # Coming up: a live interview first (someone may be waiting in the room), then the soonest.
+    # Interviews that did not start or were never ended are in the to-do list instead.
+    upcoming = [
+        i for i in interviews
+        if (i.status == "scheduled" and not i.overdue) or (i.status == "live" and not i.forgotten)
+    ]
+    upcoming.sort(key=lambda i: (i.status != "live", i.scheduled_at))
 
-    top = sorted(
-        (p for p in people if p.overall is not None and p.status == "screened"),
-        key=lambda p: -(p.overall or 0),
+    # Who to invite next: for each job, its best candidates who passed screening and have no interview.
+    # Scores are only compared inside one job: a 75 for one role says nothing about a 75 for another.
+    ready = sorted((p for p in people if p.stage == "screened"), key=lambda p: p.rank or 999)
+    ready_to_invite: list[PersonRow] = []
+    for job in jobs:
+        ready_to_invite += [p for p in ready if p.job_id == job.id][:3]
+    ready_to_invite = ready_to_invite[:8]
+
+    # Interviews that really took place lately, newest first, for the team to review.
+    since = now - timedelta(days=RECENT_DAYS)
+    recent = sorted(
+        (i for i in interviews if i.status == "ended" and i.started_at is not None and i.ended_at and i.ended_at >= since),
+        key=lambda i: i.ended_at,
+        reverse=True,
     )[:5]
 
     return Overview(
@@ -424,18 +564,23 @@ def overview(db: Session = Depends(get_db)):
         candidates_total=len(people),
         waiting_to_screen=sum(1 for p in people if p.stage == "new"),
         passed_screening=sum(1 for p in people if p.status == "screened"),
+        ready_total=len(ready),
         interviews_upcoming=len(upcoming),
-        interviews_done=sum(1 for i in interviews if i.status == "ended"),
-        average_score=round(sum(marked) / len(marked), 1) if marked else None,
+        interviews_week=sum(1 for i in upcoming if i.scheduled_at <= now + timedelta(days=7)),
+        interviews_done=sum(1 for i in interviews if i.status == "ended" and i.started_at is not None),
         funnel=[
             FunnelStep(label="CVs received", value=len(people)),
             FunnelStep(label="Screened", value=sum(1 for p in people if p.status in ("screened", "excluded"))),
             FunnelStep(label="Passed screening", value=sum(1 for p in people if p.status == "screened")),
-            FunnelStep(label="Interviewed", value=interviewed),
+            FunnelStep(label="Invited", value=sum(1 for p in people if p.stage in ("interview", "interviewed"))),
+            FunnelStep(label="Interviewed", value=sum(1 for p in people if p.stage == "interviewed")),
         ],
         todo=build_todo(jobs, people, interviews),
+        next_interview=upcoming[0] if upcoming else None,
         upcoming=upcoming[:5],
-        top_candidates=top,
+        jobs=[job_progress(job, [p for p in people if p.job_id == job.id]) for job in jobs if job.status == "published"],
+        ready_to_invite=ready_to_invite,
+        recent_interviews=recent,
     )
 
 

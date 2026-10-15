@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app import accounts
+from app import accounts, company_profile
 from app.db import get_db
 from app.deps import current_interviewer
 from app.models import Interviewer
@@ -53,7 +53,7 @@ class SignInOptions(BaseModel):
 def sign_in_options():
     """Public: tells the login page whether to offer the Create account tab."""
     return SignInOptions(
-        company=settings.company_name,
+        company=company_profile.current().name,
         signup_open=accounts.signup_is_open(),
         email_domains=accounts.allowed_domains(),
     )
@@ -92,5 +92,5 @@ def me(interviewer: Interviewer = Depends(current_interviewer), db: Session = De
         id=interviewer.id,
         email=interviewer.email,
         name=accounts.display_name(db, interviewer),
-        company=settings.company_name,
+        company=company_profile.current(db).name,
     )

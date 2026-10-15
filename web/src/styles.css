@@ -1487,8 +1487,24 @@ td a:hover {
   font-size: 15.5px;
 }
 
+/* The headline on the left, the week's interview count on the right; stacked on a phone. */
+.hero-card {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 20px 32px;
+  flex-wrap: wrap;
+}
+
 .hero-card .big-stat {
-  margin-top: 20px;
+  text-align: right;
+}
+
+.hero-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 18px;
 }
 
 .stats {
@@ -1643,6 +1659,75 @@ a.stat:hover {
   color: #fff;
 }
 
+/* A short line under a card's title that says what the list is. */
+.card-note {
+  margin: -6px 0 6px;
+}
+
+/* Open jobs: one row per job with its numbers, and the next step as a button on the right. */
+.job-progress li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--line-2);
+}
+
+.job-progress li:first-child {
+  padding-top: 0;
+}
+
+.job-progress li:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.job-progress-title {
+  color: var(--ink);
+  font-weight: 500;
+}
+
+.job-progress-title:hover {
+  color: #fff;
+}
+
+.job-progress-counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin-top: 8px;
+  font-size: 12.5px;
+  color: var(--ink-3);
+}
+
+.job-progress-counts b {
+  color: var(--ink);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+/* A button beside a line of text keeps its one line; the text wraps instead. */
+.job-progress .button,
+.todo .button,
+.mini .button {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+/* The candidate's place in their own job's shortlist. */
+.rank-chip {
+  min-width: 36px;
+  padding: 3px 8px;
+  border-radius: var(--pill);
+  border: 1px solid var(--amber-line);
+  background: var(--amber-wash);
+  color: var(--ink);
+  font-size: 12px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
 /* ---------------------------------------------------------------- progress and pipeline */
 
 .progress-block {
@@ -1664,6 +1749,8 @@ a.stat:hover {
 }
 
 .pipeline {
+  list-style: none;
+  padding: 0;
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
   gap: 11px;
@@ -2198,45 +2285,49 @@ a.stat:hover {
 
 .foot {
   margin-top: auto;
-  padding: 52px 0 22px;
+  padding: 26px 0 18px;
   border-top: 1px solid var(--line-2);
   background: rgba(12, 13, 16, 0.4);
   backdrop-filter: var(--blur);
   -webkit-backdrop-filter: var(--blur);
 }
 
+/* One slim band: the name on the left, the links in one line on the right. */
 .foot-inner {
-  display: grid;
-  grid-template-columns: minmax(210px, 1.5fr) repeat(auto-fit, minmax(140px, 1fr));
-  gap: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px 32px;
+  flex-wrap: wrap;
   width: min(1240px, calc(100% - 44px));
   margin: 0 auto;
 }
 
+.foot-brand {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
 .foot-brand p {
-  margin-top: 12px;
-  max-width: 240px;
+  margin: 0;
   font-size: 13.5px;
   color: var(--ink-4);
 }
 
-.foot-column h2 {
-  margin-bottom: 13px;
-  font-size: 11.5px;
-  font-weight: 500;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--ink-4);
+.foot-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 22px;
 }
 
-.foot-column a {
-  display: block;
-  padding: 5px 0;
-  font-size: 13.8px;
+.foot-links a {
+  font-size: 13.5px;
   color: var(--ink-2);
 }
 
-.foot-column a:hover {
+.foot-links a:hover {
   color: #fff;
 }
 
@@ -2247,24 +2338,11 @@ a.stat:hover {
   gap: 16px;
   flex-wrap: wrap;
   width: min(1240px, calc(100% - 44px));
-  margin: 40px auto 0;
-  padding-top: 20px;
+  margin: 18px auto 0;
+  padding-top: 14px;
   border-top: 1px solid var(--line-2);
   font-size: 12.5px;
   color: var(--ink-4);
-}
-
-.foot-legal {
-  display: flex;
-  gap: 22px;
-}
-
-.foot-legal a {
-  color: var(--ink-4);
-}
-
-.foot-legal a:hover {
-  color: var(--ink-2);
 }
 
 /* ---------------------------------------------------------------- movement */
@@ -2359,6 +2437,11 @@ a.stat:hover {
     grid-template-columns: 1fr;
   }
 
+  /* In one column, "Needs you" and the next interviews come before the job overview. */
+  .board > div:last-child {
+    order: -1;
+  }
+
   .gate {
     grid-template-columns: 1fr;
     gap: 34px;
@@ -2439,8 +2522,21 @@ a.stat:hover {
   }
 
   .foot-inner {
-    grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
-    gap: 24px;
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .job-progress li {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .stats {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .hero-card .big-stat {
+    text-align: left;
   }
 }
 
@@ -2460,4 +2556,590 @@ a.stat:hover {
   .pipeline a:hover {
     transform: none;
   }
+}
+
+/* ---------------------------------------------------------------- interview summary (card on the candidate page) */
+
+.interview-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.facts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0 0 18px;
+}
+
+.facts > div {
+  padding: 10px 14px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius-s);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.facts dt {
+  font-size: 12px;
+  color: var(--ink-3);
+  margin-bottom: 2px;
+}
+
+.facts dd {
+  margin: 0;
+  font-weight: 500;
+}
+
+.mini-head {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--ink-3);
+  margin: 0 0 8px;
+}
+
+.mini-head.next {
+  margin-top: 22px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line-2);
+}
+
+.attendance {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 18px;
+  display: grid;
+  gap: 10px;
+}
+
+.attendance li {
+  display: grid;
+  grid-template-columns: minmax(110px, 0.9fr) minmax(0, 1.4fr) minmax(80px, 1fr);
+  align-items: center;
+  gap: 12px;
+  font-size: 14px;
+}
+
+.attendance .who {
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.attendance .when {
+  color: var(--ink-2);
+}
+
+/* The bar: the whole interview from left to right, the coloured parts are when this person was in. */
+.presence {
+  position: relative;
+  height: 8px;
+  border-radius: var(--pill);
+  background: rgba(255, 255, 255, 0.07);
+  overflow: hidden;
+}
+
+.presence .stay {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-radius: var(--pill);
+}
+
+.presence .stay.candidate {
+  background: var(--amber);
+}
+
+.presence .stay.interviewer {
+  background: var(--met);
+}
+
+.transcript-empty {
+  margin: 0;
+  padding: 10px 14px;
+  border: 1px dashed var(--line);
+  border-radius: var(--radius-s);
+  color: var(--ink-3);
+  font-size: 14px;
+}
+
+@media (max-width: 640px) {
+  .facts {
+    gap: 6px;
+  }
+
+  .facts > div {
+    padding: 8px 10px;
+  }
+
+  .facts dd {
+    font-size: 13px;
+  }
+
+  .attendance li {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+}
+
+/* ---------------------------------------------------------------- job post, CV list */
+
+.post-status {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.job-post h2 {
+  margin-bottom: 4px;
+}
+
+.job-post h3 {
+  margin-top: 22px;
+}
+
+.apply-box {
+  margin-top: 28px;
+  padding: 18px 20px;
+  border-radius: var(--radius-s);
+  border: 1px solid var(--amber-line);
+  background: var(--amber-wash);
+}
+
+.apply-box h3 {
+  margin-top: 0;
+}
+
+
+.card .pad,
+.muted.pad {
+  padding: 22px;
+}
+
+.badge.tiny {
+  margin-left: 8px;
+  padding: 1px 8px;
+  font-size: 11px;
+}
+
+tr.is-new td {
+  background: var(--amber-wash);
+}
+
+.link-button {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ink-2);
+  font: inherit;
+  text-align: left;
+  text-decoration: underline;
+  text-decoration-color: var(--line);
+  text-underline-offset: 3px;
+  cursor: pointer;
+  word-break: break-all;
+}
+
+.link-button:hover {
+  color: var(--ink);
+  text-decoration-color: var(--amber);
+}
+
+/* The "new CVs since your last visit" notice on the job page. */
+.notice.new-cvs {
+  align-items: center;
+}
+
+.notice.new-cvs a {
+  white-space: nowrap;
+  font-weight: 500;
+}
+
+.notice-close {
+  border: 0;
+  background: none;
+  color: var(--ink-3);
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 2px;
+}
+
+.notice-close:hover {
+  color: var(--ink);
+}
+
+/* ---------------------------------------------------------------- settings page */
+
+.settings-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.settings-grid > .card {
+  margin-bottom: 0;
+}
+
+.settings-grid + .card {
+  margin-top: 18px;
+}
+
+.from-box {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 14px;
+  margin: 4px 0 16px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius-s);
+  background: rgba(255, 255, 255, 0.04);
+  word-break: break-word;
+}
+
+.mail-head {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 14px;
+  margin: 12px 0;
+  font-size: 13.5px;
+}
+
+.mail-head dt {
+  color: var(--ink-3);
+}
+
+.mail-head dd {
+  margin: 0;
+  word-break: break-word;
+}
+
+.mail-preview {
+  width: 100%;
+  height: 620px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-s);
+  background: #f3f1ee;
+}
+
+.holiday-tools {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+  margin: 14px 0;
+}
+
+.proposed {
+  margin: 8px 0 18px;
+  padding: 16px;
+  border: 1px solid var(--amber-line);
+  border-radius: var(--radius-s);
+  background: var(--amber-wash);
+}
+
+.holiday-list {
+  list-style: none;
+  padding: 0;
+  margin: 10px 0 14px;
+  display: grid;
+  gap: 2px;
+}
+
+.holiday-list li,
+.holiday-list label {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 14px;
+}
+
+.holiday-list li {
+  padding: 7px 4px;
+  border-bottom: 1px solid var(--line-2);
+}
+
+.holiday-list label {
+  width: 100%;
+  cursor: pointer;
+}
+
+.holiday-day {
+  min-width: 150px;
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 900px) {
+  .settings-grid,
+  .holiday-tools {
+    grid-template-columns: 1fr;
+  }
+}
+
+.check {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.check input {
+  width: auto;
+  margin: 0;
+  accent-color: var(--amber);
+}
+
+/* ---------------------------------------------------------------- invite top candidates */
+
+.invite-layout {
+  display: grid;
+  grid-template-columns: minmax(280px, 0.8fr) minmax(0, 1.6fr);
+  gap: 18px;
+  align-items: start;
+  margin-bottom: 18px;
+}
+
+.invite-layout > .card {
+  margin-bottom: 0;
+}
+
+.check.choice {
+  display: flex;
+  flex-wrap: wrap;
+  margin: 10px 0;
+  font-size: 15px;
+}
+
+.small-number {
+  width: 76px !important;
+  padding: 6px 10px !important;
+  text-align: center;
+}
+
+.rules-note {
+  font-size: 13px;
+  color: var(--ink-3);
+  line-height: 1.55;
+  margin: 4px 0 16px;
+}
+
+tr.in-top td {
+  background: rgba(234, 173, 109, 0.07);
+}
+
+tr.dimmed td {
+  opacity: 0.45;
+}
+
+input.tick {
+  width: auto;
+  accent-color: var(--amber);
+}
+
+.warn-text {
+  color: var(--partly) !important;
+}
+
+.failed-list {
+  list-style: none;
+  padding: 0;
+  margin: 12px 0 8px;
+  display: grid;
+  gap: 6px;
+  font-size: 14px;
+}
+
+@media (max-width: 900px) {
+  .invite-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ---------------------------------------------------------------- reschedule, schedule rules, holiday questions */
+
+.settings-grid.lower {
+  margin-top: 18px;
+}
+
+.settings-grid.lower .holiday-tools {
+  grid-template-columns: 1fr;
+}
+
+.schedule-grid,
+.reschedule-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+.hours-row {
+  margin-bottom: 8px;
+}
+
+.hours-row input[type="time"] {
+  width: 140px;
+}
+
+.day-chip {
+  cursor: pointer;
+  user-select: none;
+}
+
+.day-chip input {
+  display: none;
+}
+
+.day-chip.on {
+  border-color: var(--amber-line);
+  background: var(--amber-wash);
+  color: #f3c694;
+}
+
+.reschedule {
+  margin: 4px 0 14px;
+}
+
+.warn-line,
+.ok-line {
+  font-size: 13.5px;
+  margin: 2px 0 12px;
+}
+
+.warn-line {
+  color: var(--partly);
+}
+
+.ok-line {
+  color: var(--met);
+}
+
+.slot-chip {
+  cursor: pointer;
+}
+
+.slot-chip:hover {
+  border-color: var(--amber-line);
+  color: var(--ink);
+}
+
+.ask-box {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line-2);
+}
+
+.ask-box h3 {
+  margin: 0 0 10px;
+}
+
+.answer {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border-radius: var(--radius-s);
+  border: 1px solid var(--line-2);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.answer p {
+  margin: 0 0 6px;
+}
+
+.answer blockquote {
+  margin: 8px 0 0;
+  padding: 8px 12px;
+  border-left: 2px solid var(--amber-line);
+  white-space: pre-wrap;
+  font-size: 13px;
+  color: var(--ink-2);
+}
+
+.docs-line .chip {
+  margin: 4px 6px 0 0;
+}
+
+.order-list {
+  list-style: none;
+  padding: 0;
+  margin: 8px 0 14px;
+  display: grid;
+  gap: 4px;
+  counter-reset: order;
+}
+
+.order-list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  padding: 6px 8px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.order-list li::before {
+  counter-increment: order;
+  content: counter(order);
+  min-width: 20px;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.move-buttons {
+  display: inline-flex;
+  gap: 2px;
+}
+
+.move-buttons button {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink-2);
+  cursor: pointer;
+}
+
+.move-buttons button:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.reschedule-row td {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+@media (max-width: 640px) {
+  .schedule-grid,
+  .reschedule-fields {
+    grid-template-columns: 1fr;
+  }
+}
+
+.sort-select {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sort-select select {
+  width: auto;
+  padding: 7px 36px 7px 12px;
+}
+
+.hint .link-button {
+  margin-right: 10px;
+}
+
+.row-actions {
+  display: inline-flex;
+  gap: 8px;
+  justify-content: flex-end;
+  flex-wrap: wrap;
 }

@@ -1,7 +1,7 @@
-from datetime import datetime
+from datetime import date, datetime
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import JSON, DateTime, Float, ForeignKey, Integer, String, Text, func, Boolean
+from sqlalchemy import JSON, Boolean, Date, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint, func
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 DEFAULT_WEIGHTS = {"technical_skills": 40, "experience": 30, "qualifications": 15, "jd_match": 15}
@@ -177,6 +177,9 @@ class InterviewSession(Base):
     status: Mapped[str] = mapped_column(String(20), default="scheduled")  # scheduled | live | ended
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # How long this interview is booked for. Empty for interviews made before durations could be
+    # chosen: those use the length on the Settings page. (Added to old databases by init_db.)
+    duration_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
 class SessionParticipant(Base):
     """Who was in an interview and when (Module 7).
@@ -231,4 +234,115 @@ class CalendarEvent(Base):
     session_id: Mapped[int] = mapped_column(ForeignKey("interview_sessions.id", ondelete="CASCADE"), primary_key=True)
     event_id: Mapped[str] = mapped_column(String(255))
     calendar_id: Mapped[str] = mapped_column(String(255))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class JobVisit(Base):
+    """When a hiring team member last opened a job, so the job page can say how many CVs are new.
+
+    seen_at is the latest visit; previous_seen_at the one before it. "New" means arrived after
+    previous_seen_at. Opening the page again within a minute counts as the same visit (a refresh
+    must not wipe the notice).
+    """
+
+    __tablename__ = "job_visits"
+    __table_args__ = (UniqueConstraint("interviewer_id", "job_profile_id"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    interviewer_id: Mapped[int] = mapped_column(ForeignKey("interviewers.id", ondelete="CASCADE"))
+    job_profile_id: Mapped[int] = mapped_column(ForeignKey("job_profiles.id", ondelete="CASCADE"))
+    seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    previous_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class CompanyProfile(Base):
+    """The company that uses this TalentSight: its name and who candidates can contact.
+
+    One row (id 1), edited on the Settings page. Empty fields fall back to .env (COMPANY_NAME),
+    so a fresh install still works before anyone fills this in.
+    """
+
+    __tablename__ = "company_profile"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    company_name: Mapped[str] = mapped_column(String(120), default="")
+    sender_name: Mapped[str] = mapped_column(String(120), default="")  # the name shown in "From"
+    contact_name: Mapped[str] = mapped_column(String(120), default="")  # who answers candidates' questions
+    contact_email: Mapped[str] = mapped_column(String(255), default="")  # replies go here
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class Holiday(Base):
+    """A day with no interviews: a government or company holiday (Settings page).
+
+    Read from the government's holiday PDF (the AI lists the dates, a person checks them) or
+    added by hand. The interview planner never books a slot on one of these days.
+    """
+
+    __tablename__ = "holidays"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    day: Mapped[date] = mapped_column(Date, unique=True)
+    name: Mapped[str] = mapped_column(String(200), default="")
+    source: Mapped[str] = mapped_column(String(10), default="manual")  # manual | pdf
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class InviteBatch(Base):
+    """One "invite the top candidates" action: many interviews booked and e-mailed together."""
+
+    __tablename__ = "invite_batches"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    job_profile_id: Mapped[int] = mapped_column(ForeignKey("job_profiles.id", ondelete="CASCADE"))
+    created_by: Mapped[int | None] = mapped_column(ForeignKey("interviewers.id", ondelete="SET NULL"), nullable=True)
+    total: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class InviteDelivery(Base):
+    """Whether the invitation of one interview in a batch has gone out (sent in the background)."""
+
+    __tablename__ = "invite_deliveries"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    batch_id: Mapped[int] = mapped_column(ForeignKey("invite_batches.id", ondelete="CASCADE"))
+    session_id: Mapped[int] = mapped_column(ForeignKey("interview_sessions.id", ondelete="CASCADE"), unique=True)
+    status: Mapped[str] = mapped_column(String(10), default="queued")  # queued | sent | failed
+    error: Mapped[str] = mapped_column(Text, default="")
+    calendar_error: Mapped[str] = mapped_column(Text, default="")
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class ScheduleRules(Base):
+    """When interviews may be booked (Settings page): length, gap, hours and working days.
+
+    One row (id 1). Empty means "use .env" (INTERVIEW_MINUTES, INTERVIEW_GAP_MINUTES,
+    INTERVIEW_WINDOWS, WORK_DAYS), so a fresh install works before anyone opens Settings.
+    """
+
+    __tablename__ = "schedule_rules"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    interview_minutes: Mapped[int] = mapped_column(Integer)
+    gap_minutes: Mapped[int] = mapped_column(Integer)
+    windows: Mapped[str] = mapped_column(String(200))  # "09:00-12:00,14:00-17:00"
+    work_days: Mapped[str] = mapped_column(String(60))  # "Mon,Tue,Wed,Thu,Fri"
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class HolidayChunk(Base):
+    """One piece of an uploaded holiday calendar PDF, with its embedding (RAG, like policy_chunks).
+
+    Used two ways: the most relevant pieces are given to the AI to list the holidays, and they
+    answer questions in the "Ask about holidays" box. The planner never reads these: it only
+    uses the holiday list a person checked and saved.
+    """
+
+    __tablename__ = "holiday_chunks"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    source: Mapped[str] = mapped_column(String(200))  # the PDF's file name
+    text: Mapped[str] = mapped_column(Text)
+    embedding = mapped_column(Vector(384))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

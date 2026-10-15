@@ -147,6 +147,7 @@ export type Interview = {
   calendar_added: boolean | null; // null = Google Calendar is off or was not tried in this answer
   calendar_error: string;
   duration_seconds: number | null; // null until the interview has ended
+  duration_minutes: number; // how long it is booked for
   participants: { role: "interviewer" | "candidate"; joined_at: string; left_at: string | null }[];
 
 };
@@ -212,7 +213,10 @@ export type InterviewRow = {
   ended_at: string | null;
   duration_seconds: number | null;
   transcript_lines: number;
+  overall: number | null; // the candidate's score
+  duration_minutes: number;
   overdue: boolean;
+  forgotten: boolean;
 };
 
 export type JobRow = {
@@ -231,19 +235,40 @@ export type JobRow = {
 
 export type TodoItem = { text: string; action: string; to: string; tone: "normal" | "warn" };
 
+// One open job on the dashboard: how far its hiring has got, and the next step for it.
+export type JobProgress = {
+  id: number;
+  title: string;
+  days_open: number;
+  candidates: number;
+  waiting: number;
+  passed: number;
+  invited: number;
+  interviewed: number;
+  leader_id: number | null;
+  leader_name: string;
+  leader_score: number | null;
+  next_step: string;
+  next_link: string;
+};
+
 export type Overview = {
   jobs_open: number;
   jobs_total: number;
   candidates_total: number;
   waiting_to_screen: number;
   passed_screening: number;
+  ready_total: number;
   interviews_upcoming: number;
+  interviews_week: number;
   interviews_done: number;
-  average_score: number | null;
   funnel: { label: string; value: number }[];
   todo: TodoItem[];
+  next_interview: InterviewRow | null;
   upcoming: InterviewRow[];
-  top_candidates: PersonRow[];
+  jobs: JobProgress[];
+  ready_to_invite: PersonRow[];
+  recent_interviews: InterviewRow[];
 };
 
 // ---------- Accounts ----------
@@ -276,4 +301,76 @@ export type SetupCheck = {
   detail: string;
   fix: string; // what to change when it does not work; empty when it does
   optional: boolean; // the app works without it, but a company will usually want it
+};
+
+// The "new CVs" notice on the job page: CVs that arrived since this person's previous visit.
+export type JobVisit = { new_cvs: number; since: string | null };
+
+// Settings page: the company that uses TalentSight (name and contact in every e-mail).
+export type CompanySettings = {
+  company_name: string;
+  sender_name: string;
+  contact_name: string;
+  contact_email: string;
+  sending_address: string; // the real mailbox (SMTP_USER), set in .env
+  from_line: string; // exactly what candidates see in "From"
+};
+
+export type EmailPreview = { subject: string; from: string; reply_to: string; html: string; wording: "ai" | "template" };
+
+// Days with no interviews.
+export type Holiday = { id: number; day: string; name: string; source: "pdf" | "manual" };
+export type ProposedHoliday = { day: string; name: string; kind: "public" | "optional" };
+// What reading a holiday PDF gives back: how it was cut up for RAG, and the holidays the AI found.
+export type HolidayReadResult = { source: string; chunks_stored: number; chunks_used: number; holidays: ProposedHoliday[] };
+export type HolidayAnswer = { answer: string; sources: { source: string; text: string }[] };
+export type HolidayDocument = { source: string; chunks: number };
+
+// When interviews may be booked (Settings page).
+export type ScheduleRules = {
+  interview_minutes: number;
+  gap_minutes: number;
+  windows: { start: string; end: string }[];
+  work_days: string[];
+  slots_per_day: number;
+};
+
+// Inviting the top candidates of a job at once.
+export type PlanRules = {
+  windows: string[];
+  interview_minutes: number;
+  gap_minutes: number;
+  work_days: string[];
+  slots_per_day: number;
+  holidays_ahead: number;
+};
+
+export type InvitePlan = {
+  ranked_total: number;
+  asked: number;
+  slots: { candidate_id: number; rank: number; name: string; email: string; overall: number | null; scheduled_at: string; email_ok: boolean }[];
+  skipped: { candidate_id: number; rank: number; name: string; reason: string }[];
+  not_placed: number;
+  rules: Omit<PlanRules, "holidays_ahead">;
+};
+
+export type InviteBatch = {
+  id: number;
+  created_at: string;
+  total: number;
+  sent: number;
+  failed: number;
+  queued: number;
+  deliveries: {
+    session_id: number;
+    candidate_id: number;
+    name: string;
+    email: string;
+    scheduled_at: string;
+    duration_minutes: number;
+    interview_status: "scheduled" | "live" | "ended";
+    status: "queued" | "sent" | "failed";
+    error: string;
+    calendar_error: string;
+  }[];
 };

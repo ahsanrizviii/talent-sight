@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { api } from "../api";
 import type { Interview } from "../types";
 import { Link } from "react-router-dom";
+import InterviewSummary from "./InterviewSummary";
+import RescheduleBox from "./RescheduleBox";
 import SavedTranscript from "./SavedTranscript";
 
 // "localhost" and "127.0.0.1" mean "this computer", so a link containing them is useless to
@@ -17,7 +19,6 @@ function toInputValue(date: Date): string {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
-const clock = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 type Props = { candidateId: number; candidateStatus: string };
 
 // Schedule, move or end the interview of one screened candidate (Tasks 7.1.2 and 7.1.3).
@@ -28,6 +29,8 @@ export default function InterviewCard({ candidateId, candidateStatus }: Props) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
+  const [minutes, setMinutes] = useState<number | "">(""); // "" = the length on the Settings page
+  const [moving, setMoving] = useState(false);
 
   useEffect(() => {
     api<Interview | null>(`/candidates/${candidateId}/interview`)
@@ -38,15 +41,13 @@ export default function InterviewCard({ candidateId, candidateStatus }: Props) {
 
   const active = interview !== null && interview.status !== "ended";
 
+  // Booking a new interview. Moving one that is already booked is done by RescheduleBox.
   async function save() {
     setBusy(true);
     setError("");
     try {
-      const body = JSON.stringify({ scheduled_at: new Date(when).toISOString() });
-      const result = active
-        ? await api<Interview>(`/interviews/${interview.id}`, { method: "PATCH", body })
-        : await api<Interview>(`/candidates/${candidateId}/interview`, { method: "POST", body });
-      setInterview(result);
+      const body = JSON.stringify({ scheduled_at: new Date(when).toISOString(), duration_minutes: minutes || null });
+      setInterview(await api<Interview>(`/candidates/${candidateId}/interview`, { method: "POST", body }));
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -99,26 +100,8 @@ export default function InterviewCard({ candidateId, candidateStatus }: Props) {
     <div className="card glass">
       <h2>Interview</h2>
 
-      {interview && (
-        <p>
-          <span className="badge">{interview.status}</span>{" "}
-          {interview.status === "ended" && interview.ended_at
-            ? `Ended ${new Date(interview.ended_at).toLocaleString()}`
-            : `Scheduled for ${new Date(interview.scheduled_at).toLocaleString()}`}
-        </p>
-      )}
-      {interview && interview.participants.length > 0 && (
-        <ul className="small muted">
-          {interview.participants.map((p, i) => (
-            <li key={i}>
-              {p.role === "interviewer" ? "Interviewer" : "Candidate"}: joined {clock(p.joined_at)}
-              {p.left_at && `, left ${clock(p.left_at)}`}
-            </li>
-          ))}
-          {interview.duration_seconds !== null && <li>Duration: {Math.max(1, Math.round(interview.duration_seconds / 60))} min</li>}
-        </ul>
-      )}
-      {interview?.status === "ended" && <SavedTranscript sessionId={interview.id} candidateName={interview.candidate_name} />}
+      {interview && <InterviewSummary interview={interview} />}
+      {interview?.status === "ended" && interview.started_at && <SavedTranscript sessionId={interview.id} candidateName={interview.candidate_name} />}
       {active && (
         <div className="field">
           <label htmlFor="invite-link">Candidate's private link</label>
@@ -143,17 +126,49 @@ export default function InterviewCard({ candidateId, candidateStatus }: Props) {
       {interview?.calendar_added === true && <p className="success">Added to the company Google Calendar.</p>}
       {interview?.calendar_added === false && <p className="error">{interview.calendar_error}</p>}
 
-      {candidateStatus === "screened" && (interview === null || interview.status !== "live") && (
-        <div className="field">
-          <label htmlFor="interview-time">{active ? "Move to another time" : "Date and time"}</label>
-          <input id="interview-time" type="datetime-local" value={when} onChange={(event) => setWhen(event.target.value)} />
+      {interview?.status === "scheduled" && moving && (
+        <>
+          <h3 className="mini-head next">Move to another time</h3>
+          <RescheduleBox
+            sessionId={interview.id}
+            currentAt={interview.scheduled_at}
+            durationMinutes={interview.duration_minutes}
+            onMoved={(moved) => setInterview(moved)}
+            onClose={() => setMoving(false)}
+          />
+        </>
+      )}
+
+      {candidateStatus === "screened" && interview?.status === "ended" && <h3 className="mini-head next">Book another interview</h3>}
+      {candidateStatus === "screened" && !active && (
+        <div className="reschedule-fields">
+          <div className="field">
+            <label htmlFor="interview-time">{interview ? "New date and time" : "Date and time"}</label>
+            <input id="interview-time" type="datetime-local" value={when} onChange={(event) => setWhen(event.target.value)} />
+          </div>
+          <div className="field">
+            <label htmlFor="interview-length">Length</label>
+            <select id="interview-length" value={minutes} onChange={(event) => setMinutes(event.target.value ? Number(event.target.value) : "")}>
+              <option value="">As in Settings</option>
+              {[30, 45, 60, 90].map((m) => (
+                <option key={m} value={m}>
+                  {m} minutes
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
       )}
 
       <div className="row">
-        {candidateStatus === "screened" && (interview === null || interview.status !== "live") && (
+        {candidateStatus === "screened" && !active && (
           <button className="button" onClick={save} disabled={busy || !when}>
-            {active ? "Reschedule" : interview ? "Schedule a new interview" : "Schedule interview"}
+            {interview ? "Schedule a new interview" : "Schedule interview"}
+          </button>
+        )}
+        {interview?.status === "scheduled" && !moving && (
+          <button className="button secondary" onClick={() => setMoving(true)}>
+            Reschedule
           </button>
         )}
         {active && (

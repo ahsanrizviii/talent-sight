@@ -2,11 +2,11 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app import blogger
+from app import blogger, job_visits
 from app.db import get_db
 from app.deps import current_interviewer
 from app.job_profiles import JobIn, JobOut, publish_job_post
-from app.models import JobProfile
+from app.models import Interviewer, JobProfile
 from app.scoring import rescore_job
 
 router = APIRouter(prefix="/api/jobs", tags=["jobs"], dependencies=[Depends(current_interviewer)])
@@ -60,3 +60,10 @@ def publish_job(job_id: int, db: Session = Depends(get_db)):
     if not already_published:  
         blogger.post_job(job)
     return job
+
+
+@router.post("/{job_id}/visit", response_model=job_visits.VisitOut)
+def visit_job(job_id: int, db: Session = Depends(get_db), interviewer: Interviewer = Depends(current_interviewer)):
+    """Called when the job page opens: how many CVs are new since this person's last visit."""
+    find_job(db, job_id)
+    return job_visits.record_visit(db, interviewer.id, job_id)

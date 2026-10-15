@@ -117,6 +117,10 @@ export default function TopNav() {
                 <strong>{me?.name}</strong>
                 <span>{me?.email}</span>
               </div>
+              <Link className="menu-item" to="/settings" onClick={() => setOpenMenu(false)}>
+                <Icon name="settings" />
+                Settings
+              </Link>
               <button className="menu-item" type="button" onClick={logOut}>
                 <Icon name="logout" />
                 Log out

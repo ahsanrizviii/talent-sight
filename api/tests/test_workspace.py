@@ -216,6 +216,22 @@ def test_jobs_can_be_filtered_by_draft_or_published(client, auth_headers):
 # ---------- The dashboard ----------
 
 
+def cancel_interview(candidate_id: int) -> None:
+    """An interview that was cancelled before it started: ended, but never started."""
+    with SessionLocal() as db:
+        db.add(
+            InterviewSession(
+                candidate_id=candidate_id,
+                scheduled_at=in_hours(-2),
+                invite_token=f"cancelled-{candidate_id}",
+                invite_expires_at=in_hours(22),
+                status="ended",
+                ended_at=in_hours(-3),
+            )
+        )
+        db.commit()
+
+
 def test_the_dashboard_counts_the_whole_pipeline(client, auth_headers):
     job = make_job("Backend Developer")
     best = make_candidate(job, "Maya Rahman", score=80)
@@ -227,9 +243,22 @@ def test_the_dashboard_counts_the_whole_pipeline(client, auth_headers):
     assert body["candidates_total"] == 3
     assert body["waiting_to_screen"] == 1
     assert body["passed_screening"] == 2
+    assert body["ready_total"] == 1  # Arif passed and has no interview yet
     assert body["interviews_done"] == 1
-    assert body["average_score"] == 70
-    assert [step["value"] for step in body["funnel"]] == [3, 2, 2, 1]
+    assert [step["label"] for step in body["funnel"]] == [
+        "CVs received", "Screened", "Passed screening", "Invited", "Interviewed"
+    ]
+    assert [step["value"] for step in body["funnel"]] == [3, 2, 2, 1, 1]
+
+
+def test_a_cancelled_interview_does_not_count_as_held(client, auth_headers):
+    job = make_job("Backend Developer")
+    cancel_interview(make_candidate(job, "Maya Rahman", score=80))
+
+    body = get(client, auth_headers, "/api/workspace/overview")
+    assert body["interviews_done"] == 0
+    assert body["funnel"][-1]["value"] == 0
+    assert get(client, auth_headers, "/api/workspace/candidates")[0]["stage"] == "screened"
 
 
 def test_the_dashboard_says_what_to_do_next(client, auth_headers):
@@ -249,24 +278,118 @@ def test_a_leading_candidate_without_an_interview_is_flagged(client, auth_header
     assert any("Maya Rahman" in item["text"] for item in todo)
 
 
-def test_the_dashboard_lists_the_next_interviews_and_the_best_candidates(client, auth_headers):
+def test_an_interview_that_did_not_start_is_flagged_not_listed_as_next(client, auth_headers):
     job = make_job("Backend Developer")
-    soon = make_candidate(job, "Maya Rahman", score=82)
-    make_interview(soon, hours=1)
+    candidate = make_candidate(job, "Maya Rahman", score=82)
+    make_interview(candidate, status="scheduled", hours=-3)
+
+    body = get(client, auth_headers, "/api/workspace/overview")
+    assert body["upcoming"] == []
+    assert body["next_interview"] is None
+    flagged = [item for item in body["todo"] if "did not start" in item["text"]]
+    assert flagged and flagged[0]["to"] == f"/candidates/{candidate}"
+
+
+def test_an_interview_nobody_ended_is_flagged(client, auth_headers):
+    job = make_job("Backend Developer")
+    make_interview(make_candidate(job, "Maya Rahman", score=82), status="live", hours=-5)
+
+    body = get(client, auth_headers, "/api/workspace/overview")
+    assert body["upcoming"] == []
+    assert any("never ended" in item["text"] for item in body["todo"])
+
+
+def test_the_dashboard_lists_the_next_interviews(client, auth_headers):
+    job = make_job("Backend Developer")
+    make_interview(make_candidate(job, "Maya Rahman", score=82), hours=1)
     make_interview(make_candidate(job, "Arif Khan", score=61), hours=5)
 
     body = get(client, auth_headers, "/api/workspace/overview")
     assert [row["candidate_name"] for row in body["upcoming"]] == ["Maya Rahman", "Arif Khan"]
-    assert body["top_candidates"][0]["name"] == "Maya Rahman"
+    assert body["next_interview"]["candidate_name"] == "Maya Rahman"
+    assert body["interviews_week"] == 2
+
+
+def test_each_open_job_shows_its_progress_and_next_step(client, auth_headers):
+    waiting = make_job("Backend Developer")
+    make_candidate(waiting, "Maya Rahman", score=82)
+    make_candidate(waiting, "Tanvir Ahmed", status="uploaded")
+    ready = make_job("Data Engineer")
+    make_candidate(ready, "Arif Khan", score=61)
+    make_job("Product Designer", status="draft")
+
+    jobs = {job["title"]: job for job in get(client, auth_headers, "/api/workspace/overview")["jobs"]}
+    assert set(jobs) == {"Backend Developer", "Data Engineer"}  # drafts are not open
+    assert jobs["Backend Developer"]["candidates"] == 2
+    assert jobs["Backend Developer"]["leader_name"] == "Maya Rahman"
+    assert jobs["Backend Developer"]["next_step"] == "Screen 1 CV"
+    assert jobs["Data Engineer"]["next_step"] == "Invite Arif Khan"
+
+
+def test_who_to_invite_is_listed_per_job_best_first(client, auth_headers):
+    job = make_job("Backend Developer")
+    for name, score in (("Maya Rahman", 90), ("Arif Khan", 80), ("Rafi Islam", 70), ("Zara Noor", 60)):
+        make_candidate(job, name, score=score)
+    invited = make_candidate(job, "Abir Das", score=95)
+    make_interview(invited)
+
+    ready = get(client, auth_headers, "/api/workspace/overview")["ready_to_invite"]
+    assert [p["name"] for p in ready] == ["Maya Rahman", "Arif Khan", "Rafi Islam"]  # top 3, no one already invited
+
+
+def test_recent_interviews_list_only_the_ones_that_took_place(client, auth_headers):
+    job = make_job("Backend Developer")
+    make_interview(make_candidate(job, "Maya Rahman", score=82), status="ended", lines=3)
+    cancel_interview(make_candidate(job, "Arif Khan", score=61))
+
+    recent = get(client, auth_headers, "/api/workspace/overview")["recent_interviews"]
+    assert [row["candidate_name"] for row in recent] == ["Maya Rahman"]
 
 
 def test_an_empty_workspace_answers_without_breaking(client, auth_headers):
     body = get(client, auth_headers, "/api/workspace/overview")
     assert body["candidates_total"] == 0
-    assert body["average_score"] is None
+    assert body["next_interview"] is None
+    assert body["jobs"] == []
     assert body["todo"] == []
 
 
 def test_these_views_need_a_login(client):
     for path in ("candidates", "interviews", "jobs", "overview"):
         assert client.get(f"/api/workspace/{path}").status_code == 401
+
+
+# ---------- Sorting the interviews page ----------
+
+
+def test_interviews_can_be_sorted(client, auth_headers):
+    from datetime import datetime, timedelta, timezone
+
+    from app.db import SessionLocal
+    from app.models import Candidate, CandidateScore, InterviewSession, JobProfile
+
+    now = datetime.now(timezone.utc)
+    with SessionLocal() as db:
+        jobs = [JobProfile(title="Backend"), JobProfile(title="Analyst")]
+        db.add_all(jobs)
+        db.flush()
+        people = [("Zara", jobs[0], 70, 3), ("Adnan", jobs[1], 90, 1), ("Mitu", jobs[0], 80, 2)]
+        for name, job, score, hours in people:
+            c = Candidate(job_profile_id=job.id, name=name, email="x@example.com", cv_filename="cv.pdf", status="screened")
+            db.add(c)
+            db.flush()
+            db.add(CandidateScore(candidate_id=c.id, technical_skills=score, experience=score, qualifications=score, jd_match=score, overall=score, justification={}))
+            db.add(InterviewSession(candidate_id=c.id, scheduled_at=now + timedelta(hours=hours), invite_token=f"t-{name}", invite_expires_at=now + timedelta(days=2)))
+        db.commit()
+
+    def names(sort):
+        rows = client.get("/api/workspace/interviews", params={"sort": sort}, headers=auth_headers).json()
+        return [r["candidate_name"] for r in rows]
+
+    assert names("soonest") == ["Adnan", "Mitu", "Zara"]
+    assert names("latest") == ["Zara", "Mitu", "Adnan"]
+    assert names("candidate") == ["Adnan", "Mitu", "Zara"]
+    assert names("score") == ["Adnan", "Mitu", "Zara"]
+    assert names("job") == ["Adnan", "Mitu", "Zara"]  # Analyst before Backend, then by time
+    rows = client.get("/api/workspace/interviews", headers=auth_headers).json()
+    assert rows[0]["overall"] == 90 and rows[0]["duration_minutes"] == 60
