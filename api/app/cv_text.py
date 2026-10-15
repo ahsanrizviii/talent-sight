@@ -32,13 +32,14 @@ def pdf_text(path: Path) -> str:
     return "\n".join(page.extract_text() or "" for page in reader.pages)
 
 
-def pdf_ocr(path: Path) -> str:
+def pdf_ocr(path: Path, lang: str = "eng") -> str:
+    """lang is the Tesseract language, for example "eng", or "ben+eng" for Bangla and English."""
     pdf = pypdfium2.PdfDocument(path)
     try:
         pages = []
         for index in range(min(len(pdf), OCR_PAGES)):
             image = pdf[index].render(scale=300 / 72).to_pil()
-            pages.append(pytesseract.image_to_string(image))
+            pages.append(pytesseract.image_to_string(image, lang=lang))
         return "\n".join(pages)
     finally:
         pdf.close()

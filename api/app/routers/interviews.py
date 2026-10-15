@@ -6,12 +6,12 @@ Candidates never use this file. They only use their private invite link (routers
 import secrets
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
-from pydantic import BaseModel, field_validator
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app import calendar_events, invite_mail, livekit_service, participants, transcription
+from app import calendar_events, invite_mail, livekit_service, participants, planner, schedule_rules, scheduling, transcription
 from app.db import get_db
 from app.deps import current_interviewer
 from app.models import Candidate, Interviewer, InterviewSession, JobProfile
@@ -31,6 +31,7 @@ def utcnow() -> datetime:
 
 class ScheduleIn(BaseModel):
     scheduled_at: datetime
+    duration_minutes: int | None = Field(default=None, ge=10, le=240)  # empty = the length on the Settings page
 
     @field_validator("scheduled_at")
     @classmethod
@@ -61,6 +62,7 @@ class SessionOut(BaseModel):
     started_at: datetime | None
     ended_at: datetime | None
     duration_seconds: int | None  # from the first join to the end; None until the interview has ended
+    duration_minutes: int  # how long it is booked for
     participants: list[ParticipantOut]
     invite_url: str  # the candidate's private link; only the logged-in interviewer ever sees it
     email_sent: bool | None = None  # None = no e-mail was tried in this answer
@@ -115,6 +117,7 @@ def to_out(
         started_at=session.started_at,
         ended_at=session.ended_at,
         duration_seconds=participants.duration_seconds(session),
+        duration_minutes=schedule_rules.minutes_of(session),
         participants=[
             ParticipantOut(role=row.role, joined_at=row.joined_at, left_at=row.left_at)
             for row in participants.history(db, session.id)
@@ -181,6 +184,7 @@ def schedule_interview(candidate_id: int, body: ScheduleIn, db: Session = Depend
         scheduled_at=body.scheduled_at,
         invite_token=new_invite_token(),
         invite_expires_at=expiry_for(body.scheduled_at),
+        duration_minutes=body.duration_minutes or schedule_rules.default_minutes(db),
     )
     db.add(session)
     db.commit()
@@ -213,6 +217,8 @@ def reschedule_interview(session_id: int, body: ScheduleIn, db: Session = Depend
         raise HTTPException(status.HTTP_409_CONFLICT, "Only an interview that has not started can be moved.")
     session.scheduled_at = body.scheduled_at
     session.invite_expires_at = expiry_for(body.scheduled_at)
+    if body.duration_minutes:
+        session.duration_minutes = body.duration_minutes
     db.commit()
     return to_out(db, session, send_invite_for(db, session, rescheduled=True), calendar_for(db, session))
 
@@ -224,6 +230,40 @@ def send_invite_again(session_id: int, db: Session = Depends(get_db)):
     if session.status != "scheduled":
         raise HTTPException(status.HTTP_409_CONFLICT, "Only an interview that has not started can be sent again.")
     return to_out(db, session, send_invite_for(db, session))
+
+
+class TimeCheckOut(BaseModel):
+    problem: str  # "" = the time follows every rule; otherwise why not (HR may still choose it)
+
+
+@router.get("/interviews/{session_id}/time-check", response_model=TimeCheckOut)
+def check_new_time(session_id: int, at: datetime, duration_minutes: int | None = Query(None, ge=10, le=240), db: Session = Depends(get_db)):
+    """Before moving an interview: does the new time break a rule? A candidate may ask for a time
+    outside the normal hours, so this only warns; the page asks HR to confirm."""
+    session = find_session(db, session_id)
+    if at.tzinfo is None:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Please include the time zone.")
+    minutes = duration_minutes or schedule_rules.minutes_of(session)
+    return TimeCheckOut(problem=scheduling.check_time(db, at, minutes, exclude_session_id=session.id))
+
+
+@router.get("/interviews/{session_id}/free-times", response_model=list[datetime])
+def suggest_free_times(
+    session_id: int,
+    start: datetime | None = None,
+    count: int = Query(6, ge=1, le=20),
+    duration_minutes: int | None = Query(None, ge=10, le=240),
+    db: Session = Depends(get_db),
+):
+    """The next free slots for this interview (working days, interview hours, no holidays, no clash)."""
+    session = find_session(db, session_id)
+    if start is not None and start.tzinfo is None:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Please include the time zone.")
+    minutes = duration_minutes or schedule_rules.minutes_of(session)
+    try:
+        return scheduling.free_times(db, start or utcnow(), count, minutes, exclude_session_id=session.id)
+    except planner.PlanError as problem:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(problem))
 
 
 @router.post("/interviews/{session_id}/join", response_model=JoinOut)

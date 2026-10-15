@@ -1,7 +1,9 @@
 """The interview invitation e-mail (Module 7).
 
-The link and the text are made here, in plain code: no AI is involved, so the message is the
-same every time and can never contain anything but the job, the time and the candidate's own link.
+The AI writes only the wording: the subject, the opening and the closing sentence (mail_writer.py, with
+its system prompt, and checked by code afterwards). Everything that must be exact is made here, in plain
+code: the date, time, length, the candidate's own link, the button, the rules and the calendar file.
+The AI never sees the link or the time. If the AI is off or down, a fixed wording is used.
 
 Every message goes to the candidate's real address through the company's own mail server
 (SMTP_HOST, SMTP_USER, SMTP_PASSWORD). That can be Gmail, Google Workspace, Microsoft 365 or any
@@ -19,6 +21,7 @@ from email.utils import formataddr, parseaddr
 from urllib.parse import urlparse
 from html import escape
 
+from app import company_profile, mail_template, mail_writer, schedule_rules
 from app.models import Candidate, InterviewSession, JobProfile
 from app.settings import settings
 
@@ -49,14 +52,23 @@ def mail_server() -> MailServer | None:
 
 
 def sender(server: MailServer) -> str:
-    """The From line. MAIL_FROM when it is set, otherwise the company name and the login address.
+    """The From line. MAIL_FROM when it is set, otherwise the sender name from the Settings page
+    and the mailbox that logs in.
 
     Gmail and Microsoft 365 only send as the mailbox that logged in (or an alias of it), so the
-    login address is the safe default.
+    address itself is always the SMTP login. Only the name in front of it is free to choose.
     """
     if settings.mail_from.strip():
         return settings.mail_from.strip()
-    return formataddr((f"{settings.company_name} Hiring", server.user))
+    return formataddr((company_profile.current().sender_name, server.user))
+
+
+def reply_to() -> str:
+    """Where a candidate's reply goes: the contact person from the Settings page, if one is set."""
+    details = company_profile.current()
+    if not details.contact_email:
+        return ""
+    return formataddr((details.contact_name or details.name, details.contact_email))
 
 
 def invite_link(token: str) -> str:
@@ -70,6 +82,27 @@ def when_text(moment: datetime) -> str:
     local = moment.astimezone(timezone(timedelta(minutes=minutes)))
     sign = "+" if minutes >= 0 else "-"
     return f"{local:%A, %d %B %Y at %H:%M} (UTC{sign}{abs(minutes) // 60:02d}:{abs(minutes) % 60:02d})"
+
+
+def _local(moment: datetime) -> datetime:
+    return moment.astimezone(timezone(timedelta(minutes=settings.interview_utc_offset_minutes)))
+
+
+def _clock(moment: datetime) -> str:
+    return f"{moment:%I:%M %p}".lstrip("0")
+
+
+def zone_text() -> str:
+    minutes = settings.interview_utc_offset_minutes
+    sign = "+" if minutes >= 0 else "-"
+    return f"UTC{sign}{abs(minutes) // 60:02d}:{abs(minutes) % 60:02d}"
+
+
+def date_and_time(start: datetime, minutes: int) -> tuple[str, str]:
+    """('Thursday, 16 October 2026', '10:15 AM - 11:15 AM (UTC+06:00)') in the configured time zone."""
+    begin = _local(start)
+    end = begin + timedelta(minutes=minutes)
+    return f"{begin:%A, %d %B %Y}", f"{_clock(begin)} - {_clock(end)} ({zone_text()})"
 
 
 def _ics_escape(text: str) -> str:
@@ -106,16 +139,16 @@ def calendar_invite(
     private link. method is REQUEST to add or move the entry, CANCEL to remove it.
     """
     start = session.scheduled_at.astimezone(timezone.utc)
-    end = start + timedelta(minutes=settings.interview_minutes)
+    end = start + timedelta(minutes=schedule_rules.minutes_of(session))
     stamp = datetime.now(timezone.utc)
-    company = " ".join(settings.company_name.split())
+    company_name = company_profile.current().name
     title = " ".join(job.title.split())
     link = invite_link(session.invite_token)
     host = urlparse(settings.public_base_url).hostname or "talentsight"
     cancelled = method == "CANCEL"
     when = "%Y%m%dT%H%M%SZ"
     description = (
-        f"Video interview for the {title} position at {company}.\nJoin: {link}\n"
+        f"Video interview for the {title} position at {company_name}.\nJoin: {link}\n"
         f"The link opens {settings.join_early_minutes} minutes before the start. It is made only for you."
     )
     lines = [
@@ -131,12 +164,12 @@ def calendar_invite(
         f"SEQUENCE:{int(stamp.timestamp())}",
         f"DTSTART:{start:{when}}",
         f"DTEND:{end:{when}}",
-        f"SUMMARY:{_ics_escape(f'Interview at {company}: {title}')}",
+        f"SUMMARY:{_ics_escape(f'Interview at {company_name}: {title}')}",
         f"DESCRIPTION:{_ics_escape(description)}",
         f"LOCATION:{_ics_escape(link)}",
         f"URL:{link}",
         f"STATUS:{'CANCELLED' if cancelled else 'CONFIRMED'}",
-        f"ORGANIZER;CN={_ics_escape(company + ' Hiring')}:mailto:{organizer_address(server)}",
+        f"ORGANIZER;CN={_ics_escape(company_profile.current().sender_name)}:mailto:{organizer_address(server)}",
         f"ATTENDEE;CN={_ics_escape(candidate.name.strip() or candidate.email)};ROLE=REQ-PARTICIPANT;RSVP=FALSE:mailto:{candidate.email.strip()}",
     ]
     if not cancelled:
@@ -158,58 +191,120 @@ def attach_calendar_invite(message: EmailMessage, ics: str, method: str) -> None
     message.add_attachment(ics.encode("utf-8"), maintype="application", subtype="ics", filename="invite.ics")
 
 
+def _contact_line(details: company_profile.Company) -> tuple[str, str]:
+    """'For any question, contact ...' as plain text and as HTML. Empty when no contact is set."""
+    if not details.contact_email:
+        return "", ""
+    who = details.contact_name or f"the {details.name} hiring team"
+    text = f"For any question, contact {who} at {details.contact_email}."
+    html = mail_template.paragraph(f"For any question, contact {who} at ").replace(
+        "</p>", f'<a href="mailto:{escape(details.contact_email)}" style="color:{mail_template.ACCENT}">{escape(details.contact_email)}</a>.</p>'
+    )
+    return text, html
+
+
+def _footer(details: company_profile.Company) -> tuple[str, str]:
+    text = (
+        "If this e-mail is not meant for you, you can safely ignore it.\n"
+        f"Sent by {details.name} with TalentSight."
+    )
+    return text, escape(text).replace("\n", "<br>")
+
+
 def build_message(
     session: InterviewSession, candidate: Candidate, job: JobProfile, rescheduled: bool, server: MailServer
 ) -> EmailMessage:
-    title = " ".join(job.title.split())  # one line: no line break can sneak into the subject
-    company = " ".join(settings.company_name.split())
-    greeting = f"Hello {candidate.name.strip()}," if candidate.name.strip() else "Hello,"
+    """The invitation, in the same shape as a formal test or interview invitation:
+    greeting, what it is, a details block, one button, the rules, who to contact, and a footer.
+    The wording (subject, opening, closing) comes from the AI; the facts are filled in here."""
+    details = company_profile.current()
+    title = company_profile.one_line(job.title)  # one line: no line break can sneak into the subject
+    name = company_profile.one_line(candidate.name)
     link = invite_link(session.invite_token)
-    when = when_text(session.scheduled_at)
-    intro = (
-        f"Your video interview with {company} for the {title} position has been moved to a new time."
-        if rescheduled
-        else f"{company} invites you to a video interview for the {title} position."
-    )
-    rules = (
-        f"The link opens {settings.join_early_minutes} minutes before the start time. "
-        "It is made only for you, so please do not share it. "
-        "You need a camera, a microphone and an up-to-date browser."
-    )
-    signature = f"The {company} hiring team"
+    minutes = schedule_rules.minutes_of(session)
+    day, hours = date_and_time(session.scheduled_at, minutes)
+
+    wording, written_by = mail_writer.write_invite(candidate.name, job.title, rescheduled)
+    subject, intro, closing = wording.subject, wording.intro, wording.closing
+    heading = f"Your interview at {details.name} has a new time" if rescheduled else f"Invitation for Interview at {details.name}"
+    greeting = f"Dear {name}," if name else "Dear candidate,"
+    rows = [
+        ("Position", title),
+        ("Date", day),
+        ("Time", hours),
+        ("Duration", f"{minutes} minutes"),
+        ("Format", "Online video call"),
+    ]
+    rules = [
+        f"The button works from {settings.join_early_minutes} minutes before the start time.",
+        "The link is made only for you. Please do not share it.",
+        "You need a camera, a microphone and an up-to-date browser (Chrome, Edge, Firefox or Safari).",
+        "Nothing is recorded. What is said is only turned into text for the interviewer.",
+    ]
+    contact_text, contact_html = _contact_line(details)
+    footer_text, footer_html = _footer(details)
+    sign_off = f"Best regards,\nThe {details.name} hiring team"
 
     message = EmailMessage()
-    message["Subject"] = f"{'Interview rescheduled' if rescheduled else 'Interview invitation'}: {title} at {company}"
+    message["Subject"] = subject
     message["To"] = candidate.email.strip()
-    message.set_content(f"{greeting}\n\n{intro}\n\nWhen: {when}\nJoin: {link}\n\n{rules}\n\nGood luck!\n{signature}\n")
-    message.add_alternative(
-        f"<p>{escape(greeting)}</p><p>{escape(intro)}</p>"
-        f"<p><strong>When:</strong> {escape(when)}</p>"
-        f'<p><a href="{escape(link)}">Join your interview</a></p>'
-        f"<p>{escape(rules)}</p><p>Good luck!<br>{escape(signature)}</p>",
-        subtype="html",
+    detail_lines = "\n".join(f"{label}: {value}" for label, value in rows)
+    rule_lines = "\n".join(f"- {rule}" for rule in rules)
+    message.set_content(
+        f"{greeting}\n\n{intro}\n\nINTERVIEW DETAILS\n{detail_lines}\n\nJoin your interview: {link}\n\n"
+        f"{rule_lines}\n\n{contact_text + chr(10) + chr(10) if contact_text else ''}"
+        f"{closing}\n\n{sign_off}\n\n--\n{footer_text}\n"
     )
+    body = (
+        mail_template.paragraph(greeting)
+        + mail_template.paragraph(intro)
+        + mail_template.details_table(rows)
+        + mail_template.button("Join your interview", link)
+        + mail_template.notes(rules)
+        + contact_html
+        + mail_template.paragraph(closing)
+        + mail_template.paragraph(sign_off).replace("\n", "<br>")
+    )
+    message.add_alternative(mail_template.page(details.name, heading, body, footer_html), subtype="html")
     attach_calendar_invite(message, calendar_invite(session, candidate, job, server), "REQUEST")
+    message["X-TalentSight-Wording"] = written_by  # "ai" or "template": shows in the e-mail's headers
     return message
 
 
 def build_cancellation(session: InterviewSession, candidate: Candidate, job: JobProfile, server: MailServer) -> EmailMessage:
     """Tells the candidate the interview will not happen, and removes it from their calendar."""
-    title = " ".join(job.title.split())
-    company = " ".join(settings.company_name.split())
-    greeting = f"Hello {candidate.name.strip()}," if candidate.name.strip() else "Hello,"
-    when = when_text(session.scheduled_at)
+    details = company_profile.current()
+    title = company_profile.one_line(job.title)
+    name = company_profile.one_line(candidate.name)
+    minutes = schedule_rules.minutes_of(session)
+    day, hours = date_and_time(session.scheduled_at, minutes)
+    greeting = f"Dear {name}," if name else "Dear candidate,"
     text = (
-        f"The video interview with {company} for the {title} position, planned for {when}, has been cancelled. "
+        f"We are sorry to tell you that your video interview for the {title} position has been cancelled. "
         "The link you were sent no longer works. If a new time is agreed, you will get a new e-mail."
     )
-    signature = f"The {company} hiring team"
+    rows = [("Position", title), ("Was planned for", f"{day}, {hours}")]
+    contact_text, contact_html = _contact_line(details)
+    footer_text, footer_html = _footer(details)
+    sign_off = f"Best regards,\nThe {details.name} hiring team"
 
     message = EmailMessage()
-    message["Subject"] = f"Interview cancelled: {title} at {company}"
+    message["Subject"] = f"Interview cancelled at {details.name}: {title}"
     message["To"] = candidate.email.strip()
-    message.set_content(f"{greeting}\n\n{text}\n\n{signature}\n")
-    message.add_alternative(f"<p>{escape(greeting)}</p><p>{escape(text)}</p><p>{escape(signature)}</p>", subtype="html")
+    message.set_content(
+        f"{greeting}\n\n{text}\n\nPosition: {title}\nWas planned for: {day}, {hours}\n\n"
+        f"{contact_text + chr(10) + chr(10) if contact_text else ''}{sign_off}\n\n--\n{footer_text}\n"
+    )
+    body = (
+        mail_template.paragraph(greeting)
+        + mail_template.paragraph(text)
+        + mail_template.details_table(rows)
+        + contact_html
+        + mail_template.paragraph(sign_off).replace("\n", "<br>")
+    )
+    message.add_alternative(
+        mail_template.page(details.name, f"Your interview at {details.name} is cancelled", body, footer_html), subtype="html"
+    )
     attach_calendar_invite(message, calendar_invite(session, candidate, job, server, method="CANCEL"), "CANCEL")
     return message
 
@@ -247,6 +342,8 @@ def _send(session: InterviewSession, candidate: Candidate, job: JobProfile, make
         try:
             message = make(server)
             message["From"] = sender(server)
+            if reply_to():
+                message["Reply-To"] = reply_to()
             deliver(message, server)
         except smtplib.SMTPAuthenticationError as error:
             log.warning(
@@ -309,9 +406,8 @@ def send_test(address: str) -> str:
         return "E-mail is not set up (SMTP_HOST is empty)."
     if not EMAIL_SHAPE.match(address.strip()):
         return "That e-mail address looks wrong."
-    company = " ".join(settings.company_name.split())
     message = EmailMessage()
-    message["Subject"] = f"Test e-mail from {company} TalentSight"
+    message["Subject"] = f"Test e-mail from {company_profile.current().name} TalentSight"
     message["To"] = address.strip()
     message["From"] = sender(server)
     message.set_content(

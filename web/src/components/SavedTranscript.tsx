@@ -29,7 +29,7 @@ export default function SavedTranscript({
   if (error) return <p className="error small">{error}</p>;
   if (!transcript) return <p className="muted small">Loading the transcript…</p>;
   if (transcript.segments.length === 0) {
-    return <p className="muted small">No transcript: nothing was recognised in this interview.</p>;
+    return <p className="transcript-empty">No transcript. No speech was recognised during this interview.</p>;
   }
 
   return (

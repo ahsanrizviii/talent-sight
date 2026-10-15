@@ -17,6 +17,7 @@ from urllib.parse import quote
 import httpx
 from sqlalchemy.orm import Session
 
+from app import schedule_rules
 from app.google_api import TIMEOUT, GoogleError, auth_header
 from app.models import CalendarEvent, Candidate, InterviewSession, JobProfile
 from app.settings import settings
@@ -42,7 +43,7 @@ def room_link(session_id: int) -> str:
 
 def event_body(session: InterviewSession, candidate: Candidate, job: JobProfile) -> dict:
     start = session.scheduled_at.astimezone(timezone.utc)
-    end = start + timedelta(minutes=settings.interview_minutes)
+    end = start + timedelta(minutes=schedule_rules.minutes_of(session))
     name = candidate.name.strip() or candidate.cv_filename
     title = " ".join(job.title.split())
     link = room_link(session.id)

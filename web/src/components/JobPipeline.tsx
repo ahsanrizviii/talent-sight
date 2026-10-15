@@ -46,13 +46,13 @@ export default function JobPipeline({
       done: job.description.trim().length > 0,
       value: job.description.trim() ? "Written" : "Empty",
       note: `${job.required_skills.length} required skills · min ${job.min_experience_years} years`,
-      to: `/jobs/${job.id}`,
+      to: `/jobs/${job.id}/post`,
     },
     {
       label: "Posted",
       done: published,
       value: !published ? "Not yet" : job.blog_url ? "On the blog" : "Published",
-      note: job.blog_url ? "Open the blog post ↗" : "Publish the job to post it",
+      note: job.blog_url ? "Open the blog post ↗" : published ? "Published" : "Publish the job to post it",
       href: job.blog_url ?? undefined,
     },
     {
@@ -60,7 +60,7 @@ export default function JobPipeline({
       done: list.length > 0,
       value: String(list.length),
       note: `${list.length - fromForm} uploaded · ${fromForm} from the Google Form`,
-      to: candidatesPage,
+      to: `/jobs/${job.id}/cvs`,
     },
     {
       label: "Screened",

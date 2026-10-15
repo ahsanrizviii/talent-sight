@@ -1,11 +1,11 @@
-import { useCallback, useEffect, useState, type FormEvent } from "react";
-import { Link, useParams } from "react-router-dom";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import { Link, useNavigate, useParams } from "react-router-dom";
 
 import { api } from "../api";
 import Empty from "../components/Empty";
 import Icon from "../components/Icon";
 import JobPipeline from "../components/JobPipeline";
-import type { CandidateRow, ChatSummary, ImportResult, Job, ScreeningRun, UploadResult } from "../types";
+import type { CandidateRow, ChatSummary, ImportResult, Job, JobVisit, ScreeningRun, UploadResult } from "../types";
 
 type Tab = "ranked" | "excluded" | "other";
 
@@ -28,6 +28,9 @@ export default function CandidatesPage() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [visit, setVisit] = useState<JobVisit | null>(null);
+  const navigate = useNavigate();
+  const wasRunning = useRef(false);
 
   const load = useCallback(async () => {
     const [list, latest] = await Promise.all([
@@ -47,6 +50,25 @@ export default function CandidatesPage() {
       .catch(() => undefined);
     load().catch((err) => setError(err.message));
   }, [id, load]);
+
+  // Opening the job counts as a visit; the answer says how many CVs are new since the last one.
+  useEffect(() => {
+    setVisit(null);
+    api<JobVisit>(`/jobs/${id}/visit`, { method: "POST" })
+      .then(setVisit)
+      .catch(() => undefined); // the notice is a nice-to-have: never block the page for it
+  }, [id]);
+
+  // When a screening that was running on this page finishes, go straight to the ranking and
+  // the "invite the top candidates" step: that is what comes next.
+  useEffect(() => {
+    if (run?.status === "running") {
+      wasRunning.current = true;
+    } else if (wasRunning.current && run?.status === "done") {
+      wasRunning.current = false;
+      if (candidates.some((c) => c.status === "screened")) navigate(`/jobs/${id}/invite`);
+    }
+  }, [run?.status, candidates, id, navigate]);
 
   useEffect(() => {
     if (run?.status !== "running") return;
@@ -120,6 +142,11 @@ export default function CandidatesPage() {
           <p>{candidates.length} CVs · {ranked.length} passed screening · {excluded.length} excluded</p>
         </div>
         <div className="row">
+          {ranked.length > 0 && (
+            <Link className="button" to={`/jobs/${id}/invite`}>
+              Invite top candidates
+            </Link>
+          )}
           <Link className="button secondary" to={`/jobs/${id}`}>
             Edit the job
           </Link>
@@ -131,6 +158,24 @@ export default function CandidatesPage() {
           )}
         </div>
       </div>
+
+      {visit && visit.new_cvs > 0 && (
+        <div className="notice new-cvs" role="status">
+          <Icon name="sparkle" />
+          <span className="grow">
+            <strong>
+              {visit.new_cvs} new {visit.new_cvs === 1 ? "CV" : "CVs"}
+            </strong>{" "}
+            {visit.since
+              ? `since you last opened this job (${new Date(visit.since).toLocaleString([], { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" })}).`
+              : "for this job so far."}
+          </span>
+          <Link to={`/jobs/${id}/cvs${visit.since ? `?since=${encodeURIComponent(visit.since)}` : ""}`}>See them</Link>
+          <button className="notice-close" aria-label="Close the notice" onClick={() => setVisit(null)}>
+            ×
+          </button>
+        </div>
+      )}
 
       {job && <JobPipeline job={job} candidates={candidates} />}
 

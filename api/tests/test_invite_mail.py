@@ -78,7 +78,7 @@ def test_scheduling_sends_one_email_with_the_private_link(client, auth_headers):
     assert "Backend Developer" in message["Subject"]
     text = message.get_body(("plain",)).get_content()
     assert link in text
-    assert "Hello Maya Rahman," in text
+    assert "Dear Maya Rahman," in text
     assert session["invite_url"] == link
 
 
@@ -177,7 +177,7 @@ def test_the_email_comes_from_the_company(client, auth_headers):
     schedule(client, auth_headers, make_candidate())
     message = FakeSMTP.sent[0]
     assert message["From"] == "BJIT Hiring <hiring@example.com>"
-    assert message["Subject"] == "Interview invitation: Backend Developer at BJIT"
+    assert message["Subject"] == "Invitation for Interview at BJIT: Backend Developer"
     assert "The BJIT hiring team" in message.get_body(("plain",)).get_content()
 
 
@@ -302,3 +302,74 @@ def test_the_calendar_invitation_holds_no_scores_either(client, auth_headers):
     text = invite_text(FakeSMTP.sent[0]).lower()
     for secret in ("score", "rank", "overall", "excluded", "unmet"):
         assert secret not in text
+
+
+# ---------- The company on the Settings page (name, sender, contact) ----------
+
+
+def save_company(client, headers, **fields):
+    body = {"company_name": "WellDev", "sender_name": "", "contact_name": "", "contact_email": "", **fields}
+    return client.put("/api/company", json=body, headers=headers)
+
+
+def test_the_company_from_settings_is_used_in_the_email(client, auth_headers):
+    assert save_company(client, auth_headers, sender_name="WellDev Talent Team").status_code == 200
+    schedule(client, auth_headers, make_candidate())
+    message = FakeSMTP.sent[0]
+    assert message["Subject"] == "Invitation for Interview at WellDev: Backend Developer"
+    assert message["From"] == "WellDev Talent Team <hiring@example.com>"  # the name changes, the mailbox does not
+    assert "The WellDev hiring team" in message.get_body(("plain",)).get_content()
+
+
+def test_replies_go_to_the_contact_person(client, auth_headers):
+    save_company(client, auth_headers, contact_name="Nadia Islam", contact_email="nadia@welldev.com")
+    schedule(client, auth_headers, make_candidate())
+    message = FakeSMTP.sent[0]
+    assert message["Reply-To"] == "Nadia Islam <nadia@welldev.com>"
+    assert "contact Nadia Islam at nadia@welldev.com" in message.get_body(("plain",)).get_content()
+
+
+def test_without_a_contact_there_is_no_reply_to(client, auth_headers):
+    schedule(client, auth_headers, make_candidate())
+    assert FakeSMTP.sent[0]["Reply-To"] is None
+
+
+def test_the_email_has_the_interview_details_and_a_button(client, auth_headers):
+    session = schedule(client, auth_headers, make_candidate()).json()
+    message = FakeSMTP.sent[0]
+    text = message.get_body(("plain",)).get_content()
+    for part in ("INTERVIEW DETAILS", "Position: Backend Developer", "Date: ", "Time: ", f"Duration: {settings.interview_minutes} minutes"):
+        assert part in text
+    html = message.get_body(("html",)).get_content()
+    assert "Join your interview" in html and session["invite_url"] in html
+    assert "not meant for you" in html
+
+
+def test_names_cannot_inject_html(client, auth_headers):
+    candidate_id = make_candidate(name="<b>Maya</b>")
+    save_company(client, auth_headers, company_name="Acme <script>")
+    schedule(client, auth_headers, candidate_id)
+    html = FakeSMTP.sent[0].get_body(("html",)).get_content()
+    assert "<script>" not in html and "<b>Maya</b>" not in html
+    assert "&lt;b&gt;Maya&lt;/b&gt;" in html
+
+
+def test_company_settings_are_checked(client, auth_headers):
+    assert save_company(client, auth_headers, company_name="  ").status_code == 400
+    assert save_company(client, auth_headers, contact_email="not-an-address").status_code == 400
+    assert client.put("/api/company", json={"company_name": "X"}).status_code == 401  # needs a login
+
+
+def test_settings_show_the_real_from_line(client, auth_headers):
+    body = save_company(client, auth_headers).json()
+    assert body["sending_address"] == "hiring@example.com"
+    assert body["from_line"] == "WellDev Hiring <hiring@example.com>"  # the default sender name
+
+
+def test_the_preview_sends_nothing(client, auth_headers):
+    save_company(client, auth_headers)
+    preview = client.get("/api/company/email-preview", headers=auth_headers).json()
+    assert preview["subject"].startswith("Invitation for Interview at WellDev")
+    assert "Join your interview" in preview["html"]
+    assert client.get("/api/company/email-preview?kind=cancel", headers=auth_headers).json()["subject"].startswith("Interview cancelled")
+    assert FakeSMTP.sent == []

@@ -67,6 +67,20 @@ def no_real_mail(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def no_real_mail_writer(monkeypatch):
+    """autouse = applied to every test. Tests must never call the real AI to write an e-mail:
+    the AI is "down", so e-mails use the fixed wording. Tests of the AI wording fake it themselves."""
+    from app import mail_writer
+    from app.llm import LLMUnavailable
+
+    def down(*args, **kwargs):
+        raise LLMUnavailable("The AI service is not available right now. Please try again.")
+
+    monkeypatch.setattr(mail_writer, "ask_llm", down)
+    monkeypatch.setattr(settings, "groq_api_key", "test-key")
+
+
+@pytest.fixture(autouse=True)
 def no_real_speech_service(monkeypatch):
     """autouse = applied to every test. Tests must never call the real speech service (AssemblyAI)."""
     monkeypatch.setattr(settings, "assemblyai_api_key", "")

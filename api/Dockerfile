@@ -5,9 +5,10 @@ ENV PYTHONUNBUFFERED=1 \
 
 WORKDIR /app
 
-# Tesseract reads text from scanned CVs (OCR, Module 5)
+# Tesseract reads text from scanned CVs (OCR, Module 5).
+# The Bangla pack reads the government holiday calendar, which is printed in Bangla.
 RUN apt-get update \
- && apt-get install -y --no-install-recommends tesseract-ocr \
+ && apt-get install -y --no-install-recommends tesseract-ocr tesseract-ocr-ben \
  && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
