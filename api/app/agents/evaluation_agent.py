@@ -17,6 +17,7 @@ BATCH = 12          # exchanges or pairs in one AI call, to stay inside Groq's f
 TURN_CHARS = 1500   # the longest piece of one turn the AI is shown
 MAX_SCORE_ATTEMPTS = 2  # one retry if a score is outside 0-100
 DIMENSIONS = ("relevance", "accuracy", "completeness", "articulation")
+WEAK_BELOW = 50
 
 
 # ---------- 1. The state ----------
@@ -24,6 +25,7 @@ class EvaluationState(AgentState, total=False):
     turns: list[dict]   # input: [{"n", "speaker", "text", "start_ms", "end_ms"}], see build_turns()
     job: dict           # input: {"title", "description", "requirements"}, like the Screening Agent
     pairs: list[dict]   # the question-answer pairs, filled in step by step
+    coverage: list[dict]
 
 
 # ---------- 2. The answer shapes ----------
@@ -353,6 +355,29 @@ def score_answers(state: EvaluationState) -> dict:
         pairs.append(pair)
     return {"pairs": pairs}
 
+
+
+def check_coverage(state: EvaluationState) -> dict:
+    """Task 9.2.1: every requirement with the pairs that explored it. Plain code, no AI, so it is always the same."""
+    coverage = []
+    for number, requirement in enumerate(state["job"]["requirements"], start=1):
+        linked = [p for p in state["pairs"] if p["kind"] == "job_related" and number in p["requirements"]]
+        best = max((p["overall"] for p in linked if p["overall"] is not None), default=None)
+        if not linked:
+            status = "not_explored"
+        elif best is None or best < WEAK_BELOW:
+            status = "weak"
+        else:
+            status = "explored"
+        coverage.append({
+            "number": number,
+            **requirement,  # requirement, kind, mandatory
+            "pairs": [p["id"] for p in linked],
+            "best_score": best,
+            "status": status,
+        })
+    return {"coverage": coverage}
+
 def failed(state: EvaluationState) -> dict:
     log.warning("evaluation agent stopped with an error", extra={"event": "evaluation_failed"})
     return {}
@@ -375,12 +400,14 @@ def get_evaluation_agent():
     graph.add_node("classify_pairs", classify_pairs)
     graph.add_node("map_requirements", map_requirements)
     graph.add_node("score_answers", score_answers)
+    graph.add_node("check_coverage", check_coverage)
     graph.add_node("failed", failed)
 
     graph.add_edge(START, "segment_pairs")
     graph.add_conditional_edges("segment_pairs", next_or_failed("classify_pairs"), ["classify_pairs", "failed"])
     graph.add_conditional_edges("classify_pairs", next_or_failed("map_requirements"), ["map_requirements", "failed"])
     graph.add_conditional_edges("map_requirements", next_or_failed("score_answers"), ["score_answers", "failed"])
-    graph.add_conditional_edges("score_answers", next_or_failed(END), [END, "failed"])
+    graph.add_conditional_edges("score_answers", next_or_failed("check_coverage"), ["check_coverage", "failed"])
+    graph.add_edge("check_coverage", END)
     graph.add_edge("failed", END)
     return graph.compile()

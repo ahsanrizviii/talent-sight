@@ -281,3 +281,34 @@ def test_a_job_without_requirements_is_still_scored(ai):
     pairs = run(job={"title": "Backend Developer", "description": "", "requirements": []})["pairs"]
     assert all(p["requirements"] == [] for p in pairs)
     assert pairs[1]["overall"] == 80
+
+
+
+
+# ---------- Task 9.2.1: requirement coverage ----------
+
+
+def test_coverage_shows_what_the_interview_explored_and_what_it_missed(monkeypatch):
+    fake = FakeAI(answers=[scores(80), scores(70), scores(30)])  # pair 4 (PostgreSQL) is a weak answer
+    monkeypatch.setattr(agent, "ask", fake)
+    coverage = run()["coverage"]
+    assert [(c["number"], c["requirement"], c["status"], c["pairs"], c["best_score"]) for c in coverage] == [
+        (1, "Python", "explored", [2, 3], 80),
+        (2, "PostgreSQL", "weak", [4], 30),
+        (3, "Kubernetes", "not_explored", [], None),
+    ]
+    assert coverage[2]["mandatory"] is False and coverage[2]["kind"] == "preferred"
+
+
+def test_small_talk_never_counts_as_exploring_a_requirement(monkeypatch):
+    fake = FakeAI(kinds={1: "small_talk", 2: "small_talk", 3: "small_talk", 4: "small_talk"})
+    monkeypatch.setattr(agent, "ask", fake)
+    result = run()
+    assert all(c["status"] == "not_explored" for c in result["coverage"])
+    assert RequirementLinks not in [shape for shape, _ in fake.calls]  # nothing job-related to link
+
+
+def test_a_failed_run_has_no_coverage(monkeypatch):
+    monkeypatch.setattr(agent, "ask", FakeAI(broken={AnswerScores}))
+    result = run()
+    assert result["error"] and "coverage" not in result
