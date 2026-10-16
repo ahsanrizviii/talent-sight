@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 
 import { api } from "../api";
 import AssessmentPanel from "../components/AssessmentPanel";
@@ -29,12 +29,16 @@ export default function CandidatePage() {
   const navigate = useNavigate();
   const [candidate, setCandidate] = useState<CandidateDetail | null>(null);
   const [neighbours, setNeighbours] = useState<PersonRow[]>([]);
-  const [tab, setTab] = useState<Tab>("score");
+  const [params] = useSearchParams();
+  // ?tab=assessment opens that tab straight away (the comparison page links here like that).
+  const firstTab = (params.get("tab") as Tab | null) ?? "score";
+  const [tab, setTab] = useState<Tab>(firstTab);
   const [error, setError] = useState("");
 
   useEffect(() => {
     setCandidate(null);
     setTab("score");
+    setTab(firstTab);
     api<CandidateDetail>(`/candidates/${id}`)
       .then(setCandidate)
       .catch((err) => setError(err.message));

@@ -4,6 +4,7 @@ import Layout from "./components/Layout";
 import RequireLogin from "./components/RequireLogin";
 import CandidatePage from "./pages/CandidatePage";
 import CandidatesPage from "./pages/CandidatesPage";
+import ComparePage from "./pages/ComparePage";
 import DashboardPage from "./pages/DashboardPage";
 import InterviewRoomPage from "./pages/InterviewRoomPage";
 import InterviewsPage from "./pages/InterviewsPage";
@@ -39,6 +40,7 @@ export default function App() {
           <Route path="/jobs/:id/candidates" element={<CandidatesPage />} />
           <Route path="/jobs/:id/post" element={<JobPostPage />} />
           <Route path="/jobs/:id/cvs" element={<JobCvsPage />} />
+          <Route path="/jobs/:id/compare" element={<ComparePage />} />
           <Route path="/candidates" element={<PeoplePage />} />
           <Route path="/candidates/:id" element={<CandidatePage />} />
           <Route path="/interviews" element={<InterviewsPage />} />

@@ -236,3 +236,82 @@
     grid-template-columns: 1fr;
   }
 }
+
+
+/* ---------- Side-by-side comparison (Task 10.2.2) ---------- */
+.cmp-pick {
+  cursor: pointer;
+  font: inherit;
+  font-size: 12.5px;
+}
+
+.cmp-pick.on {
+  border-color: var(--amber-line);
+  background: var(--amber-wash);
+  color: var(--ink);
+}
+
+.cmp-table {
+  min-width: 640px;
+}
+
+.cmp-table th,
+.cmp-table td {
+  vertical-align: top;
+}
+
+/* Row and column names read as names, not as small capital labels like other tables. */
+.cmp-table thead th,
+.cmp-table tbody th {
+  font-size: 14px;
+  letter-spacing: normal;
+  text-transform: none;
+  text-align: left;
+}
+
+.cmp-table tbody th {
+  width: 210px;
+  font-weight: 500;
+  color: var(--ink-2);
+}
+
+.cmp-table .cmp-section th {
+  padding-top: 18px;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+.cmp-table .bar {
+  margin-top: 6px;
+  max-width: 160px;
+}
+
+.cmp-number {
+  display: block;
+  font-size: 17px;
+  font-variant-numeric: tabular-nums;
+}
+
+.cmp-number.best {
+  color: var(--amber);
+}
+
+.cmp-req {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.cmp-points {
+  margin: 0;
+  padding-left: 16px;
+  list-style: disc;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.as-foot {
+  margin-top: 18px;
+}

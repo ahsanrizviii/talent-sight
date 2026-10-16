@@ -455,3 +455,26 @@ export type Assessment = {
   outdated: boolean; // the interview answers were analysed again after this report was made
   report: AssessmentReport;
 };
+
+
+export type ComparedCandidate = {
+  candidate_id: number;
+  name: string;
+  position: { code: AssessmentReport["position"]["code"]; label: string; overall: number };
+  components: { key: string; label: string; score: number }[];
+  requirements: Record<string, { cv: AssessmentRequirement["cv"]; interview: AssessmentRequirement["interview"]; best_score: number | null }>;
+  strengths: string[];
+  weaknesses: string[];
+  gaps: number;
+  must_have_gaps: number;
+  assessed_at: string | null;
+  outdated: boolean;
+};
+
+export type Comparison = {
+  job_id: number;
+  job_title: string;
+  requirements: { key: string; requirement: string; mandatory: boolean }[];
+  candidates: ComparedCandidate[]; // best position first
+  waiting: number; // interviewed candidates without a finished assessment yet
+};

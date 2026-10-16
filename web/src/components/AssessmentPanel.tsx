@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { Link } from "react-router-dom";
 import { api, apiBlob } from "../api";
 import type { Assessment, AssessmentEvidence, AssessmentFinding, AssessmentReport } from "../types";
 import VerdictBadge from "./VerdictBadge";
@@ -250,9 +251,10 @@ function Report({ report, finishedAt }: { report: AssessmentReport; finishedAt: 
         </ol>
       </details>
 
-      <p className="muted small">
+    <p className="muted small as-foot">
         Interview held {new Date(report.interview.held_at).toLocaleDateString()}
-        {finishedAt && ` · assessed ${new Date(finishedAt).toLocaleString()}`}.
+        {finishedAt && ` · assessed ${new Date(finishedAt).toLocaleString()}`}.{" "}
+        <Link to={`/jobs/${report.job.id}/compare`}>Compare with the other candidates for this job</Link>
       </p>
     </>
   );
