@@ -10,6 +10,7 @@ from app.db import init_db
 from app.holiday_calendar import load_holiday_calendars
 from app.knowledge import load_policies
 from app.logging_setup import setup_logging
+from app.references import load_references
 from app.routers import (
     auth,
     candidates,
@@ -38,6 +39,7 @@ async def lifespan(app: FastAPI):
     init_db()
     seed_interviewer()
     load_policies()
+    load_references()  # the skills reference documents for the Evaluation Agent (Module 9)
     mark_interrupted_runs()
     # The holiday calendar PDF(s) in knowledge/holidays: reading one (OCR + AI) takes about a minute,
     # so it runs in the background and the API is ready straight away. Files read before are skipped.

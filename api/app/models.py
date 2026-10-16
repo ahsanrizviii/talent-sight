@@ -84,6 +84,23 @@ class PolicyChunk(Base):
     text: Mapped[str] = mapped_column(Text)
     embedding = mapped_column(Vector(384))
 
+class ReferenceChunk(Base):
+    """One section of the skills reference documents in api/knowledge/skills/ (Module 9).
+
+    The Evaluation Agent compares interview answers with these sections, so an accuracy score
+    rests on written documentation and not only on the language model's memory (Q&A 10).
+    """
+
+    __tablename__ = "reference_chunks"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    source: Mapped[str] = mapped_column(String(200))   # the file name, e.g. python.md
+    skill: Mapped[str] = mapped_column(String(200))    # the document title, e.g. Python
+    heading: Mapped[str] = mapped_column(String(300))  # the section heading
+    url: Mapped[str] = mapped_column(Text, default="")  # the "Sources:" line of the document
+    text: Mapped[str] = mapped_column(Text)
+    embedding = mapped_column(Vector(384))
+
 
 class Candidate(Base):
     """One applicant for one job: their CV file, its text, and what the screening found (Module 5)."""
