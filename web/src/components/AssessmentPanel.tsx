@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
-import { api } from "../api";
+import { api, apiBlob } from "../api";
 import type { Assessment, AssessmentEvidence, AssessmentFinding, AssessmentReport } from "../types";
 import VerdictBadge from "./VerdictBadge";
 import "../assessment.css";
@@ -22,6 +22,7 @@ export default function AssessmentPanel({ candidateId }: { candidateId: number }
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState("");
   const [starting, setStarting] = useState(false);
+  const [downloading, setDownloading] = useState(false);
 
   const load = useCallback(
     () =>
@@ -60,6 +61,24 @@ export default function AssessmentPanel({ candidateId }: { candidateId: number }
     }
   }
 
+    // The PDF is made by the API (Task 10.2.1); the browser saves it under the candidate's name.
+  async function downloadPdf(name: string) {
+    setDownloading(true);
+    setError("");
+    try {
+      const file = await apiBlob(`/candidates/${candidateId}/assessment/pdf`);
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(file);
+      link.download = `assessment-${name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || candidateId}.pdf`;
+      link.click();
+      window.setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setDownloading(false);
+    }
+  }
+
   if (!loaded && !error) return <p className="muted small">Loading the assessment…</p>;
 
   const done = assessment?.status === "done" ? assessment : null;
@@ -74,6 +93,11 @@ export default function AssessmentPanel({ candidateId }: { candidateId: number }
           </p>
         </div>
         <div className="row">
+         {done && (
+            <button className="button secondary" onClick={() => downloadPdf(done.report.candidate.name)} disabled={downloading}>
+              {downloading ? "Preparing…" : "Download PDF"}
+            </button>
+          )}
           <button className="button" onClick={start} disabled={running || starting}>
             {running ? "Assessing…" : assessment ? "Assess again" : "Assess candidate"}
           </button>

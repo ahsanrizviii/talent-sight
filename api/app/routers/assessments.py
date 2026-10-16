@@ -3,9 +3,11 @@
 Interviewers only. The candidate never sees their own assessment (N9).
 """
 
+import re
 from datetime import datetime
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
+from fastapi.responses import Response
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -13,6 +15,7 @@ from app import assessment
 from app.db import get_db
 from app.deps import current_interviewer
 from app.models import Assessment, Candidate
+from app.report_pdf import build_pdf
 
 router = APIRouter(prefix="/api", tags=["assessment"], dependencies=[Depends(current_interviewer)])
 
@@ -64,3 +67,21 @@ def get_assessment(candidate_id: int, db: Session = Depends(get_db)):
     find_candidate(db, candidate_id)
     row = assessment.assessment_of(db, candidate_id)
     return to_out(db, row) if row else None
+
+
+
+
+@router.get("/candidates/{candidate_id}/assessment/pdf")
+def assessment_pdf(candidate_id: int, db: Session = Depends(get_db)):
+    """The finished report as a PDF file to save, print or attach (Task 10.2.1)."""
+    find_candidate(db, candidate_id)
+    row = assessment.assessment_of(db, candidate_id)
+    if row is None or row.status != "done":
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "There is no finished assessment to export yet.")
+    # A plain file name: letters and digits only, e.g. assessment-maya-rahman.pdf
+    name = re.sub(r"[^a-z0-9]+", "-", row.report["candidate"]["name"].lower()).strip("-") or str(candidate_id)
+    return Response(
+        build_pdf(row.report, row.finished_at),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="assessment-{name}.pdf"'},
+    )
