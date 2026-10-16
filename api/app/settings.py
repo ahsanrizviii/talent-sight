@@ -45,6 +45,7 @@ class Settings(BaseSettings):
 
     # Screening agent (Module 5): leave empty to use LLM_MODEL
     screening_model: str = ""
+    evaluation_model: str = ""
 
         # LiveKit video server
     livekit_api_key: str = ""
