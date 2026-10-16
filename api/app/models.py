@@ -364,3 +364,25 @@ class HolidayChunk(Base):
     text: Mapped[str] = mapped_column(Text)
     embedding = mapped_column(Vector(384))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+
+class InterviewEvaluation(Base):
+    """The Evaluation Agent's analysis of one interview's answers (Module 9).
+
+    One row per interview. Running it again replaces the result. The result is kept as JSON:
+    the transcript turns it used, the question-answer pairs with their scores and evidence, and
+    the requirement coverage, so Module 10 can read the whole analysis in one place.
+    """
+
+    __tablename__ = "interview_evaluations"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    session_id: Mapped[int] = mapped_column(ForeignKey("interview_sessions.id", ondelete="CASCADE"), unique=True)
+    status: Mapped[str] = mapped_column(String(20), default="running")  # running | done | failed
+    step: Mapped[str] = mapped_column(String(200), default="")  # what the agent is doing now, for the screen
+    error: Mapped[str] = mapped_column(Text, default="")
+    result: Mapped[dict] = mapped_column(JSON, default=dict)  # {"turns", "pairs", "coverage", "summary"}
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    seconds: Mapped[float | None] = mapped_column(Float)

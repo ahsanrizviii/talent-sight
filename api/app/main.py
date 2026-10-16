@@ -7,6 +7,7 @@ from fastapi.responses import JSONResponse
 
 from app.agents.jd_agent import get_jd_agent
 from app.db import init_db
+from app.evaluation import mark_interrupted_evaluations
 from app.holiday_calendar import load_holiday_calendars
 from app.knowledge import load_policies
 from app.logging_setup import setup_logging
@@ -15,6 +16,7 @@ from app.routers import (
     auth,
     candidates,
     company,
+    evaluations,
     health,
     interviews,
     invite_batches,
@@ -41,6 +43,7 @@ async def lifespan(app: FastAPI):
     load_policies()
     load_references()  # the skills reference documents for the Evaluation Agent (Module 9)
     mark_interrupted_runs()
+    mark_interrupted_evaluations()
     # The holiday calendar PDF(s) in knowledge/holidays: reading one (OCR + AI) takes about a minute,
     # so it runs in the background and the API is ready straight away. Files read before are skipped.
     threading.Thread(target=load_holiday_calendars, name="holiday-calendars", daemon=True).start()
@@ -98,3 +101,4 @@ app.include_router(workspace.router)
 app.include_router(setup.router)
 app.include_router(company.router)
 app.include_router(invite_batches.router)
+app.include_router(evaluations.router)
