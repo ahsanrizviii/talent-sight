@@ -4,6 +4,7 @@ import type { Interview } from "../types";
 import { Link } from "react-router-dom";
 import InterviewSummary from "./InterviewSummary";
 import RescheduleBox from "./RescheduleBox";
+import QaAnalysis from "./QaAnalysis";
 import SavedTranscript from "./SavedTranscript";
 
 // "localhost" and "127.0.0.1" mean "this computer", so a link containing them is useless to
@@ -101,6 +102,7 @@ export default function InterviewCard({ candidateId, candidateStatus }: Props) {
 
       {interview && <InterviewSummary interview={interview} />}
       {interview?.status === "ended" && interview.started_at && <SavedTranscript sessionId={interview.id} candidateName={interview.candidate_name} />}
+      {interview?.status === "ended" && interview.started_at && <QaAnalysis sessionId={interview.id} candidateName={interview.candidate_name} />}
       {active && (
         <div className="field">
           <label htmlFor="invite-link">Candidate's private link</label>

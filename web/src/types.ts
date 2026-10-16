@@ -346,3 +346,60 @@ export type InviteTopResult = {
   skipped: { candidate_id: number; rank: number; name: string; reason: string }[];
   not_placed: number;
 };
+
+
+// ---------- The answer analysis of an interview (Module 9) ----------
+
+export type QaDimensionKey = "relevance" | "accuracy" | "completeness" | "articulation";
+
+export type QaTurn = { n: number; speaker: Speaker; text: string; start_ms: number; end_ms: number };
+
+export type QaPair = {
+  id: number;
+  question: string;
+  asked: string; // the interviewer's own words
+  turns: number[]; // every turn of this exchange, follow-ups included
+  answer_turns: number[];
+  part: number;
+  parts: number; // 2 or more = one part of a multi-part question
+  follow_ups: string[];
+  start_ms: number;
+  kind: "job_related" | "small_talk";
+  requirements: number[]; // numbers in the coverage list
+  scores: Record<QaDimensionKey, { score: number; justification: string }> | null;
+  overall: number | null;
+  evidence: { turn: number; start_ms: number; quote: string } | null;
+  references: { skill: string; heading: string; url: string }[];
+};
+
+export type QaCoverage = {
+  number: number;
+  requirement: string;
+  kind: string;
+  mandatory: boolean;
+  pairs: number[];
+  best_score: number | null;
+  status: "explored" | "weak" | "not_explored";
+};
+
+export type QaEvaluation = {
+  session_id: number;
+  status: "running" | "done" | "failed";
+  step: string;
+  error: string;
+  started_at: string;
+  finished_at: string | null;
+  seconds: number | null;
+  turns: QaTurn[];
+  pairs: QaPair[];
+  coverage: QaCoverage[];
+  summary: {
+    pairs: number;
+    job_related: number;
+    small_talk: number;
+    scored: number;
+    average: number | null;
+    not_explored: number;
+    weak: number;
+  };
+};
