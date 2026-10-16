@@ -1,23 +1,36 @@
-"""Tests for the holiday calendar, read from the knowledge/holidays folder when the API starts (RAG).
-The AI is faked; the PDF reading, the chunking and the vector search are real (with the test
-embedding from conftest). The folder is a temporary one (conftest), so no real PDF is ever read."""
+"""Tests for the holiday list, read from the knowledge/holidays folder when the API starts.
+A text file is read by plain code; a PDF with normal text is read with RAG (the AI is faked; the
+chunking and the vector search are real, with the test embedding from conftest). The folder is a
+temporary one (conftest), so the real files are never read here."""
 
 from datetime import date
+from pathlib import Path
 
 from sqlalchemy import select
 
 from app import holiday_calendar
 from app.db import SessionLocal
 from app.holiday_calendar import FoundHoliday, FoundHolidays
-from app.models import Holiday, HolidaySource
+from app.cv_text import pdf_text, tidy
+from app.models import Holiday, HolidaySource, JobProfile
 from scripts.make_sample_cvs import make_pdf
 
-GOVERNMENT_LIST = [
+REAL_LIST = Path(__file__).resolve().parent.parent / "knowledge" / "holidays" / "bangladesh-public-holidays-2026.pdf"
+
+TEXT_LIST = """# Public holidays 2026
+2026-02-21  Shaheed Day
+2026-10-20  Durga Puja (Nabami)
+2026-10-21  Durga Puja (Bijoya Dashami)
+16 December 2026  Victory Day
+December 25, 2026 - Christmas Day
+this line has no date
+"""
+
+ENGLISH_PDF = [
     "Government of the People's Republic of Bangladesh",
     "Public Holidays 2026",
     "Shaheed Day and International Mother Language Day - 21 February 2026",
     "Independence Day - 26 March 2026",
-    "May Day - 1 May 2026",
     "Victory Day - 16 December 2026",
     "Optional holiday: Shab-e-Miraj - 17 January 2026",
 ] + ["Offices remain closed on these days."] * 4
@@ -41,8 +54,9 @@ def fake_ai(monkeypatch, found: list[FoundHoliday] | None = None, seen: list | N
     monkeypatch.setattr(holiday_calendar, "ask_llm", answer)
 
 
-def put_pdf(name: str = "Calendar_2026.pdf", lines: list[str] = GOVERNMENT_LIST) -> None:
-    (holiday_calendar.HOLIDAY_FOLDER / name).write_bytes(make_pdf(lines))
+def put(name: str, content: str | bytes) -> None:
+    path = holiday_calendar.HOLIDAY_FOLDER / name
+    path.write_bytes(content.encode() if isinstance(content, str) else content)
 
 
 def saved() -> dict[str, str]:
@@ -50,59 +64,68 @@ def saved() -> dict[str, str]:
         return {h.day.isoformat(): h.name for h in db.scalars(select(Holiday).order_by(Holiday.day))}
 
 
-# ---------- Reading the folder ----------
+# ---------- A text file: one holiday per line ----------
 
 
-def test_public_holidays_in_the_folder_are_saved(client, monkeypatch):
-    seen: list = []
-    fake_ai(monkeypatch, seen=seen)
-    put_pdf()
-    results = holiday_calendar.load_holiday_calendars()
-    assert results == ["Calendar_2026.pdf: 2 public holidays saved"]
-    assert saved() == {"2026-03-26": "Independence Day", "2026-12-16": "Victory Day"}  # optional and undated left out
-    assert "Independence Day - 26 March 2026" in seen[0]  # the real text of the PDF reached the AI
-    assert "This calendar is for the year 2026." in seen[0]
+def test_a_text_list_is_read_by_code_without_the_ai(client, monkeypatch):
+    asked: list = []
+    fake_ai(monkeypatch, seen=asked)
+    put("holidays-2026.txt", TEXT_LIST)
+    assert holiday_calendar.load_holiday_calendars() == ["holidays-2026.txt: 5 public holidays saved"]
+    assert saved() == {
+        "2026-02-21": "Shaheed Day",
+        "2026-10-20": "Durga Puja (Nabami)",
+        "2026-10-21": "Durga Puja (Bijoya Dashami)",
+        "2026-12-16": "Victory Day",
+        "2026-12-25": "Christmas Day",
+    }
+    assert asked == []  # a clean list needs no AI
+
+
+def test_the_real_2026_list_has_every_government_holiday(client):
+    found = holiday_calendar.dates_in_text(tidy(pdf_text(REAL_LIST)))
+    days = {day.isoformat() for day in found}
+    assert len(days) == 25
+    assert {"2026-10-20", "2026-10-21", "2026-12-16", "2026-12-25", "2026-03-21", "2026-05-28"} <= days
+    assert "2026-04-13" not in days  # hill districts only
+    assert all(date.fromisoformat(d).year == 2026 for d in days)
 
 
 def test_a_file_read_before_is_not_read_again(client, monkeypatch):
-    seen: list = []
-    fake_ai(monkeypatch, seen=seen)
-    put_pdf()
+    put("holidays-2026.txt", TEXT_LIST)
     holiday_calendar.load_holiday_calendars()
-    assert holiday_calendar.load_holiday_calendars() == ["Calendar_2026.pdf: already read"]
-    assert len(seen) == 1  # the AI was asked only once
-    holiday_calendar.load_holiday_calendars(force=True)
-    assert len(seen) == 2  # unless asked to read everything again
+    assert holiday_calendar.load_holiday_calendars() == ["holidays-2026.txt: already read"]
+    assert holiday_calendar.load_holiday_calendars(force=True) == ["holidays-2026.txt: 5 public holidays saved"]
 
 
-def test_a_changed_calendar_replaces_the_days_of_that_year(client, monkeypatch):
-    fake_ai(monkeypatch)
-    put_pdf()
+def test_a_changed_file_replaces_the_days_of_its_year_but_keeps_hand_added_ones(client):
+    put("holidays-2026.txt", TEXT_LIST)
     holiday_calendar.load_holiday_calendars()
-    fake_ai(monkeypatch, [FoundHoliday(date="2026-12-16", name="Victory Day", kind="public")])
-    put_pdf(lines=GOVERNMENT_LIST + ["Corrected edition"])  # same file name, new contents
-    holiday_calendar.load_holiday_calendars()
-    assert saved() == {"2026-12-16": "Victory Day"}  # 26 March came from the old file: gone
-
-
-def test_when_the_ai_is_down_it_is_tried_again_next_start(client, monkeypatch):
-    fake_ai(monkeypatch, down=True)
-    put_pdf()
-    assert "not available" in holiday_calendar.load_holiday_calendars()[0]
     with SessionLocal() as db:
-        assert db.scalar(select(HolidaySource)).error != ""
-    fake_ai(monkeypatch)
-    assert holiday_calendar.load_holiday_calendars() == ["Calendar_2026.pdf: 2 public holidays saved"]
+        db.add(Holiday(day=date(2026, 11, 2), name="Company anniversary", source="manual"))
+        db.add(Holiday(day=date(2026, 7, 11), name="junk from an old reading", source="pdf"))
+        db.commit()
+    put("holidays-2026.txt", "2026-12-16  Victory Day\n")
+    holiday_calendar.load_holiday_calendars()
+    assert saved() == {"2026-11-02": "Company anniversary", "2026-12-16": "Victory Day"}
 
 
-def test_a_broken_file_never_stops_the_others(client, monkeypatch):
-    fake_ai(monkeypatch)
-    (holiday_calendar.HOLIDAY_FOLDER / "a-broken.pdf").write_bytes(b"%PDF-1.4 this is not really a pdf")
-    put_pdf()
-    results = holiday_calendar.load_holiday_calendars()
-    assert len(results) == 2
-    assert "Calendar_2026.pdf: 2 public holidays saved" in results
-    assert "a-broken.pdf: The file is damaged or cannot be opened." in results
+def test_a_text_file_without_dates_says_how_to_write_it(client):
+    put("holidays.txt", "Victory Day is in December.\n")
+    result = holiday_calendar.load_holiday_calendars()[0]
+    assert "one holiday per line" in result
+    with SessionLocal() as db:
+        assert "2026-10-21" in db.scalar(select(HolidaySource)).error
+
+
+def test_a_file_taken_out_of_the_folder_is_forgotten(client):
+    put("holidays-2026.txt", TEXT_LIST)
+    holiday_calendar.load_holiday_calendars()
+    (holiday_calendar.HOLIDAY_FOLDER / "holidays-2026.txt").unlink()
+    holiday_calendar.load_holiday_calendars()
+    with SessionLocal() as db:
+        assert db.scalars(select(HolidaySource)).all() == []
+    assert "2026-12-16" in saved()  # its days stay until a newer file for 2026 replaces them
 
 
 def test_an_empty_or_missing_folder_does_nothing(client, monkeypatch, tmp_path):
@@ -113,7 +136,7 @@ def test_an_empty_or_missing_folder_does_nothing(client, monkeypatch, tmp_path):
 
 def test_days_off_for_the_planner(client):
     with SessionLocal() as db:
-        holiday_calendar.save_many(db, [(date(2026, 12, 16), "Victory Day")], source="pdf")
+        holiday_calendar.save_many(db, [(date(2026, 12, 16), "Victory Day")], source="file")
         assert holiday_calendar.days_off(db, date(2026, 12, 1), date(2026, 12, 31)) == {date(2026, 12, 16)}
         assert holiday_calendar.days_off(db, date(2027, 1, 1), date(2027, 1, 31)) == set()
 
@@ -122,7 +145,66 @@ def test_the_old_holiday_pages_are_gone(client, auth_headers):
     assert client.get("/api/holidays", headers=auth_headers).status_code == 404
 
 
-# ---------- RAG: pieces and retrieval ----------
+# ---------- A PDF with normal text: RAG ----------
+
+
+def test_an_english_pdf_is_read_with_rag(client, monkeypatch):
+    seen: list = []
+    fake_ai(monkeypatch, seen=seen)
+    put("Calendar_2026.pdf", make_pdf(ENGLISH_PDF))
+    assert holiday_calendar.load_holiday_calendars() == ["Calendar_2026.pdf: 3 public holidays saved"]
+    assert saved() == {
+        "2026-02-21": "Shaheed Day and International Mother Language Day",  # the AI left it out: the check added it
+        "2026-03-26": "Independence Day",
+        "2026-12-16": "Victory Day",
+    }  # the optional one (17 January) and the undated one stay out
+    assert "Independence Day - 26 March 2026" in seen[0]  # the real text of the PDF reached the AI
+    assert "This calendar is for the year 2026." in seen[0]
+
+
+def test_the_check_adds_every_date_the_ai_cut_short(client, monkeypatch):
+    """The real failure on the Bangla calendar: the AI listed 11 of 25 days. Here it lists only one."""
+    fake_ai(monkeypatch, [FoundHoliday(date="2026-02-04", name="Shab-e-Barat", kind="public")])
+    put("bangladesh-public-holidays-2026.pdf", REAL_LIST.read_bytes())
+    assert holiday_calendar.load_holiday_calendars() == ["bangladesh-public-holidays-2026.pdf: 25 public holidays saved"]
+    days = saved()
+    assert days["2026-10-21"] == "Durga Puja (Bijoya Dashami)"
+    assert days["2026-12-25"] == "Christmas Day"
+
+
+def test_a_pdf_whose_text_cannot_be_read_is_refused_clearly(client, monkeypatch):
+    """The government's Bangla wall calendar: an old font, so its text comes out as letters like this."""
+    monkeypatch.setattr(holiday_calendar, "pdf_text", lambda path: "MYcÖRvZš¿x evsjv‡`k miKvi 2026\nRvbyqvwi †cŠl-gvN\n" + "16 10 17 11 " * 30)
+    asked: list = []
+    fake_ai(monkeypatch, seen=asked)
+    put("Calendar_2026.pdf", make_pdf(["anything"]))
+    result = holiday_calendar.load_holiday_calendars()[0]
+    assert "cannot be read" in result and "normal text" in result
+    assert saved() == {} and asked == []  # nothing guessed, nothing saved
+
+
+def test_when_the_ai_is_down_the_dates_written_in_the_pdf_are_used(client, monkeypatch):
+    fake_ai(monkeypatch, down=True)
+    put("Calendar_2026.pdf", make_pdf(ENGLISH_PDF))
+    assert holiday_calendar.load_holiday_calendars() == ["Calendar_2026.pdf: 3 public holidays saved"]
+    assert "2026-01-17" not in saved()  # the line says "Optional"
+
+
+def test_when_the_ai_is_down_and_no_date_is_written_out_it_is_tried_again(client, monkeypatch):
+    fake_ai(monkeypatch, down=True)
+    put("Calendar_2026.pdf", make_pdf(["Public holidays 2026", "Eid: three days in March, after the moon is seen."]))
+    assert "not available" in holiday_calendar.load_holiday_calendars()[0]
+    fake_ai(monkeypatch, [FoundHoliday(date="2026-03-20", name="Eid-ul-Fitr", kind="public")])
+    assert holiday_calendar.load_holiday_calendars() == ["Calendar_2026.pdf: 1 public holidays saved"]
+
+
+def test_a_broken_file_never_stops_the_others(client):
+    put("a-broken.pdf", b"%PDF-1.4 this is not really a pdf")
+    put("holidays-2026.txt", TEXT_LIST)
+    results = holiday_calendar.load_holiday_calendars()
+    assert "holidays-2026.txt: 5 public holidays saved" in results
+    assert "a-broken.pdf: The file is damaged or cannot be opened." in results
+
 
 LONG_DOCUMENT = (
     ["Ministry of Public Administration circular about office hours."]
@@ -144,16 +226,6 @@ def test_only_the_holiday_pieces_reach_the_ai(client, monkeypatch):
     assert seen[0].count("sign the register") < 10  # and left most of the office-hours text out
 
 
-def test_only_pdfs_are_read(client):
-    with SessionLocal() as db:
-        try:
-            holiday_calendar.read_pdf(db, b"hello", "holidays.txt")
-        except holiday_calendar.HolidayReadError as problem:
-            assert "PDF" in str(problem)
-        else:
-            raise AssertionError("a text file was accepted")
-
-
 def test_a_clean_list_comes_back(client):
     cleaned = holiday_calendar.clean(
         [
@@ -166,165 +238,19 @@ def test_a_clean_list_comes_back(client):
     assert cleaned[0].name == "Independence Day / Another name" and cleaned[0].kind == "public"
 
 
-# ---------- The Bangla government calendar ----------
-
-# What the PDF's own text layer gives for the government calendar: an old Bangla font (Bijoy),
-# so the letters are wrong ("Rvbyqvwi" is "জানুয়ারি", January).
-OLD_FONT_TEXT = "MYcÖRvZš¿x evsjv‡`k miKvi 2026 wLªóvã\nRvbyqvwi †cŠl-gvN iRe-kvevb †deªæqvwi\n" + "16 10 17 11 18 12 19 13 " * 20
-
-# What Bangla + English OCR gives for the same page (a short part of it, with an OCR slip: "এচ্ছিক").
-BANGLA_OCR_TEXT = "\n".join(
-    [
-        "২০২৬ খ্রিষ্টাব্দ | ১৪৩২-১৪৩৩ বঙ্গাব্দ | ১৪৪৭-১৪৪৮ হিজরি",
-        "জানুয়ারি পৌষ-মাঘ ফেব্রুয়ারি মাঘ-ফাল্গুন মার্চ ফাল্গুন-চৈত্র",
-        "সাধারণ ছুটি-২১ ফেব্রুয়ারি (০৮ ফাল্গুন)-শহিদ দিবস ও আন্তর্জাতিক মাতৃভাষা দিবস | ২৬ মার্চ (১২ চৈত্র)-স্বাধীনতা ও জাতীয় দিবস |",
-        "১৬ ডিসেম্বর (০১ পৌষ)-বিজয় দিবস।",
-        "এচ্ছিক ছুটি (মুসলিম পর্ব)-১৭ জানুয়ারি (০৩ মাঘ)-*শব-ই-মিরাজ |",
-    ]
-)
+# ---------- The invite pop-up never hides a missing list ----------
 
 
-def bangla_calendar(monkeypatch, ocr_text: str = BANGLA_OCR_TEXT) -> list:
-    """Fakes the two ways of reading the PDF. Returns a list that collects the OCR languages used."""
-    languages: list = []
-
-    def ocr(path, lang="eng"):
-        languages.append(lang)
-        return ocr_text
-
-    monkeypatch.setattr(holiday_calendar, "pdf_text", lambda path: OLD_FONT_TEXT)
-    monkeypatch.setattr(holiday_calendar, "pdf_ocr", ocr)
-    monkeypatch.setattr(holiday_calendar, "ocr_languages", lambda: "ben+eng")
-    return languages
-
-
-def test_text_with_month_names_is_readable_and_old_font_text_is_not():
-    assert holiday_calendar.readable("\n".join(GOVERNMENT_LIST))
-    assert holiday_calendar.readable(BANGLA_OCR_TEXT)
-    assert not holiday_calendar.readable(OLD_FONT_TEXT)
-
-
-def test_the_year_is_found_in_bangla_or_english_digits():
-    assert holiday_calendar.calendar_year(BANGLA_OCR_TEXT) == 2026
-    assert holiday_calendar.calendar_year("বর্ষপঞ্জি\n২০২৬ খ্রিষ্টাব্দ\n...\nপ্রেস-২৫৫২ ২০২৫/২৬ কপি, ২০২৫") == 2026  # title, not the printer's line
-    assert holiday_calendar.calendar_year("no year here") is None
-
-
-def test_an_unreadable_text_layer_is_read_with_bangla_ocr(client, monkeypatch):
-    languages = bangla_calendar(monkeypatch)
-    seen: list = []
-    fake_ai(monkeypatch, [FoundHoliday(date="2026-12-16", name="Victory Day", kind="public")], seen)
-    put_pdf()
-    assert holiday_calendar.load_holiday_calendars() == ["Calendar_2026.pdf: 3 public holidays saved"]
-    assert languages == ["ben+eng"]
-    assert "This calendar is for the year 2026." in seen[0]
-    assert "সাধারণ ছুটি-২১ ফেব্রুয়ারি" in seen[0]  # the Bangla holiday lines reached the AI
-
-
-def test_a_pdf_with_no_month_names_is_refused_clearly(client, monkeypatch):
-    bangla_calendar(monkeypatch, ocr_text="just some pictures")
-    fake_ai(monkeypatch, [])
-    put_pdf()
-    result = holiday_calendar.load_holiday_calendars()[0]
-    assert "month names" in result
-    assert saved() == {}
-
-
-def test_holiday_pieces_are_found_by_keyword_even_when_far_down(client):
-    filler = [f"{n} {n + 1} {n + 2} {n + 3} জানুয়ারি" for n in range(30)]
-    pieces = filler[:20] + ["সাধারণ ছুটি-২১ ফেব্রুয়ারি (০৮ ফাল্গুন)-শহিদ দিবস | ২১ মার্চ (০৭", "চৈত্র)-*ঈদ-উল-ফিতর |"] + filler[20:]
-    with SessionLocal() as db:
-        holiday_calendar.store_chunks(db, "calendar.pdf", pieces)
-        texts = [chunk.text for chunk in holiday_calendar.holiday_pieces(db, "calendar.pdf")]
-    assert len(texts) <= holiday_calendar.CHUNKS_FOR_LIST
-    assert pieces[20] in texts  # says "ছুটি"
-    assert pieces[21] in texts  # the piece after it: the Eid line runs on into it
-    assert texts.index(pieces[20]) + 1 == texts.index(pieces[21])  # kept in document order
-
-
-# ---------- The Bangla calendar: the dates come from the text, the AI only names them ----------
-
-# The two public paragraphs of the real 2026 calendar, as OCR reads them (shortened), then an optional one.
-GOVERNMENT_OCR = "\n".join(
-    [
-        "২০২৬ খ্রিষ্টাব্দ | ১৪৩২-১৪৩৩ বঙ্গাব্দ",
-        "জানুয়ারি ফেব্রুয়ারি মার্চ",
-        "১০ ১২১১ ১৩:১২ ১৪1১৩ ১৫",  # a row of calendar numbers: no month name, so no date
-        "সাধারণ ছুটি-২১ ফেব্রুয়ারি (০৮ ফাল্গুন)_শহিদ দিবস ও আন্তর্জাতিক মাতৃভাষা দিবস | ২১ মার্চ (04",
-        "চৈত্র)-*ঈদ-উল-ফিতর | ১৩ এপ্রিল (৩০ চৈত্র)-চৈত্রসংক্রান্তি শুধু রাঙ্গামাটি, খাগড়াছড়ি ও",
-        "বান্দরবান পার্বত্য জেলাসমূহের জন্য প্রযোজ্য)। ০১ মে (১৮ বৈশাখ)-মে দিবস 1 ২১ অক্টোবর (০৫ কার্তিক)-দুর্গাপূজা (বিজয়া দশমী) |",
-        "১৬ ডিসেম্বর (০১ পৌষ)_বিজয় দিবস।",
-        "নির্বাহী আদেশে সরকারি ছুটি_১৯ মার্চ, ২০ মার্চ এবং ২২",
-        "মার্চ ও ২৩ মার্চ (০৫, ০৬ চৈত্র ও ০৮, ০৯ চৈত্র)-*ঈদ-উল-ফিতর | ২০ অক্টোবর (০৪ কার্তিক)-_ দুর্গাপূজা (নবমী)।",
-        "এচ্ছিক ছুটি (মুসলিম পর্ব)_১৭ জানুয়ারি (০৩ মাঘ)-*শব-ই-মিরাজ |",
-        "টীকা : একজন কর্মচারীকে তার নিজ ধর্ম অনুযায়ী ঐচ্ছিক ছুটি",
-    ]
-)
-PUBLIC_DAYS = [
-    "2026-02-21", "2026-03-19", "2026-03-20", "2026-03-21", "2026-03-22", "2026-03-23",
-    "2026-05-01", "2026-10-20", "2026-10-21", "2026-12-16",
-]
-
-
-def test_the_public_paragraphs_and_their_dates_are_found_by_code():
-    sections = holiday_calendar.public_sections(GOVERNMENT_OCR)
-    assert len(sections) == 2  # general and executive order; the optional one is left out
-    found = {day.isoformat(): name for section in sections for day, name in holiday_calendar.dates_in(section, 2026)}
-    assert sorted(found) == PUBLIC_DAYS  # 13 April (only the hill districts) and 17 January (optional) are not there
-    assert found["2026-03-19"] == "ঈদ-উল-ফিতর"  # a group of dates shares the name written after the last one
-    assert found["2026-05-01"] == "মে দিবস"  # the OCR "1" at the end is cleaned off
-
-
-def test_dates_the_ai_leaves_out_are_still_saved_and_made_up_ones_are_not(client, monkeypatch):
-    """The real failure: the AI cut a long list short (11 of 25). The dates come from the text now."""
-    monkeypatch.setattr(holiday_calendar, "pdf_text", lambda path: OLD_FONT_TEXT)
-    monkeypatch.setattr(holiday_calendar, "pdf_ocr", lambda path, lang="eng": GOVERNMENT_OCR)
-    monkeypatch.setattr(holiday_calendar, "ocr_languages", lambda: "ben+eng")
-    asked: list = []
-    fake_ai(
-        monkeypatch,
-        [
-            FoundHoliday(date="2026-02-21", name="Shaheed Day", kind="public"),
-            FoundHoliday(date="2026-07-07", name="Made-up holiday", kind="public"),  # not in the text
-        ],
-        asked,
-    )
-    put_pdf()
-    assert holiday_calendar.load_holiday_calendars() == ["Calendar_2026.pdf: 10 public holidays saved"]
-    days = saved()
-    assert sorted(days) == PUBLIC_DAYS
-    assert days["2026-02-21"] == "Shaheed Day"  # the AI's English name where it gave one
-    assert days["2026-10-21"] == "দুর্গাপূজা (বিজয়া দশমী)"  # the Bangla name where it did not
-    assert len(asked) == 2  # one short paragraph per AI call, not the whole calendar at once
-    assert all("Every holiday below is a public holiday." in prompt for prompt in asked)
-
-
-def test_with_the_ai_down_the_dates_are_still_saved(client, monkeypatch):
-    monkeypatch.setattr(holiday_calendar, "pdf_text", lambda path: OLD_FONT_TEXT)
-    monkeypatch.setattr(holiday_calendar, "pdf_ocr", lambda path, lang="eng": GOVERNMENT_OCR)
-    monkeypatch.setattr(holiday_calendar, "ocr_languages", lambda: "ben+eng")
-    fake_ai(monkeypatch, down=True)
-    put_pdf()
-    holiday_calendar.load_holiday_calendars()
-    assert sorted(saved()) == PUBLIC_DAYS  # the planner already skips every holiday
-    with SessionLocal() as db:
-        assert "Bangla" in db.scalar(select(HolidaySource)).error  # so the names are tried again next start
-
-
-def test_the_invite_pop_up_says_how_many_holidays_are_skipped(client, auth_headers, monkeypatch):
-    from app.models import JobProfile
-
+def test_the_invite_pop_up_says_how_many_holidays_are_skipped(client, auth_headers):
     with SessionLocal() as db:
         job = JobProfile(title="Data Engineer")
         db.add(job)
         db.commit()
         job_id = job.id
     info = client.get(f"/api/jobs/{job_id}/invite-info", headers=auth_headers).json()
-    assert info["holidays_ahead"] == 0 and "No holiday calendar" in info["calendar_problem"]
+    assert info["holidays_ahead"] == 0 and "No holiday list" in info["calendar_problem"]
 
-    fake_ai(monkeypatch)
-    put_pdf()
+    put("holidays-2030.txt", "2030-12-16  Victory Day\n2030-12-25  Christmas Day\n")
     holiday_calendar.load_holiday_calendars()
     info = client.get(f"/api/jobs/{job_id}/invite-info", headers=auth_headers).json()
-    assert info["calendar_problem"] == ""
-
+    assert info == {"holidays_ahead": 2, "calendar_problem": ""}

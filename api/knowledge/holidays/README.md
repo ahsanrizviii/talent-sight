@@ -1,24 +1,23 @@
-# Holiday calendar
+# Holiday list
 
-Put the government's public holiday calendar PDF here (for example `Calendar_2026.pdf`), then rebuild:
+`bangladesh-public-holidays-2026.pdf` lists the 2026 government public holidays (general and
+executive-order holidays), with normal, selectable English text. The interview planner never
+books a day on it. Saturday and Sunday are the weekend and are not listed.
 
-```
-docker compose up --build -d --remove-orphans
-```
+When the API starts it reads every PDF (or .txt) here that it has not read before, in the
+background: the text is stored in pieces with embeddings (RAG), the pieces about holiday dates go
+to the AI, which lists the holidays, and plain code checks the list against every date written in
+the file. A changed file is read again and replaces the days of its year.
 
-When the API starts it reads every PDF in this folder that it has not read before. It runs in the
-background and takes about a minute for the Bangla calendar (OCR, then the AI lists the holidays).
-Only public holidays are saved; optional ones are not. The interview planner never books a day on the list.
-Saturday and Sunday are the weekend and are not taken from the PDF.
+For 2027, add a PDF the same way: one row per holiday with the full date (`21 October 2027`).
 
-See what was found:
+The government's Bangla wall calendar cannot be used directly: its text is in an old non-Unicode
+font and the page is a poster, so reading it with OCR mixed the calendar grid into the holidays.
 
-```
-docker compose logs api | Select-String "holiday calendar"
-```
-
-A newer calendar for the same year replaces the older one's days. To read every file again:
+See what was read:
 
 ```
-docker compose exec api python -m scripts.reload_holidays
+docker compose logs api | Select-String "holiday"
 ```
+
+To read every file again: `docker compose exec api python -m scripts.reload_holidays`
