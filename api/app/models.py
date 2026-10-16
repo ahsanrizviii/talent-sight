@@ -228,14 +228,25 @@ class TranscriptSegment(Base):
 
 
 class Assessment(Base):
+    """The consolidated assessment of one candidate (Module 10).
+
+    One row per candidate; assessing again replaces it. The report is kept as JSON: the position,
+    the component scores, the requirement lines, the gaps, the findings and the numbered evidence.
+    The columns from status down were added in Module 10; init_db adds them to older databases.
+    """
 
     __tablename__ = "assessments"
 
     id: Mapped[int] = mapped_column(primary_key=True)
     candidate_id: Mapped[int] = mapped_column(ForeignKey("candidates.id", ondelete="CASCADE"))
-    overall_position: Mapped[str] = mapped_column(String(30))
+    overall_position: Mapped[str] = mapped_column(String(30), default="")  # strong_fit | possible_fit | weak_fit
     report: Mapped[dict] = mapped_column(JSON, default=dict)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())  # when it started
+    status: Mapped[str] = mapped_column(String(20), default="running")  # running | done | failed
+    step: Mapped[str] = mapped_column(String(200), default="")  # what the agent is doing now, for the screen
+    error: Mapped[str] = mapped_column(Text, default="")
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    seconds: Mapped[float | None] = mapped_column(Float)
 
 
 class CalendarEvent(Base):

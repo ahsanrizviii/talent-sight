@@ -148,6 +148,9 @@ export default function CandidatesPage() {
               Invite top candidates
             </button>
           )}
+          <Link className="button secondary" to={`/jobs/${id}/compare`}>
+            Compare assessed
+          </Link>
           <Link className="button secondary" to={`/jobs/${id}`}>
             Edit the job
           </Link>

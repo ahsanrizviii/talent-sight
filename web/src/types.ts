@@ -403,3 +403,78 @@ export type QaEvaluation = {
     weak: number;
   };
 };
+
+
+// ---------- The consolidated assessment of a candidate (Module 10) ----------
+
+export type AssessmentFinding = { text: string; evidence: string[] };
+
+export type AssessmentEvidence = {
+  id: string; // R = CV requirement, S = CV score, Q = interview answer, C = interview coverage
+  source: "cv" | "interview";
+  label: string;
+  text: string;
+  at: string | null; // mm:ss in the interview
+};
+
+export type AssessmentRequirement = {
+  n: number;
+  requirement: string;
+  kind: string;
+  mandatory: boolean;
+  cv: "met" | "partially_met" | "unmet" | null;
+  cv_note: string;
+  interview: "explored" | "weak" | "not_explored" | null;
+  best_score: number | null;
+  pairs: number[];
+};
+
+export type AssessmentReport = {
+  candidate: { id: number; name: string };
+  job: { id: number; title: string };
+  interview: { session_id: number; held_at: string; analysed_at: string | null };
+  position: { code: "strong_fit" | "possible_fit" | "weak_fit"; label: string; overall: number; reasons: string[]; evidence: string[] };
+  components: { key: string; label: string; source: "cv" | "interview"; score: number; weight: number; contribution: number; evidence: string[] }[];
+  requirements: AssessmentRequirement[];
+  gaps: { kind: "no_evidence" | "cv_only" | "weak_in_interview"; requirement: string; mandatory: boolean; text: string; evidence: string[] }[];
+  summary: AssessmentFinding;
+  strengths: AssessmentFinding[];
+  weaknesses: AssessmentFinding[];
+  follow_ups: AssessmentFinding[];
+  evidence: AssessmentEvidence[];
+};
+
+export type Assessment = {
+  candidate_id: number;
+  status: "running" | "done" | "failed";
+  step: string;
+  error: string;
+  started_at: string;
+  finished_at: string | null;
+  seconds: number | null;
+  outdated: boolean; // the interview answers were analysed again after this report was made
+  report: AssessmentReport;
+};
+
+
+export type ComparedCandidate = {
+  candidate_id: number;
+  name: string;
+  position: { code: AssessmentReport["position"]["code"]; label: string; overall: number };
+  components: { key: string; label: string; score: number }[];
+  requirements: Record<string, { cv: AssessmentRequirement["cv"]; interview: AssessmentRequirement["interview"]; best_score: number | null }>;
+  strengths: string[];
+  weaknesses: string[];
+  gaps: number;
+  must_have_gaps: number;
+  assessed_at: string | null;
+  outdated: boolean;
+};
+
+export type Comparison = {
+  job_id: number;
+  job_title: string;
+  requirements: { key: string; requirement: string; mandatory: boolean }[];
+  candidates: ComparedCandidate[]; // best position first
+  waiting: number; // interviewed candidates without a finished assessment yet
+};

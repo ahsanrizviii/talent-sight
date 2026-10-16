@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 
 import { api } from "../api";
+import AssessmentPanel from "../components/AssessmentPanel";
 import Avatar from "../components/Avatar";
 import CvViewer from "../components/CvViewer";
 import Icon from "../components/Icon";
@@ -12,7 +13,7 @@ import VerdictBadge from "../components/VerdictBadge";
 import type { CandidateDetail, PersonRow } from "../types";
 import { shortDate } from "../when";
 
-type Tab = "score" | "requirements" | "interview" | "cv";
+type Tab = "score" | "requirements" | "interview" | "assessment" | "cv";
 
 const KIND_LABELS = {
   skill: "Required skill",
@@ -28,12 +29,16 @@ export default function CandidatePage() {
   const navigate = useNavigate();
   const [candidate, setCandidate] = useState<CandidateDetail | null>(null);
   const [neighbours, setNeighbours] = useState<PersonRow[]>([]);
-  const [tab, setTab] = useState<Tab>("score");
+  const [params] = useSearchParams();
+  // ?tab=assessment opens that tab straight away (the comparison page links here like that).
+  const firstTab = (params.get("tab") as Tab | null) ?? "score";
+  const [tab, setTab] = useState<Tab>(firstTab);
   const [error, setError] = useState("");
 
   useEffect(() => {
     setCandidate(null);
     setTab("score");
+    setTab(firstTab);
     api<CandidateDetail>(`/candidates/${id}`)
       .then(setCandidate)
       .catch((err) => setError(err.message));
@@ -78,6 +83,7 @@ export default function CandidatePage() {
     { value: "score", label: "Score" },
     { value: "requirements", label: `Requirements (${candidate.verdicts.length})` },
     { value: "interview", label: "Interview" },
+    { value: "assessment", label: "Assessment" },
     { value: "cv", label: "CV" },
   ];
 
@@ -264,6 +270,7 @@ export default function CandidatePage() {
 
       {tab === "interview" && <InterviewCard candidateId={candidate.id} candidateStatus={candidate.status} />}
 
+      {tab === "assessment" && <AssessmentPanel candidateId={candidate.id} />}
       {tab === "cv" && (
         <CvViewer candidateId={candidate.id} filename={candidate.cv_filename} text={candidate.cv_text} />
       )}

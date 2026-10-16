@@ -1,0 +1,317 @@
+/* The consolidated assessment of a candidate (Module 10).
+ * Kept in its own file so the main styles.css stays as it is. It only uses the colours,
+ * glass and radii already defined in styles.css (the variables in :root).
+ */
+
+.assessment h4 {
+  margin: 0 0 10px;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+.as-block {
+  margin-top: 24px;
+}
+
+/* While the agent works: one quiet line with a turning ring. */
+.as-step {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 14px 0 0;
+  color: var(--ink-2);
+  font-size: 14px;
+}
+
+.as-spinner {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid var(--line);
+  border-top-color: var(--amber);
+  animation: as-turn 0.9s linear infinite;
+}
+
+@keyframes as-turn {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* The position: the verdict block on the left, the summary and the rules on the right. */
+.as-position {
+  display: flex;
+  gap: 20px;
+  align-items: flex-start;
+  margin-top: 20px;
+}
+
+.as-verdict {
+  min-width: 150px;
+  padding: 16px 18px;
+  border-radius: var(--radius-s);
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.as-verdict strong {
+  display: block;
+  font-size: 19px;
+  font-weight: 500;
+}
+
+.as-verdict span {
+  display: block;
+  margin-top: 6px;
+  font-size: 30px;
+  font-variant-numeric: tabular-nums;
+}
+
+.as-verdict small {
+  font-size: 13px;
+  color: var(--ink-3);
+}
+
+.as-verdict.pass {
+  border-color: rgba(140, 199, 162, 0.4);
+}
+.as-verdict.pass strong {
+  color: var(--met);
+}
+.as-verdict.warn {
+  border-color: rgba(229, 183, 120, 0.4);
+}
+.as-verdict.warn strong {
+  color: var(--partly);
+}
+.as-verdict.stop {
+  border-color: rgba(224, 147, 143, 0.4);
+}
+.as-verdict.stop strong {
+  color: var(--unmet);
+}
+
+.as-summary {
+  margin: 0 0 8px;
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+.as-reasons {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 13px;
+  color: var(--ink-3);
+}
+
+/* Strengths and weaknesses side by side; one column on a phone. */
+.as-columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 26px;
+}
+
+.as-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.as-item {
+  padding: 9px 12px;
+  border-left: 2px solid var(--line);
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 0 var(--radius-s) var(--radius-s) 0;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.as-item.pass {
+  border-left-color: var(--met);
+}
+.as-item.stop {
+  border-left-color: var(--unmet);
+}
+.as-item.warn {
+  border-left-color: var(--partly);
+}
+.as-item.follow {
+  border-left-color: var(--amber);
+}
+
+/* Evidence tags: R and S come from the CV, Q and C from the interview. */
+.as-tags {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  vertical-align: middle;
+}
+
+.as-tags-line {
+  margin-top: 7px;
+}
+
+.as-tag {
+  padding: 0 7px;
+  border-radius: var(--pill);
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--ink-3);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 18px;
+  cursor: pointer;
+}
+
+.as-tag.cv {
+  border-color: rgba(140, 199, 162, 0.35);
+  color: var(--met);
+}
+
+.as-tag.interview {
+  border-color: var(--amber-line);
+  color: var(--amber);
+}
+
+.as-tag:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.as-table-wrap {
+  overflow-x: auto;
+}
+
+.as-table td {
+  vertical-align: middle;
+}
+
+/* The numbered evidence at the bottom. */
+.as-evidence > summary {
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--ink-3);
+}
+
+.as-evidence ol {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+}
+
+.as-evidence li {
+  display: flex;
+  gap: 12px;
+  padding: 10px 8px;
+  border-bottom: 1px solid var(--line-2);
+  border-radius: 8px;
+  transition: background 0.3s var(--ease);
+}
+
+.as-evidence li > .as-tag {
+  align-self: flex-start;
+  flex-shrink: 0;
+}
+
+.as-evidence li p {
+  margin: 4px 0 0;
+}
+
+.as-evidence li.active {
+  background: var(--amber-wash);
+}
+
+@media (max-width: 720px) {
+  .as-position {
+    flex-direction: column;
+  }
+
+  .as-columns {
+    grid-template-columns: 1fr;
+  }
+}
+
+
+/* ---------- Side-by-side comparison (Task 10.2.2) ---------- */
+.cmp-pick {
+  cursor: pointer;
+  font: inherit;
+  font-size: 12.5px;
+}
+
+.cmp-pick.on {
+  border-color: var(--amber-line);
+  background: var(--amber-wash);
+  color: var(--ink);
+}
+
+.cmp-table {
+  min-width: 640px;
+}
+
+.cmp-table th,
+.cmp-table td {
+  vertical-align: top;
+}
+
+/* Row and column names read as names, not as small capital labels like other tables. */
+.cmp-table thead th,
+.cmp-table tbody th {
+  font-size: 14px;
+  letter-spacing: normal;
+  text-transform: none;
+  text-align: left;
+}
+
+.cmp-table tbody th {
+  width: 210px;
+  font-weight: 500;
+  color: var(--ink-2);
+}
+
+.cmp-table .cmp-section th {
+  padding-top: 18px;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+.cmp-table .bar {
+  margin-top: 6px;
+  max-width: 160px;
+}
+
+.cmp-number {
+  display: block;
+  font-size: 17px;
+  font-variant-numeric: tabular-nums;
+}
+
+.cmp-number.best {
+  color: var(--amber);
+}
+
+.cmp-req {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.cmp-points {
+  margin: 0;
+  padding-left: 16px;
+  list-style: disc;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.as-foot {
+  margin-top: 18px;
+}
