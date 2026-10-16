@@ -7,7 +7,7 @@ import secrets
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, field_validator
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -30,8 +30,7 @@ def utcnow() -> datetime:
 
 
 class ScheduleIn(BaseModel):
-    scheduled_at: datetime
-    duration_minutes: int | None = Field(default=None, ge=10, le=240)  # empty = the length on the Settings page
+    scheduled_at: datetime  # every interview lasts 1 hour (schedule_rules.py)
 
     @field_validator("scheduled_at")
     @classmethod
@@ -184,7 +183,7 @@ def schedule_interview(candidate_id: int, body: ScheduleIn, db: Session = Depend
         scheduled_at=body.scheduled_at,
         invite_token=new_invite_token(),
         invite_expires_at=expiry_for(body.scheduled_at),
-        duration_minutes=body.duration_minutes or schedule_rules.default_minutes(db),
+        duration_minutes=schedule_rules.default_minutes(db),
     )
     db.add(session)
     db.commit()
@@ -217,8 +216,6 @@ def reschedule_interview(session_id: int, body: ScheduleIn, db: Session = Depend
         raise HTTPException(status.HTTP_409_CONFLICT, "Only an interview that has not started can be moved.")
     session.scheduled_at = body.scheduled_at
     session.invite_expires_at = expiry_for(body.scheduled_at)
-    if body.duration_minutes:
-        session.duration_minutes = body.duration_minutes
     db.commit()
     return to_out(db, session, send_invite_for(db, session, rescheduled=True), calendar_for(db, session))
 
@@ -237,14 +234,13 @@ class TimeCheckOut(BaseModel):
 
 
 @router.get("/interviews/{session_id}/time-check", response_model=TimeCheckOut)
-def check_new_time(session_id: int, at: datetime, duration_minutes: int | None = Query(None, ge=10, le=240), db: Session = Depends(get_db)):
+def check_new_time(session_id: int, at: datetime, db: Session = Depends(get_db)):
     """Before moving an interview: does the new time break a rule? A candidate may ask for a time
     outside the normal hours, so this only warns; the page asks HR to confirm."""
     session = find_session(db, session_id)
     if at.tzinfo is None:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Please include the time zone.")
-    minutes = duration_minutes or schedule_rules.minutes_of(session)
-    return TimeCheckOut(problem=scheduling.check_time(db, at, minutes, exclude_session_id=session.id))
+    return TimeCheckOut(problem=scheduling.check_time(db, at, exclude_session_id=session.id))
 
 
 @router.get("/interviews/{session_id}/free-times", response_model=list[datetime])
@@ -252,16 +248,14 @@ def suggest_free_times(
     session_id: int,
     start: datetime | None = None,
     count: int = Query(6, ge=1, le=20),
-    duration_minutes: int | None = Query(None, ge=10, le=240),
     db: Session = Depends(get_db),
 ):
     """The next free slots for this interview (working days, interview hours, no holidays, no clash)."""
     session = find_session(db, session_id)
     if start is not None and start.tzinfo is None:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Please include the time zone.")
-    minutes = duration_minutes or schedule_rules.minutes_of(session)
     try:
-        return scheduling.free_times(db, start or utcnow(), count, minutes, exclude_session_id=session.id)
+        return scheduling.free_times(db, start or utcnow(), count, exclude_session_id=session.id)
     except planner.PlanError as problem:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(problem))
 

@@ -103,7 +103,7 @@ def make_rules(minutes: int, gap: int, windows: str, days: str) -> Rules:
 
 
 def rules_from_settings() -> Rules:
-    """The rules written in .env: used until someone saves them on the Settings page."""
+    """The fixed rules from settings.py: 1-hour interviews, 09:00-12:00 and 14:00-17:00, Monday to Friday."""
     return make_rules(settings.interview_minutes, settings.interview_gap_minutes, settings.interview_windows, settings.work_days)
 
 

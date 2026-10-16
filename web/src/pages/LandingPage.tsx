@@ -63,7 +63,7 @@ export default function LandingPage() {
 
         <p className="hero-note">
           {options?.signup_open
-            ? `For the hiring team at ${options.company}. You will need your company code.`
+            ? "For the hiring team. You will need your company code."
             : "For the hiring team. Accounts are created by your administrator."}
         </p>
       </section>

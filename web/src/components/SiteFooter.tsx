@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { api } from "../api";
-import type { SignInOptions } from "../types";
+import { getToken } from "../auth";
 
 // The foot of every page. Only the company's hiring team uses this site (candidates only ever see
 // their own interview link), so the foot is one slim band: the name on the left, the workspace
@@ -12,14 +12,15 @@ const LINKS = [
   { label: "Jobs", to: "/jobs" },
   { label: "Candidates", to: "/candidates" },
   { label: "Interviews", to: "/interviews" },
-  { label: "Write a job with AI", to: "/jd-chat" },
 ];
 
 export default function SiteFooter() {
   const [company, setCompany] = useState("");
 
+  // The company name is shown only to someone who is logged in. Public pages stay neutral.
   useEffect(() => {
-    api<SignInOptions>("/auth/options")
+    if (!getToken()) return;
+    api<{ company: string }>("/auth/me")
       .then((body) => setCompany(body.company))
       .catch(() => undefined);
   }, []);

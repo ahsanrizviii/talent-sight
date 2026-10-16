@@ -84,6 +84,23 @@ class PolicyChunk(Base):
     text: Mapped[str] = mapped_column(Text)
     embedding = mapped_column(Vector(384))
 
+class ReferenceChunk(Base):
+    """One section of the skills reference documents in api/knowledge/skills/ (Module 9).
+
+    The Evaluation Agent compares interview answers with these sections, so an accuracy score
+    rests on written documentation and not only on the language model's memory (Q&A 10).
+    """
+
+    __tablename__ = "reference_chunks"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    source: Mapped[str] = mapped_column(String(200))   # the file name, e.g. python.md
+    skill: Mapped[str] = mapped_column(String(200))    # the document title, e.g. Python
+    heading: Mapped[str] = mapped_column(String(300))  # the section heading
+    url: Mapped[str] = mapped_column(Text, default="")  # the "Sources:" line of the document
+    text: Mapped[str] = mapped_column(Text)
+    embedding = mapped_column(Vector(384))
+
 
 class Candidate(Base):
     """One applicant for one job: their CV file, its text, and what the screening found (Module 5)."""
@@ -177,8 +194,8 @@ class InterviewSession(Base):
     status: Mapped[str] = mapped_column(String(20), default="scheduled")  # scheduled | live | ended
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    # How long this interview is booked for. Empty for interviews made before durations could be
-    # chosen: those use the length on the Settings page. (Added to old databases by init_db.)
+    # How long this interview is booked for (1 hour for every new interview). Empty for interviews
+    # made before this column existed: those use INTERVIEW_MINUTES. (Added to old databases by init_db.)
     duration_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
 class SessionParticipant(Base):
@@ -258,8 +275,8 @@ class JobVisit(Base):
 class CompanyProfile(Base):
     """The company that uses this TalentSight: its name and who candidates can contact.
 
-    One row (id 1), edited on the Settings page. Empty fields fall back to .env (COMPANY_NAME),
-    so a fresh install still works before anyone fills this in.
+    One row (id 1), filled in once in the sign-up form of the first person who signs up.
+    Empty fields fall back to .env (COMPANY_NAME), so a fresh install still works before that.
     """
 
     __tablename__ = "company_profile"
@@ -273,10 +290,11 @@ class CompanyProfile(Base):
 
 
 class Holiday(Base):
-    """A day with no interviews: a government or company holiday (Settings page).
+    """A day with no interviews: a public holiday.
 
-    Read from the government's holiday PDF (the AI lists the dates, a person checks them) or
-    added by hand. The interview planner never books a slot on one of these days.
+    Read from the government's holiday calendar PDF in the knowledge/holidays folder when the API
+    starts (holiday_calendar.load_holiday_calendars). The interview planner never books a slot on
+    one of these days. Weekends (Saturday and Sunday) are not stored here: they are fixed in settings.
     """
 
     __tablename__ = "holidays"
@@ -286,6 +304,24 @@ class Holiday(Base):
     name: Mapped[str] = mapped_column(String(200), default="")
     source: Mapped[str] = mapped_column(String(10), default="manual")  # manual | pdf
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class HolidaySource(Base):
+    """A holiday calendar PDF that was read from the knowledge/holidays folder.
+
+    The file's fingerprint (sha256) is kept, so the same file is not read again at every start,
+    and a changed file is read again. error is set when reading failed (it is tried again next start).
+    """
+
+    __tablename__ = "holiday_sources"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    file_name: Mapped[str] = mapped_column(String(200), unique=True)
+    sha256: Mapped[str] = mapped_column(String(64))
+    year: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    holidays_found: Mapped[int] = mapped_column(Integer, default=0)
+    error: Mapped[str] = mapped_column(Text, default="")
+    read_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
 
 class InviteBatch(Base):
@@ -314,29 +350,11 @@ class InviteDelivery(Base):
     sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
-class ScheduleRules(Base):
-    """When interviews may be booked (Settings page): length, gap, hours and working days.
-
-    One row (id 1). Empty means "use .env" (INTERVIEW_MINUTES, INTERVIEW_GAP_MINUTES,
-    INTERVIEW_WINDOWS, WORK_DAYS), so a fresh install works before anyone opens Settings.
-    """
-
-    __tablename__ = "schedule_rules"
-
-    id: Mapped[int] = mapped_column(primary_key=True)
-    interview_minutes: Mapped[int] = mapped_column(Integer)
-    gap_minutes: Mapped[int] = mapped_column(Integer)
-    windows: Mapped[str] = mapped_column(String(200))  # "09:00-12:00,14:00-17:00"
-    work_days: Mapped[str] = mapped_column(String(60))  # "Mon,Tue,Wed,Thu,Fri"
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
-
-
 class HolidayChunk(Base):
-    """One piece of an uploaded holiday calendar PDF, with its embedding (RAG, like policy_chunks).
+    """One piece of a holiday calendar PDF, with its embedding (RAG, like policy_chunks).
 
-    Used two ways: the most relevant pieces are given to the AI to list the holidays, and they
-    answer questions in the "Ask about holidays" box. The planner never reads these: it only
-    uses the holiday list a person checked and saved.
+    The most relevant pieces are given to the AI to list the holidays. The planner never reads
+    these: it only uses the saved holiday list.
     """
 
     __tablename__ = "holiday_chunks"
@@ -346,3 +364,25 @@ class HolidayChunk(Base):
     text: Mapped[str] = mapped_column(Text)
     embedding = mapped_column(Vector(384))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+
+class InterviewEvaluation(Base):
+    """The Evaluation Agent's analysis of one interview's answers (Module 9).
+
+    One row per interview. Running it again replaces the result. The result is kept as JSON:
+    the transcript turns it used, the question-answer pairs with their scores and evidence, and
+    the requirement coverage, so Module 10 can read the whole analysis in one place.
+    """
+
+    __tablename__ = "interview_evaluations"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    session_id: Mapped[int] = mapped_column(ForeignKey("interview_sessions.id", ondelete="CASCADE"), unique=True)
+    status: Mapped[str] = mapped_column(String(20), default="running")  # running | done | failed
+    step: Mapped[str] = mapped_column(String(200), default="")  # what the agent is doing now, for the screen
+    error: Mapped[str] = mapped_column(Text, default="")
+    result: Mapped[dict] = mapped_column(JSON, default=dict)  # {"turns", "pairs", "coverage", "summary"}
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    seconds: Mapped[float | None] = mapped_column(Float)

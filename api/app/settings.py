@@ -45,6 +45,7 @@ class Settings(BaseSettings):
 
     # Screening agent (Module 5): leave empty to use LLM_MODEL
     screening_model: str = ""
+    evaluation_model: str = ""
 
         # LiveKit video server
     livekit_api_key: str = ""
@@ -56,8 +57,9 @@ class Settings(BaseSettings):
     join_early_minutes: int = 15  # a candidate can join this long before the start time
     invite_hours_after: int = 24  # an invite link stops working this long after the start time
 
-    # Inviting many candidates at once: the planner books slots only inside these hours, on these
+    # The interview schedule (fixed, not changed in the app): slots only inside these hours, on these
     # days, with a gap after each interview. Times are in the interview time zone (below).
+    # Public holidays are read from the PDF in knowledge/holidays (holiday_calendar.py).
     interview_windows: str = "09:00-12:00,14:00-17:00"
     interview_gap_minutes: int = 15
     work_days: str = "Mon,Tue,Wed,Thu,Fri"  # Saturday and Sunday off
@@ -76,7 +78,7 @@ class Settings(BaseSettings):
     # Google Calendar: every scheduled interview is put on this calendar of the Google account the
     # refresh token belongs to. "primary" = that account's own calendar. Empty = switched off.
     google_calendar_id: str = ""
-    interview_minutes: int = 60  # how long the calendar entry and the invitation say the interview lasts
+    interview_minutes: int = 60  # every interview lasts 1 hour
 
     # Older names for the same Gmail login, still read so an existing .env keeps working.
     gmail_user: str = ""

@@ -819,6 +819,8 @@ input[type="radio"] {
 .switch,
 .tabs {
   display: inline-flex;
+  max-width: 100%;
+  overflow-x: auto; /* on a phone, a long row of tabs scrolls inside itself instead of widening the page */
   gap: 4px;
   padding: 4px;
   border-radius: var(--pill);
@@ -3142,4 +3144,142 @@ input.tick {
   gap: 8px;
   justify-content: flex-end;
   flex-wrap: wrap;
+}
+
+/* ---------------------------------------------------------------- invite pop-up (after screening) */
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgba(7, 8, 11, 0.55);
+  animation: fade-in 0.18s var(--ease);
+}
+
+.modal {
+  width: min(760px, 100%);
+  max-height: calc(100vh - 32px);
+  overflow: auto;
+  border-radius: var(--radius);
+  padding: 22px 24px;
+  background: rgba(28, 30, 37, 0.9);
+}
+
+.modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+
+.modal-head h2 {
+  margin: 0;
+}
+
+.modal-table {
+  max-height: 320px;
+  overflow: auto;
+  margin: 10px 0 16px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius-s);
+}
+
+.modal-table table {
+  width: 100%;
+}
+
+.modal-table tr.chosen td {
+  background: var(--amber-wash);
+}
+
+.modal-table tr.chosen td:first-child {
+  box-shadow: inset 3px 0 0 var(--amber);
+}
+
+.invite-inputs {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  gap: 12px;
+  align-items: end;
+  margin-bottom: 8px;
+}
+
+.invite-inputs .field {
+  margin: 0;
+}
+
+.delivery-list {
+  list-style: none;
+  margin: 12px 0 16px;
+  padding: 0;
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius-s);
+}
+
+.delivery-list li {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr 1fr;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 14px;
+  border-top: 1px solid var(--line-2);
+}
+
+.delivery-list li:first-child {
+  border-top: 0;
+}
+
+/* Who took part in an interview: just the names. */
+.people-list {
+  margin: 0;
+  padding-left: 18px;
+  line-height: 1.8;
+}
+
+/* The company part of the first sign-up. */
+.signup-company {
+  margin: 6px 0 4px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line-2);
+}
+
+.signup-company h3 {
+  margin: 0 0 4px;
+  font-size: 15px;
+}
+
+.signup-company p {
+  margin: 0 0 14px;
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (max-width: 640px) {
+  .tabs button {
+    flex: 0 0 auto;
+  }
+
+  .modal {
+    padding: 18px 16px;
+  }
+
+  .invite-inputs {
+    grid-template-columns: 1fr;
+  }
+
+  .delivery-list li {
+    grid-template-columns: 1fr;
+    gap: 2px;
+  }
 }

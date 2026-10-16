@@ -13,7 +13,8 @@ type Mode = "login" | "signup";
 // the page being swapped underneath you.
 //
 // Sign-up is only offered when the company has set a code, and it asks for that code: this tool
-// holds people's CVs, so the door stays shut by default.
+// holds people's CVs, so the door stays shut by default. The very first sign-up also asks for the
+// company's name and contact e-mail, which every invitation e-mail uses.
 export default function LoginPage({ startOn = "login" }: { startOn?: Mode }) {
   const navigate = useNavigate();
   const [mode, setMode] = useState<Mode>(startOn);
@@ -23,6 +24,7 @@ export default function LoginPage({ startOn = "login" }: { startOn?: Mode }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [companyCode, setCompanyCode] = useState("");
+  const [company, setCompany] = useState({ company_name: "", contact_email: "" });
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -49,7 +51,7 @@ export default function LoginPage({ startOn = "login" }: { startOn?: Mode }) {
       const body =
         mode === "login"
           ? { email, password }
-          : { full_name: fullName, email, password, company_code: companyCode };
+          : { full_name: fullName, email, password, company_code: companyCode, ...(askCompany ? company : {}) };
       const answer = await api<{ access_token: string }>(path, {
         method: "POST",
         body: JSON.stringify(body),
@@ -64,6 +66,9 @@ export default function LoginPage({ startOn = "login" }: { startOn?: Mode }) {
   }
 
   const domains = options?.email_domains ?? [];
+  const askCompany = mode === "signup" && options?.company_setup_needed === true;
+  const setField = (key: keyof typeof company) => (event: { target: { value: string } }) =>
+    setCompany((old) => ({ ...old, [key]: event.target.value }));
 
   return (
     <PublicFrame full footer={false}>
@@ -83,7 +88,7 @@ export default function LoginPage({ startOn = "login" }: { startOn?: Mode }) {
           <h2>{mode === "login" ? "Welcome back" : "Create your account"}</h2>
           <p className="gate-sub">
             {mode === "login"
-              ? `Log in to ${options?.company ?? "TalentSight"}.`
+              ? "Log in to TalentSight."
               : "For people on the hiring team."}
           </p>
 
@@ -149,6 +154,29 @@ export default function LoginPage({ startOn = "login" }: { startOn?: Mode }) {
                 required
               />
               <span className="hint">Your administrator has this code.</span>
+            </div>
+          )}
+
+          {askCompany && (
+            <div className="signup-company">
+              <h3>Your company</h3>
+              <p className="muted small">Asked only once, of the first person who signs up.</p>
+              <div className="field">
+                <label htmlFor="company_name">Company name</label>
+                <input id="company_name" value={company.company_name} onChange={setField("company_name")} required maxLength={120} />
+              </div>
+              <div className="field">
+                <label htmlFor="contact_email">Contact e-mail</label>
+                <input
+                  id="contact_email"
+                  type="email"
+                  value={company.contact_email}
+                  onChange={setField("contact_email")}
+                  placeholder="e.g. hr@yourcompany.com"
+                  required
+                />
+                <span className="hint">Candidates can reply to this address.</span>
+              </div>
             </div>
           )}
 

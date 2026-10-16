@@ -275,7 +275,7 @@ export type Overview = {
 
 export type Me = { id: number; email: string; name: string; company: string; role: string };
 
-export type SignInOptions = { company: string; signup_open: boolean; email_domains: string[] };
+export type SignInOptions = { signup_open: boolean; email_domains: string[]; company_setup_needed: boolean };
 
 // ---------- Kept "Write a job with AI" chats ----------
 
@@ -306,7 +306,7 @@ export type SetupCheck = {
 // The "new CVs" notice on the job page: CVs that arrived since this person's previous visit.
 export type JobVisit = { new_cvs: number; since: string | null };
 
-// Settings page: the company that uses TalentSight (name and contact in every e-mail).
+// The company that uses TalentSight (name and contact in every e-mail), set at the first sign-up.
 export type CompanySettings = {
   company_name: string;
   sender_name: string;
@@ -316,44 +316,7 @@ export type CompanySettings = {
   from_line: string; // exactly what candidates see in "From"
 };
 
-export type EmailPreview = { subject: string; from: string; reply_to: string; html: string; wording: "ai" | "template" };
-
-// Days with no interviews.
-export type Holiday = { id: number; day: string; name: string; source: "pdf" | "manual" };
-export type ProposedHoliday = { day: string; name: string; kind: "public" | "optional" };
-// What reading a holiday PDF gives back: how it was cut up for RAG, and the holidays the AI found.
-export type HolidayReadResult = { source: string; chunks_stored: number; chunks_used: number; holidays: ProposedHoliday[] };
-export type HolidayAnswer = { answer: string; sources: { source: string; text: string }[] };
-export type HolidayDocument = { source: string; chunks: number };
-
-// When interviews may be booked (Settings page).
-export type ScheduleRules = {
-  interview_minutes: number;
-  gap_minutes: number;
-  windows: { start: string; end: string }[];
-  work_days: string[];
-  slots_per_day: number;
-};
-
-// Inviting the top candidates of a job at once.
-export type PlanRules = {
-  windows: string[];
-  interview_minutes: number;
-  gap_minutes: number;
-  work_days: string[];
-  slots_per_day: number;
-  holidays_ahead: number;
-};
-
-export type InvitePlan = {
-  ranked_total: number;
-  asked: number;
-  slots: { candidate_id: number; rank: number; name: string; email: string; overall: number | null; scheduled_at: string; email_ok: boolean }[];
-  skipped: { candidate_id: number; rank: number; name: string; reason: string }[];
-  not_placed: number;
-  rules: Omit<PlanRules, "holidays_ahead">;
-};
-
+// Inviting the top candidates of a job at once (the pop-up after screening).
 export type InviteBatch = {
   id: number;
   created_at: string;
@@ -373,4 +336,70 @@ export type InviteBatch = {
     error: string;
     calendar_error: string;
   }[];
+};
+
+// Shown in the invite pop-up: the holidays the planner skips, or why the holiday calendar was not read.
+export type HolidayStatus = { holidays_ahead: number; calendar_problem: string };
+
+export type InviteTopResult = {
+  batch: InviteBatch | null; // null when nobody could be invited
+  skipped: { candidate_id: number; rank: number; name: string; reason: string }[];
+  not_placed: number;
+};
+
+
+// ---------- The answer analysis of an interview (Module 9) ----------
+
+export type QaDimensionKey = "relevance" | "accuracy" | "completeness" | "articulation";
+
+export type QaTurn = { n: number; speaker: Speaker; text: string; start_ms: number; end_ms: number };
+
+export type QaPair = {
+  id: number;
+  question: string;
+  asked: string; // the interviewer's own words
+  turns: number[]; // every turn of this exchange, follow-ups included
+  answer_turns: number[];
+  part: number;
+  parts: number; // 2 or more = one part of a multi-part question
+  follow_ups: string[];
+  start_ms: number;
+  kind: "job_related" | "small_talk";
+  requirements: number[]; // numbers in the coverage list
+  scores: Record<QaDimensionKey, { score: number; justification: string }> | null;
+  overall: number | null;
+  evidence: { turn: number; start_ms: number; quote: string } | null;
+  references: { skill: string; heading: string; url: string }[];
+};
+
+export type QaCoverage = {
+  number: number;
+  requirement: string;
+  kind: string;
+  mandatory: boolean;
+  pairs: number[];
+  best_score: number | null;
+  status: "explored" | "weak" | "not_explored";
+};
+
+export type QaEvaluation = {
+  session_id: number;
+  status: "running" | "done" | "failed";
+  step: string;
+  error: string;
+  started_at: string;
+  finished_at: string | null;
+  seconds: number | null;
+  turns: QaTurn[];
+  pairs: QaPair[];
+  coverage: QaCoverage[];
+  summary: {
+    pairs: number;
+    job_related: number;
+    small_talk: number;
+    scored: number;
+    average: number | null;
+    not_explored: number;
+    weak: number;
+  };
 };

@@ -1,47 +1,31 @@
-"""The interview schedule the hiring team chose on the Settings page: length, gap, hours, days.
-
-Stored in the schedule_rules table (one row). Until someone saves it, the values in .env apply.
-Every interview also keeps its own length (interview_sessions.duration_minutes), so changing the
-setting later never moves an interview that is already booked.
+"""The interview schedule. It is fixed, not chosen in the app:
+- every interview lasts 1 hour (INTERVIEW_MINUTES, 60);
+- interviews are booked 09:00-12:00 and 14:00-17:00 (INTERVIEW_WINDOWS), with 15 minutes between them
+  (INTERVIEW_GAP_MINUTES);
+- Monday to Friday only: Saturday and Sunday are the weekend (WORK_DAYS).
+These live in settings.py (and can be changed in .env by whoever runs the server).
+Every interview also keeps its own length (interview_sessions.duration_minutes), so an interview booked
+earlier with another length keeps it.
 """
 
 from sqlalchemy.orm import Session
 
-from app.db import SessionLocal
-from app.models import InterviewSession, ScheduleRules
-from app.planner import Rules, make_rules, rules_from_settings
+from app.models import InterviewSession
+from app.planner import Rules, rules_from_settings
+from app.settings import settings
 
 
 def current(db: Session | None = None) -> Rules:
-    """The rules in force now. Raises planner.PlanError if what is stored cannot be used."""
-    if db is None:
-        with SessionLocal() as own:
-            return current(own)
-    row = db.get(ScheduleRules, 1)
-    if row is None:
-        return rules_from_settings()
-    return make_rules(row.interview_minutes, row.gap_minutes, row.windows, row.work_days)
-
-
-def save(db: Session, minutes: int, gap: int, windows: str, days: str) -> Rules:
-    """Checks and stores new rules. Raises planner.PlanError with a readable message."""
-    rules = make_rules(minutes, gap, windows, days)  # check first: nothing wrong is ever stored
-    row = db.get(ScheduleRules, 1) or ScheduleRules(id=1)
-    row.interview_minutes = minutes
-    row.gap_minutes = gap
-    row.windows = rules.windows_text()
-    row.work_days = rules.days_text()
-    db.add(row)
-    db.commit()
-    return rules
+    """The rules in force. db is not needed any more; it is accepted so callers stay simple."""
+    return rules_from_settings()
 
 
 def default_minutes(db: Session | None = None) -> int:
-    return int(current(db).length.total_seconds() // 60)
+    return settings.interview_minutes
 
 
 def minutes_of(session: InterviewSession, default: int | None = None) -> int:
-    """How long this interview is booked for. Older interviews without a length use the setting."""
+    """How long this interview is booked for. Older interviews without a length use the default."""
     if session.duration_minutes:
         return session.duration_minutes
     return default if default is not None else default_minutes()

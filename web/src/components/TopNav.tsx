@@ -12,7 +12,6 @@ const SECTIONS = [
   { to: "/jobs", label: "Jobs" },
   { to: "/candidates", label: "Candidates" },
   { to: "/interviews", label: "Interviews" },
-  { to: "/jd-chat", label: "Write with AI" },
 ];
 
 // The floating bar at the top of every working page: one glass capsule holding the brand,
@@ -117,10 +116,6 @@ export default function TopNav() {
                 <strong>{me?.name}</strong>
                 <span>{me?.email}</span>
               </div>
-              <Link className="menu-item" to="/settings" onClick={() => setOpenMenu(false)}>
-                <Icon name="settings" />
-                Settings
-              </Link>
               <button className="menu-item" type="button" onClick={logOut}>
                 <Icon name="logout" />
                 Log out

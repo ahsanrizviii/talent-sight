@@ -1,10 +1,12 @@
-"""Tests for inviting the top candidates of a job at once (plan, then send in the background)."""
+"""Tests for inviting the top candidates of a job at once: HR gives the first interview day and how
+many to invite; everyone gets a free 1-hour slot and an e-mail, sent in the background."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 
 import pytest
 from sqlalchemy import select
 
+from app import holiday_calendar
 from app.db import SessionLocal
 from app.models import Candidate, CandidateScore, InterviewSession, JobProfile
 from app.routers import invite_batches
@@ -12,6 +14,8 @@ from app.settings import settings
 
 from tests.test_interviews import fake_video_server  # noqa: F401
 from tests.test_invite_mail import FakeSMTP, fake_mail_server  # noqa: F401
+
+ZONE = timezone(timedelta(minutes=settings.interview_utc_offset_minutes))
 
 
 @pytest.fixture(autouse=True)
@@ -39,88 +43,62 @@ def make_job_with_ranked(count: int, without_email: tuple[int, ...] = ()) -> tup
         return job.id, ids
 
 
-def next_monday() -> str:
+def next_monday() -> date:
     today = datetime.now(timezone.utc).date()
-    return (today + timedelta(days=(7 - today.weekday()) or 7)).isoformat()
+    return today + timedelta(days=(7 - today.weekday()) or 7)
 
 
-def plan(client, headers, job_id, **body):
-    return client.post(f"/api/jobs/{job_id}/invite-plan", json={"start_date": next_monday(), **body}, headers=headers)
+def invite(client, headers, job_id, top: int, start: date | None = None):
+    return client.post(
+        f"/api/jobs/{job_id}/invite-top", json={"top": top, "start_date": (start or next_monday()).isoformat()}, headers=headers
+    )
 
 
-def test_top_n_gets_the_best_ranked_in_order(client, auth_headers):
+def booked() -> list[InterviewSession]:
+    with SessionLocal() as db:
+        return list(db.scalars(select(InterviewSession).order_by(InterviewSession.scheduled_at)))
+
+
+def test_the_top_n_are_invited_in_ranking_order(client, auth_headers):
     job, ids = make_job_with_ranked(6)
-    body = plan(client, auth_headers, job, top=3).json()
-    assert body["ranked_total"] == 6 and body["asked"] == 3
-    assert [s["candidate_id"] for s in body["slots"]] == ids[:3]
-    times = [s["scheduled_at"] for s in body["slots"]]
-    assert times == sorted(times)  # the best candidate gets the earliest slot
-
-
-def test_hand_picked_people_are_planned_in_my_order(client, auth_headers):
-    """"I want this person first": the order HR gives decides who gets the earliest slot."""
-    job, ids = make_job_with_ranked(5)
-    body = plan(client, auth_headers, job, candidate_ids=[ids[3], ids[0], ids[4]]).json()
-    assert [s["candidate_id"] for s in body["slots"]] == [ids[3], ids[0], ids[4]]
-    times = [s["scheduled_at"] for s in body["slots"]]
-    assert times == sorted(times)
-
-
-def test_choose_one_way_only(client, auth_headers):
-    job, ids = make_job_with_ranked(3)
-    assert plan(client, auth_headers, job).status_code == 422
-    assert plan(client, auth_headers, job, top=2, candidate_ids=[ids[0]]).status_code == 422
-
-
-def test_only_screened_people_of_this_job_can_be_picked(client, auth_headers):
-    job, ids = make_job_with_ranked(2)
-    other_job, other_ids = make_job_with_ranked(1)
-    assert plan(client, auth_headers, job, candidate_ids=[other_ids[0]]).status_code == 422
-    assert plan(client, auth_headers, job, candidate_ids=[ids[0], ids[0]]).status_code == 422
-
-
-def test_a_batch_can_have_its_own_interview_length(client, auth_headers):
-    job, ids = make_job_with_ranked(3)
-    body = plan(client, auth_headers, job, top=3, duration_minutes=45).json()
-    assert body["rules"]["interview_minutes"] == 45
-    times = [datetime.fromisoformat(s["scheduled_at"]) for s in body["slots"]]
-    assert times[1] - times[0] == timedelta(minutes=45 + 15)  # 45 minutes + the 15-minute gap
-    items = [{"candidate_id": s["candidate_id"], "scheduled_at": s["scheduled_at"]} for s in body["slots"]]
-    client.post(f"/api/jobs/{job}/invite-batches", json={"items": items, "duration_minutes": 45}, headers=auth_headers)
-    with SessionLocal() as db:
-        assert {s.duration_minutes for s in db.scalars(select(InterviewSession))} == {45}
-    assert "Duration: 45 minutes" in FakeSMTP.sent[0].get_body(("plain",)).get_content()
-
-
-def test_planning_saves_nothing(client, auth_headers):
-    job, _ = make_job_with_ranked(3)
-    plan(client, auth_headers, job, top=3)
-    with SessionLocal() as db:
-        assert db.scalars(select(InterviewSession)).all() == []
-    assert FakeSMTP.sent == []
-
-
-def test_sending_books_everyone_and_emails_them(client, auth_headers):
-    job, ids = make_job_with_ranked(4)
-    slots = plan(client, auth_headers, job, top=4).json()["slots"]
-    items = [{"candidate_id": s["candidate_id"], "scheduled_at": s["scheduled_at"]} for s in slots]
-    response = client.post(f"/api/jobs/{job}/invite-batches", json={"items": items}, headers=auth_headers)
+    response = invite(client, auth_headers, job, 3)
     assert response.status_code == 201
-    assert len(FakeSMTP.sent) == 4  # the background task ran
-    assert sorted(m["To"] for m in FakeSMTP.sent) == sorted(f"person{i}@example.com" for i in range(1, 5))
-    latest = client.get(f"/api/jobs/{job}/invite-batches/latest", headers=auth_headers).json()
-    assert latest["total"] == 4 and latest["sent"] == 4 and latest["failed"] == 0
+    sessions = booked()
+    assert [s.candidate_id for s in sessions] == ids[:3]  # the best-ranked gets the earliest slot
+    assert len(FakeSMTP.sent) == 3  # the background task ran
+    assert sorted(m["To"] for m in FakeSMTP.sent) == ["person1@example.com", "person2@example.com", "person3@example.com"]
+    assert len({s.invite_token for s in sessions}) == 3  # everyone has their own private link
+
+
+def test_every_interview_is_one_hour_inside_the_hours_and_15_minutes_apart(client, auth_headers):
+    job, _ = make_job_with_ranked(5)
+    invite(client, auth_headers, job, 5)
+    sessions = booked()
+    assert {s.duration_minutes for s in sessions} == {60}
+    local = [s.scheduled_at.astimezone(ZONE) for s in sessions]
+    assert [f"{t:%a %H:%M}" for t in local] == ["Mon 09:00", "Mon 10:15", "Mon 14:00", "Mon 15:15", "Tue 09:00"]
+    assert "Duration: 60 minutes" in FakeSMTP.sent[0].get_body(("plain",)).get_content()
+
+
+def test_weekends_are_skipped(client, auth_headers):
+    job, _ = make_job_with_ranked(2)
+    saturday = next_monday() - timedelta(days=2)
+    invite(client, auth_headers, job, 2, start=saturday)
+    days = {s.scheduled_at.astimezone(ZONE).strftime("%a") for s in booked()}
+    assert days == {"Mon"}
+
+
+def test_holidays_from_the_calendar_are_skipped(client, auth_headers):
+    job, _ = make_job_with_ranked(1)
     with SessionLocal() as db:
-        tokens = {s.invite_token for s in db.scalars(select(InterviewSession))}
-    assert len(tokens) == 4  # everyone has their own private link
+        holiday_calendar.save_many(db, [(next_monday(), "Test holiday")], source="pdf")
+    invite(client, auth_headers, job, 1)
+    assert booked()[0].scheduled_at.astimezone(ZONE).date() == next_monday() + timedelta(days=1)
 
 
 def test_a_missing_address_fails_that_one_only(client, auth_headers):
-    job, ids = make_job_with_ranked(3, without_email=(2,))
-    slots = plan(client, auth_headers, job, top=3).json()["slots"]
-    assert [s["email_ok"] for s in slots] == [True, False, True]
-    items = [{"candidate_id": s["candidate_id"], "scheduled_at": s["scheduled_at"]} for s in slots]
-    client.post(f"/api/jobs/{job}/invite-batches", json={"items": items}, headers=auth_headers)
+    job, _ = make_job_with_ranked(3, without_email=(2,))
+    invite(client, auth_headers, job, 3)
     latest = client.get(f"/api/jobs/{job}/invite-batches/latest", headers=auth_headers).json()
     assert latest["sent"] == 2 and latest["failed"] == 1
     failed = next(d for d in latest["deliveries"] if d["status"] == "failed")
@@ -129,64 +107,43 @@ def test_a_missing_address_fails_that_one_only(client, auth_headers):
 
 def test_already_invited_candidates_are_skipped(client, auth_headers):
     job, ids = make_job_with_ranked(3)
-    slots = plan(client, auth_headers, job, top=1).json()["slots"]
-    client.post(f"/api/jobs/{job}/invite-batches", json={"items": [{"candidate_id": slots[0]["candidate_id"], "scheduled_at": slots[0]["scheduled_at"]}]}, headers=auth_headers)
-    again = plan(client, auth_headers, job, top=3).json()
-    assert [s["candidate_id"] for s in again["slots"]] == ids[1:]
+    invite(client, auth_headers, job, 1)
+    again = invite(client, auth_headers, job, 3).json()
     assert again["skipped"][0]["candidate_id"] == ids[0]
     assert again["skipped"][0]["reason"] == "Already has an interview booked."
-    assert again["slots"][0]["scheduled_at"] != slots[0]["scheduled_at"]  # no clash with the first one
+    assert [d["candidate_id"] for d in again["batch"]["deliveries"]] == ids[1:]
+    starts = [s.scheduled_at for s in booked()]
+    assert len(starts) == len(set(starts))  # no clash with the first one
 
 
-def test_an_out_of_date_plan_sends_nothing(client, auth_headers):
-    job, ids = make_job_with_ranked(2)
-    slots = plan(client, auth_headers, job, top=2).json()["slots"]
-    same_time = [{"candidate_id": s["candidate_id"], "scheduled_at": slots[0]["scheduled_at"]} for s in slots]
-    response = client.post(f"/api/jobs/{job}/invite-batches", json={"items": same_time}, headers=auth_headers)
-    assert response.status_code == 409
-    assert "clashes" in response.json()["detail"]
-    with SessionLocal() as db:
-        assert db.scalars(select(InterviewSession)).all() == []
-    assert FakeSMTP.sent == []
-
-
-def test_a_weekend_time_is_refused(client, auth_headers):
-    job, ids = make_job_with_ranked(1)
-    saturday = datetime.fromisoformat(next_monday()) + timedelta(days=5, hours=4)  # 10:00 in Dhaka
-    item = {"candidate_id": ids[0], "scheduled_at": saturday.replace(tzinfo=timezone.utc).isoformat()}
-    response = client.post(f"/api/jobs/{job}/invite-batches", json={"items": [item]}, headers=auth_headers)
-    assert response.status_code == 409
-    assert "not a working day" in response.json()["detail"]
-
-
-def test_holidays_are_avoided(client, auth_headers):
+def test_a_day_in_the_past_is_refused(client, auth_headers):
     job, _ = make_job_with_ranked(1)
-    client.post("/api/holidays", json={"holidays": [{"day": next_monday(), "name": "Test holiday"}]}, headers=auth_headers)
-    slot = plan(client, auth_headers, job, top=1).json()["slots"][0]
-    local = datetime.fromisoformat(slot["scheduled_at"]).astimezone(timezone(timedelta(minutes=settings.interview_utc_offset_minutes)))
-    assert local.date().isoformat() != next_monday()
+    yesterday = datetime.now(ZONE).date() - timedelta(days=1)
+    response = invite(client, auth_headers, job, 1, start=yesterday)
+    assert response.status_code == 422
+    assert booked() == []
+
+
+def test_a_job_with_nobody_screened_says_so(client, auth_headers):
+    with SessionLocal() as db:
+        job = JobProfile(title="Empty")
+        db.add(job)
+        db.commit()
+        job_id = job.id
+    response = invite(client, auth_headers, job_id, 3)
+    assert response.status_code == 409
+    assert "passed screening" in response.json()["detail"]
 
 
 def test_a_failed_email_can_be_tried_again(client, auth_headers):
     job, _ = make_job_with_ranked(2)
-    slots = plan(client, auth_headers, job, top=2).json()["slots"]
-    items = [{"candidate_id": s["candidate_id"], "scheduled_at": s["scheduled_at"]} for s in slots]
     FakeSMTP.fail = True
-    batch = client.post(f"/api/jobs/{job}/invite-batches", json={"items": items}, headers=auth_headers).json()
+    batch = invite(client, auth_headers, job, 2).json()["batch"]
     assert client.get(f"/api/jobs/{job}/invite-batches/latest", headers=auth_headers).json()["failed"] == 2
     FakeSMTP.fail = False
     client.post(f"/api/jobs/{job}/invite-batches/{batch['id']}/retry", headers=auth_headers)
     assert client.get(f"/api/jobs/{job}/invite-batches/latest", headers=auth_headers).json()["sent"] == 2
 
 
-def test_the_rules_are_shown(client, auth_headers):
-    job, _ = make_job_with_ranked(1)
-    rules = client.get(f"/api/jobs/{job}/invite-plan/rules", headers=auth_headers).json()
-    assert rules["windows"] == ["09:00-12:00", "14:00-17:00"]
-    assert rules["work_days"] == ["Mon", "Tue", "Wed", "Thu", "Fri"]
-    assert rules["slots_per_day"] == 4
-
-
 def test_inviting_needs_a_login(client):
-    assert client.post("/api/jobs/1/invite-plan", json={"top": 1}).status_code == 401
-    assert client.post("/api/jobs/1/invite-batches", json={"items": []}).status_code == 401
+    assert client.post("/api/jobs/1/invite-top", json={"top": 1, "start_date": "2030-01-07"}).status_code == 401

@@ -1,7 +1,7 @@
 import type { Interview } from "../types";
 
 // The top of the interview card: what state the interview is in and, once it has run,
-// who was there and for how long. Replaces the raw "joined ..., left ..." list.
+// when it ran, how long it took and who took part.
 
 type Visit = Interview["participants"][number];
 
@@ -15,48 +15,20 @@ function minutesText(seconds: number): string {
   return `${Math.floor(minutes / 60)} h${rest ? ` ${rest} min` : ""}`;
 }
 
-// One line per person: how many times they came in, from when to when, and a small bar
-// that shows the moments they were in the room.
+// Who took part: just the names. Someone who never came in is marked so.
 function Attendance({ interview }: { interview: Interview }) {
-  const visits = interview.participants;
-  const end = interview.ended_at ?? new Date().toISOString();
-  const times = visits.flatMap((v) => [Date.parse(v.joined_at), Date.parse(v.left_at ?? end)]);
-  const from = Math.min(...times);
-  const span = Math.max(1, Math.max(...times) - from); // never divide by zero
-
   const people: { label: string; role: Visit["role"] }[] = [
     { label: interview.candidate_name || "Candidate", role: "candidate" },
     { label: "Interviewer", role: "interviewer" },
   ];
-
   return (
-    <ul className="attendance">
+    <ul className="people-list">
       {people.map(({ label, role }) => {
-        const mine = visits.filter((v) => v.role === role);
-        if (mine.length === 0) {
-          return (
-            <li key={role}>
-              <span className="who">{label}</span>
-              <span className="when muted">Did not join</span>
-            </li>
-          );
-        }
-        const first = mine[0].joined_at;
-        const last = mine[mine.length - 1].left_at ?? end;
+        const came = interview.participants.some((v) => v.role === role);
         return (
-          <li key={role}>
-            <span className="who">{label}</span>
-            <span className="when">
-              {clock(first)} – {clock(last)}
-              {mine.length > 1 && <span className="muted"> · came in {mine.length} times</span>}
-            </span>
-            <span className="presence" aria-hidden="true">
-              {mine.map((v, i) => {
-                const left = ((Date.parse(v.joined_at) - from) / span) * 100;
-                const width = ((Date.parse(v.left_at ?? end) - Date.parse(v.joined_at)) / span) * 100;
-                return <span key={i} className={`stay ${role}`} style={{ left: `${left}%`, width: `${Math.max(width, 2)}%` }} />;
-              })}
-            </span>
+          <li key={role} className={came ? "" : "muted"}>
+            {label}
+            {!came && " (did not join)"}
           </li>
         );
       })}

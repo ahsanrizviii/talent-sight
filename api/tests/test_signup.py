@@ -14,6 +14,9 @@ NEW_ACCOUNT = {
     "email": "nadia.hasan@bjitgroup.com",
     "password": "a-good-password",
     "company_code": "bjit-hiring-2026",
+    # The first sign-up also sets up the company (test_company_setup.py).
+    "company_name": "BJIT",
+    "contact_email": "hr@bjitgroup.com",
 }
 
 
@@ -26,7 +29,12 @@ def signup_open(monkeypatch):
 def test_the_login_page_is_told_whether_sign_up_is_open(client, signup_open):
     options = client.get("/api/auth/options").json()
     assert options["signup_open"] is True
-    assert options["company"] == settings.company_name
+
+
+def test_the_public_options_never_name_the_company(client, signup_open):
+    options = client.get("/api/auth/options").json()
+    assert "company" not in options
+    assert settings.company_name not in str(options)
 
 
 def test_sign_up_is_closed_when_no_company_code_is_set(client, monkeypatch):
