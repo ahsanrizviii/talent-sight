@@ -5,11 +5,10 @@
 
 .assessment h4 {
   margin: 0 0 10px;
-  font-size: 13px;
-  font-weight: 500;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--ink-3);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--ink-2);
 }
 
 .as-block {
@@ -31,7 +30,7 @@
   height: 14px;
   border-radius: 50%;
   border: 2px solid var(--line);
-  border-top-color: var(--amber);
+  border-top-color: var(--accent);
   animation: as-turn 0.9s linear infinite;
 }
 
@@ -54,19 +53,22 @@
   padding: 16px 18px;
   border-radius: var(--radius-s);
   border: 1px solid var(--line);
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(255, 255, 255, 0.6);
 }
 
 .as-verdict strong {
   display: block;
-  font-size: 19px;
-  font-weight: 500;
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
 }
 
 .as-verdict span {
   display: block;
   margin-top: 6px;
-  font-size: 30px;
+  font-size: 32px;
+  font-weight: 600;
+  letter-spacing: -0.035em;
   font-variant-numeric: tabular-nums;
 }
 
@@ -76,19 +78,22 @@
 }
 
 .as-verdict.pass {
-  border-color: rgba(140, 199, 162, 0.4);
+  border-color: var(--met-line);
+  background: rgba(242, 250, 245, 0.75);
 }
 .as-verdict.pass strong {
   color: var(--met);
 }
 .as-verdict.warn {
-  border-color: rgba(229, 183, 120, 0.4);
+  border-color: var(--partly-line);
+  background: rgba(253, 247, 236, 0.78);
 }
 .as-verdict.warn strong {
   color: var(--partly);
 }
 .as-verdict.stop {
-  border-color: rgba(224, 147, 143, 0.4);
+  border-color: var(--unmet-line);
+  background: rgba(253, 243, 242, 0.78);
 }
 .as-verdict.stop strong {
   color: var(--unmet);
@@ -126,7 +131,7 @@
 .as-item {
   padding: 9px 12px;
   border-left: 2px solid var(--line);
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(255, 255, 255, 0.55);
   border-radius: 0 var(--radius-s) var(--radius-s) 0;
   font-size: 14px;
   line-height: 1.5;
@@ -142,7 +147,7 @@
   border-left-color: var(--partly);
 }
 .as-item.follow {
-  border-left-color: var(--amber);
+  border-left-color: var(--accent);
 }
 
 /* Evidence tags: R and S come from the CV, Q and C from the interview. */
@@ -171,17 +176,17 @@
 }
 
 .as-tag.cv {
-  border-color: rgba(140, 199, 162, 0.35);
+  border-color: var(--met-line);
   color: var(--met);
 }
 
 .as-tag.interview {
-  border-color: var(--amber-line);
-  color: var(--amber);
+  border-color: var(--accent-line);
+  color: var(--accent);
 }
 
 .as-tag:hover {
-  background: rgba(255, 255, 255, 0.08);
+  background: #fff;
 }
 
 .as-table-wrap {
@@ -224,7 +229,7 @@
 }
 
 .as-evidence li.active {
-  background: var(--amber-wash);
+  background: var(--accent-wash);
 }
 
 @media (max-width: 720px) {
@@ -246,8 +251,8 @@
 }
 
 .cmp-pick.on {
-  border-color: var(--amber-line);
-  background: var(--amber-wash);
+  border-color: var(--accent-line);
+  background: var(--accent-wash);
   color: var(--ink);
 }
 
@@ -277,10 +282,9 @@
 
 .cmp-table .cmp-section th {
   padding-top: 18px;
-  font-size: 12px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--ink-3);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink-2);
 }
 
 .cmp-table .bar {
@@ -295,7 +299,7 @@
 }
 
 .cmp-number.best {
-  color: var(--amber);
+  color: var(--accent);
 }
 
 .cmp-req {

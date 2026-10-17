@@ -14,9 +14,11 @@ const SECTIONS = [
   { to: "/interviews", label: "Interviews" },
 ];
 
-// The floating bar at the top of every working page: one glass capsule holding the brand,
-// the sections, search and the account. The dark marker behind the section you are on is a
-// single element that slides, so moving between sections reads as one movement.
+// The bar at the top of every working page, laid out like the welcome page: the sections on the
+// left, the name in the middle, search and the account on the right. It sits straight on the sky
+// and only picks up a pane of frosted glass once the page has scrolled, so cards passing under it
+// never show through the words. The dark marker behind the section you are on is a single
+// element that slides, so moving between sections reads as one movement.
 export default function TopNav() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -24,6 +26,7 @@ export default function TopNav() {
   const [query, setQuery] = useState("");
   const [openMenu, setOpenMenu] = useState(false);
   const [marker, setMarker] = useState({ left: 0, width: 0, ready: false });
+  const [scrolled, setScrolled] = useState(false);
   const bar = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -48,6 +51,14 @@ export default function TopNav() {
     return () => window.removeEventListener("resize", measure);
   }, [location.pathname]);
 
+  // The glass pane appears as soon as the page has moved a little, and goes again at the top.
+  useEffect(() => {
+    const check = () => setScrolled(window.scrollY > 8);
+    check();
+    window.addEventListener("scroll", check, { passive: true });
+    return () => window.removeEventListener("scroll", check);
+  }, []);
+
   useEffect(() => {
     if (!openMenu) return;
     const close = () => setOpenMenu(false);
@@ -66,13 +77,8 @@ export default function TopNav() {
   }
 
   return (
-    <header className="topnav">
-      <div className="navbar glass">
-        <Link to="/" className="brand">
-          <span className="brand-mark" aria-hidden="true" />
-          TalentSight
-        </Link>
-
+    <header className={scrolled ? "topnav scrolled" : "topnav"}>
+      <div className="navbar">
         <nav className="navbar-links" ref={bar} aria-label="Sections">
           <span
             className="navbar-marker"
@@ -86,42 +92,49 @@ export default function TopNav() {
           ))}
         </nav>
 
-        <form className="search" onSubmit={search} role="search">
-          <Icon name="search" />
-          <input
-            type="search"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search candidates"
-            aria-label="Search candidates"
-          />
-        </form>
+        <Link to="/" className="brand">
+          <span className="brand-mark" aria-hidden="true" />
+          TalentSight
+        </Link>
 
-        <div className="account">
-          <button
-            className="account-button"
-            type="button"
-            onClick={(event) => {
-              event.stopPropagation();
-              setOpenMenu(!openMenu);
-            }}
-            aria-expanded={openMenu}
-            aria-label="Your account"
-          >
-            {(me?.name || "?").trim().charAt(0).toUpperCase()}
-          </button>
-          {openMenu && (
-            <div className="menu glass" onClick={(event) => event.stopPropagation()}>
-              <div className="menu-who">
-                <strong>{me?.name}</strong>
-                <span>{me?.email}</span>
+        <div className="navbar-end">
+          <form className="search" onSubmit={search} role="search">
+            <Icon name="search" />
+            <input
+              type="search"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Search candidates"
+              aria-label="Search candidates"
+            />
+          </form>
+
+          <div className="account">
+            <button
+              className="account-button"
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                setOpenMenu(!openMenu);
+              }}
+              aria-expanded={openMenu}
+              aria-label="Your account"
+            >
+              {(me?.name || "?").trim().charAt(0).toUpperCase()}
+            </button>
+            {openMenu && (
+              <div className="menu glass" onClick={(event) => event.stopPropagation()}>
+                <div className="menu-who">
+                  <strong>{me?.name}</strong>
+                  <span>{me?.email}</span>
+                </div>
+                <button className="menu-item" type="button" onClick={logOut}>
+                  <Icon name="logout" />
+                  Log out
+                </button>
               </div>
-              <button className="menu-item" type="button" onClick={logOut}>
-                <Icon name="logout" />
-                Log out
-              </button>
-            </div>
-          )}
+            )}
+          </div>
         </div>
       </div>
     </header>

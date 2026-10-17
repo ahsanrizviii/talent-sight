@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 
 import { api } from "../api";
 import { isLoggedIn } from "../auth";
+import Arrow from "../components/Arrow";
 import Icon from "../components/Icon";
 import PublicFrame from "../components/PublicFrame";
 import type { SignInOptions } from "../types";
@@ -26,8 +27,8 @@ const STEPS = [
   },
 ];
 
-// The first page anyone sees. The whole screen is the dusk scene, with the two things a
-// visitor can do sitting in the middle of it.
+// The first page anyone sees. The whole first screen is the mountain scene, with the headline in
+// the open sky and the two things a visitor can do just under it, as white pills.
 export default function LandingPage() {
   const navigate = useNavigate();
   const [options, setOptions] = useState<SignInOptions | null>(null);
@@ -51,12 +52,14 @@ export default function LandingPage() {
         </p>
 
         <div className="hero-actions">
-          <Link className="button big" to="/login">
+          <Link className="button pill big" to="/login">
             Log in
+            <Arrow />
           </Link>
           {options?.signup_open !== false && (
-            <Link className="button big ghost" to="/signup">
+            <Link className="button pill big" to="/signup">
               Sign up
+              <Arrow />
             </Link>
           )}
         </div>

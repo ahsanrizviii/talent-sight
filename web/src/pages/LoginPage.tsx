@@ -8,7 +8,7 @@ import type { SignInOptions } from "../types";
 
 type Mode = "login" | "signup";
 
-// Logging in and opening an account. The dusk scene fills the screen and the form arrives as a
+// Logging in and opening an account. The mountain scene fills the screen and the form arrives as a
 // glass panel sliding in from the right, so arriving here feels like a step forward rather than
 // the page being swapped underneath you.
 //

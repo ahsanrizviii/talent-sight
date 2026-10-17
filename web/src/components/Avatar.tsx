@@ -1,17 +1,18 @@
 // Someone's initials in a circle.
 // The colour comes from their name, so the same person is always the same colour, on every
-// page, without anyone having to upload a photo. The tones are the dusk ones: sand, clay,
-// amber, slate and moss, kept dark enough for white initials to read on top.
+// page, without anyone having to upload a photo. The tones come from the mountain scene: lake
+// blue, slate, pine, moss, heather and a warm rose for the morning light, all dark enough for
+// white initials to read on top.
 
 const COLOURS = [
-  "#7d6a56",
-  "#8a5f4b",
-  "#6f6c5c",
-  "#4f5a62",
-  "#5d6b5c",
-  "#8b6f4e",
-  "#5a5560",
-  "#746253",
+  "#3f6f9e",
+  "#56677d",
+  "#3d6a5f",
+  "#5d7448",
+  "#6c5f8f",
+  "#9a5f6c",
+  "#2f5d7c",
+  "#7a6656",
 ];
 
 function pick(name: string): string {
