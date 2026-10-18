@@ -10,7 +10,7 @@ so a long list stays fast.
 """
 
 from datetime import datetime, timedelta, timezone
-
+from typing import Literal
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
 from sqlalchemy import func, select
@@ -314,10 +314,10 @@ def all_candidates(
     db: Session = Depends(get_db),
     q: str = Query("", max_length=120, description="name, e-mail, file or job"),
     job_id: int | None = None,
-    stage: str = Query("", description="one of: " + ", ".join(SHORTLISTED)),
-    source: str = Query("", description="upload or google_form"),
+    stage: Literal["", "interview", "interviewed"] = Query(""),
+    source: Literal["", "upload", "google_form"] = Query(""),
     min_score: float | None = Query(None, ge=0, le=100),
-    sort: str = Query("score", description="score, name, added or job"),
+    sort: Literal["score", "name", "added", "job"] = Query("score"),
 ):
     """The shortlist: every candidate who was sent an interview invitation (and those already
     interviewed), across every job, narrowed down however the recruiter wants. Everyone else is
@@ -352,10 +352,10 @@ INTERVIEW_SORTS = {
 @router.get("/interviews", response_model=list[InterviewRow])
 def all_interviews(
     db: Session = Depends(get_db),
-    state: str = Query("all", description="upcoming, live, past or all"),
+    state: Literal["upcoming", "live", "past", "all"] = Query("all"),
     q: str = Query("", max_length=120),
     job_id: int | None = None,
-    sort: str = Query("", description="soonest, latest, candidate, job, score or state; empty = the usual order"),
+    sort: Literal["", "soonest", "latest", "candidate", "job", "score", "state"] = Query("", description="empty = the usual order"),
 ):
     rows = interview_rows(db)
     if q.strip():
@@ -414,7 +414,7 @@ def job_rows(db: Session, status: str = "") -> list[JobRow]:
 
 
 @router.get("/jobs", response_model=list[JobRow])
-def all_jobs(db: Session = Depends(get_db), status: str = Query("", description="draft or published")):
+def all_jobs(db: Session = Depends(get_db), status: Literal["", "draft", "published"] = Query("")):
     return job_rows(db, status)
 
 

@@ -6,7 +6,7 @@ Filled in once, in the sign-up form of the first person who signs up (routers/au
 from email.utils import parseaddr
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app import company_profile, invite_mail
@@ -18,11 +18,10 @@ router = APIRouter(prefix="/api/company", tags=["company"], dependencies=[Depend
 
 
 class CompanyIn(BaseModel):
-    company_name: str
-    sender_name: str = ""
-    contact_name: str = ""
-    contact_email: str = ""
-
+    company_name: str = Field(min_length=2, max_length=120)
+    sender_name: str = Field(default="", max_length=120)
+    contact_name: str = Field(default="", max_length=120)
+    contact_email: str = Field(default="", max_length=255)
 
 class CompanyOut(CompanyIn):
     sending_address: str  # the mailbox e-mails really come from (SMTP_USER): set in .env, not here

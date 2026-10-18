@@ -1,6 +1,6 @@
 import re
 from datetime import datetime
-
+from typing import Annotated
 from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validator
 
 from app.blogger import blog_url_for
@@ -21,14 +21,16 @@ class Weights(BaseModel):
             raise ValueError(f"The four weights must add up to 100 (now {total}).")
         return self
 
+# One skill or qualification: not empty, and short enough to be one item, not a pasted paragraph (N8).
+Item = Annotated[str, Field(min_length=1, max_length=200)]
 
 class JobIn(BaseModel):
 
     title: str = Field(min_length=3, max_length=200)
     description: str = Field(default="", max_length=20000)
-    required_skills: list[str] = Field(min_length=1, max_length=10)
-    preferred_skills: list[str] = Field(default_factory=list, max_length=15)
-    qualifications: list[str] = Field(default_factory=list, max_length=10)
+    required_skills: list[Item] = Field(min_length=1, max_length=10)
+    preferred_skills: list[Item] = Field(default_factory=list, max_length=15)
+    qualifications: list[Item] = Field(default_factory=list, max_length=10)
     min_experience_years: int = Field(default=0, ge=0, le=40)
     selection_criteria: str = Field(default="", max_length=2000)
     weights: Weights = Field(default_factory=Weights)
