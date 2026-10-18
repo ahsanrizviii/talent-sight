@@ -65,9 +65,12 @@ export default function JoinPage() {
     <>
       <SkyScene />
       <header className="topbar">
-        <span className="brand">TalentSight</span>
+        <span className="brand">
+          <span className="brand-mark" aria-hidden="true" />
+          TalentSight
+        </span>
       </header>
-      <main className="content narrow">
+      <main className="content narrow join">
         {stage === "loading" && <p className="muted">Loading...</p>}
 
         {stage === "invalid" && (

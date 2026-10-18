@@ -1,11 +1,13 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 
+import Arrow from "./Arrow";
 import SiteFooter from "./SiteFooter";
 import SkyScene from "./SkyScene";
 
 // The frame around the pages you can open before logging in: the welcome page, log in and sign up.
-// The dusk scene fills the screen behind them, the same scene as behind every working page.
+// The mountain scene fills the screen behind them, the same scene as behind every working page.
+// The bar has three parts: a link on the left, the name in the middle, log in on the right.
 export default function PublicFrame({
   children,
   footer = true,
@@ -33,11 +35,7 @@ export default function PublicFrame({
         <div className="public-end">
           <Link className="button pill" to="/login">
             Log in
-            <span className="arrow-box">
-              <svg viewBox="0 0 16 16" aria-hidden="true">
-                <path d="M6 3.5 10.5 8 6 12.5" />
-              </svg>
-            </span>
+            <Arrow />
           </Link>
         </div>
       </header>
