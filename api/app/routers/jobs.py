@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app import blogger, job_visits
+from app import blogger, job_visits, privacy
 from app.db import get_db
 from app.deps import current_interviewer
 from app.job_profiles import JobIn, JobOut, publish_job_post
@@ -47,6 +47,7 @@ def update_job(job_id: int, body: JobIn, db: Session = Depends(get_db)):
 def delete_job(job_id: int, db: Session = Depends(get_db)):
     job = find_job(db, job_id)
     blogger.remove_job(job.slug) 
+    privacy.delete_job_candidates(db, job)  # their CV files and calendar entries go too (N19)
     db.delete(job)  
     db.commit()
 
