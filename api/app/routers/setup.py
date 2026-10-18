@@ -1,7 +1,7 @@
 """The setup check page (UI): is e-mail, the public link, video and Calendar really working?"""
 
 from fastapi import APIRouter, Depends, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app import invite_mail, readiness
 from app.deps import current_interviewer
@@ -19,7 +19,7 @@ class CheckOut(BaseModel):
 
 
 class TestMailIn(BaseModel):
-    to: str
+    to: str = Field(min_length=3, max_length=255)
 
 
 class TestMailOut(BaseModel):

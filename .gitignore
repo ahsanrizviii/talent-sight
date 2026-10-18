@@ -17,3 +17,11 @@ web/dist/
 .idea/
 .DS_Store
 Thumbs.db
+
+
+# Candidate personal data must never reach the repository (N14)
+cv_uploads/
+*.sql
+*.dump
+*.webm
+*.wav

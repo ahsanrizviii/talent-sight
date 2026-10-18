@@ -9,8 +9,8 @@ from pydantic import BaseModel, ConfigDict
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app import google_form
-from app.cv_files import CVFileError, delete_cv_file
+from app import google_form, privacy
+from app.cv_files import CVFileError
 from app.db import get_db
 from app.deps import current_interviewer
 from app.google_api import GoogleError
@@ -276,8 +276,6 @@ def get_cv(candidate_id: int, db: Session = Depends(get_db)):
 
 @router.delete("/candidates/{candidate_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_candidate(candidate_id: int, db: Session = Depends(get_db)):
-    """Removes the candidate, their results and their CV file (N19)."""
-    candidate = find_candidate(db, candidate_id)
-    delete_cv_file(candidate.cv_path)
-    db.delete(candidate)
-    db.commit()
+    """Removes the candidate and everything about them: CV file, results, interviews,
+    transcript, calendar entries, answer analysis and assessment (N19, see app/privacy.py)."""
+    privacy.delete_candidate(db, find_candidate(db, candidate_id))
