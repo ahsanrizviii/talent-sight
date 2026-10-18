@@ -43,10 +43,13 @@ def make_job_with_ranked(count: int, without_email: tuple[int, ...] = ()) -> tup
         return job.id, ids
 
 
-def next_monday() -> date:
-    today = datetime.now(timezone.utc).date()
-    return today + timedelta(days=(7 - today.weekday()) or 7)
-
+def next_monday():
+    today = datetime.now(ZONE).date()
+    monday = today + timedelta(days=(7 - today.weekday()) % 7 or 7)
+    # make sure the Saturday the test derives from it is still in the future
+    while monday - timedelta(days=2) <= today:
+        monday += timedelta(weeks=1)
+    return monday
 
 def invite(client, headers, job_id, top: int, start: date | None = None):
     return client.post(
