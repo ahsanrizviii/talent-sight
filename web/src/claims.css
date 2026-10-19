@@ -1,0 +1,167 @@
+/* CV claims checked against the interview (Module 13, F8).
+ * Uses only the colours, glass and radii already defined in styles.css (the variables in :root),
+ * plus .as-step and .as-spinner from assessment.css.
+ */
+
+.cl-promise {
+  margin: 14px 0 0;
+  padding: 10px 14px;
+  border-radius: var(--radius-s);
+  background: var(--accent-wash);
+  color: var(--ink-2);
+  font-size: 13.5px;
+  line-height: 1.5;
+}
+
+/* The four counts double as filters: press one to see only those claims. */
+.cl-counts {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.cl-count {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-s);
+  background: rgba(255, 255, 255, 0.55);
+  color: var(--ink-2);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.2s var(--ease), border-color 0.2s var(--ease);
+}
+
+.cl-count strong {
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+
+.cl-count span {
+  font-size: 12.5px;
+}
+
+.cl-count:hover {
+  background: #fff;
+}
+
+.cl-count.stop strong {
+  color: var(--unmet);
+}
+.cl-count.warn strong {
+  color: var(--partly);
+}
+.cl-count.pass strong {
+  color: var(--met);
+}
+
+.cl-count[aria-pressed="true"] {
+  border-color: var(--accent-line);
+  background: var(--accent-wash);
+}
+
+.cl-list {
+  list-style: none;
+  margin: 18px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.cl-item {
+  padding: 14px 16px;
+  border: 1px solid var(--line-2);
+  border-left: 3px solid var(--line);
+  border-radius: 0 var(--radius-s) var(--radius-s) 0;
+  background: rgba(255, 255, 255, 0.6);
+}
+
+.cl-item.stop {
+  border-left-color: var(--unmet);
+}
+.cl-item.warn {
+  border-left-color: var(--partly);
+}
+.cl-item.pass {
+  border-left-color: var(--met);
+}
+
+.cl-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.cl-claim {
+  margin: 8px 0 0;
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 1.45;
+  color: var(--ink);
+}
+
+.cl-note {
+  margin: 4px 0 0;
+  color: var(--ink-2);
+}
+
+.cl-quote {
+  margin: 10px 0 0;
+  padding: 8px 12px;
+  border-left: 2px solid var(--accent-line);
+  background: var(--well);
+  border-radius: 0 8px 8px 0;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.cl-follow {
+  margin: 10px 0 0;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.cl-follow span {
+  margin-right: 6px;
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.cl-more {
+  margin-top: 8px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ink-3);
+  font: inherit;
+  font-size: 12.5px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.cl-turns {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--ink-2);
+}
+
+@media (max-width: 720px) {
+  .cl-counts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

@@ -22,7 +22,7 @@ What is removed:
 - the Google Calendar entry of each of their interviews (it carries the candidate's name)
 - the candidate's row, and with it (ON DELETE CASCADE) their requirement verdicts, CV score,
   interviews, participant times, transcript lines, calendar records, invitation deliveries,
-  answer analysis and assessment
+  answer analysis, assessment and CV claim check
 
 Deleting a **job** deletes each of its candidates the same way, including their CV files.
 

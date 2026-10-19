@@ -478,3 +478,34 @@ export type Comparison = {
   candidates: ComparedCandidate[]; // best position first
   waiting: number; // interviewed candidates without a finished assessment yet
 };
+
+
+// ---------- CV claims checked against the interview (Module 13, F8) ----------
+export type ClaimStatus = "supported" | "contradicted" | "unsubstantiated" | "not_discussed";
+
+export type CheckedClaim = {
+  id: string; // K1, K2 ...
+  kind: "role" | "experience" | "project" | "certification" | "skill";
+  claim: string;
+  status: ClaimStatus;
+  label: string;
+  note: string;
+  evidence: { turn: number; start_ms: number; at: string; quote: string } | null;
+  follow_up: string;
+  turns: number[];
+};
+
+export type ClaimCheck = {
+  candidate_id: number;
+  session_id: number | null;
+  status: "running" | "done" | "failed";
+  step: string;
+  error: string;
+  started_at: string;
+  finished_at: string | null;
+  seconds: number | null;
+  outdated: boolean;
+  claims: CheckedClaim[];
+  summary: Partial<Record<ClaimStatus | "claims" | "follow_ups", number>>;
+  turns: { n: number; speaker: string; text: string; start_ms: number; end_ms: number }[];
+};

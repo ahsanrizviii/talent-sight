@@ -248,6 +248,26 @@ class Assessment(Base):
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     seconds: Mapped[float | None] = mapped_column(Float)
 
+class ClaimCheck(Base):
+    """CV claims checked against what the candidate said in the interview (Module 13, F8).
+
+    One row per candidate; checking again replaces it. A new table, so create_all makes it in an
+    existing database. It is only advice for a person: it never changes the score or the position.
+    """
+
+    __tablename__ = "claim_checks"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    candidate_id: Mapped[int] = mapped_column(ForeignKey("candidates.id", ondelete="CASCADE"), unique=True)
+    session_id: Mapped[int | None] = mapped_column(ForeignKey("interview_sessions.id", ondelete="SET NULL"), nullable=True)
+    status: Mapped[str] = mapped_column(String(20), default="running")  # running | done | failed
+    step: Mapped[str] = mapped_column(String(200), default="")  # what the agent is doing now, for the screen
+    error: Mapped[str] = mapped_column(Text, default="")
+    result: Mapped[dict] = mapped_column(JSON, default=dict)  # {"claims", "summary", "turns"}
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    seconds: Mapped[float | None] = mapped_column(Float)
+
 
 class CalendarEvent(Base):
     """The Google Calendar entry of one interview, kept so that moving or cancelling the interview
