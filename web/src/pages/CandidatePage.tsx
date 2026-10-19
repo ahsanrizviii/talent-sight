@@ -4,6 +4,7 @@ import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom"
 import { api } from "../api";
 import AssessmentPanel from "../components/AssessmentPanel";
 import Avatar from "../components/Avatar";
+import ClaimCheckPanel from "../components/ClaimCheckPanel";
 import CvViewer from "../components/CvViewer";
 import Icon from "../components/Icon";
 import InterviewCard from "../components/InterviewCard";
@@ -13,7 +14,7 @@ import VerdictBadge from "../components/VerdictBadge";
 import type { CandidateDetail, PersonRow } from "../types";
 import { shortDate } from "../when";
 
-type Tab = "score" | "requirements" | "interview" | "assessment" | "cv";
+type Tab = "score" | "requirements" | "interview" | "assessment" | "claims" | "cv";
 
 const KIND_LABELS = {
   skill: "Required skill",
@@ -84,6 +85,7 @@ export default function CandidatePage() {
     { value: "requirements", label: `Requirements (${candidate.verdicts.length})` },
     { value: "interview", label: "Interview" },
     { value: "assessment", label: "Assessment" },
+    { value: "claims", label: "CV claims" },
     { value: "cv", label: "CV" },
   ];
 
@@ -271,6 +273,7 @@ export default function CandidatePage() {
       {tab === "interview" && <InterviewCard candidateId={candidate.id} candidateStatus={candidate.status} />}
 
       {tab === "assessment" && <AssessmentPanel candidateId={candidate.id} />}
+      {tab === "claims" && <ClaimCheckPanel candidateId={candidate.id} />}
       {tab === "cv" && (
         <CvViewer candidateId={candidate.id} filename={candidate.cv_filename} text={candidate.cv_text} />
       )}
