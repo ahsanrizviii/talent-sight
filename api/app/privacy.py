@@ -12,6 +12,7 @@ from app.models import (
     CalendarEvent,
     Candidate,
     CandidateScore,
+    ClaimCheck,
     InterviewEvaluation,
     InterviewSession,
     InviteDelivery,
@@ -38,6 +39,7 @@ def what_is_kept(db: Session, candidate_id: int) -> dict[str, int]:
         "invitation deliveries": select(func.count()).select_from(InviteDelivery).where(InviteDelivery.session_id.in_(sessions)),
         "answer analyses": select(func.count()).select_from(InterviewEvaluation).where(InterviewEvaluation.session_id.in_(sessions)),
         "assessments": select(func.count()).select_from(Assessment).where(Assessment.candidate_id == candidate_id),
+        "claim checks": select(func.count()).select_from(ClaimCheck).where(ClaimCheck.candidate_id == candidate_id),
     }
     return {name: db.scalar(query) for name, query in counts.items()}
 
