@@ -84,6 +84,15 @@ def test_claims_are_listed_roles_first_and_only_the_skills_the_job_asks_for():
     # Python once (listed twice in the CV); "Go" in the job must not pull in "Google Analytics"
     assert skills == ["Skill: Python", "Skill: PostgreSQL"]
 
+def test_personal_qualities_are_not_checked_as_claims():
+    job = {"title": "Clerk", "requirements": ["Python", "Good typing speed", "Teamwork"]}
+    profile = {"skills": ["Python", "Good typing speed", "Teamwork"]}
+    claims = agent.list_claims({"job": job, "profile": profile})["claims"]
+    assert [c["claim"] for c in claims] == ["Skill: Python"]
+
+
+def test_the_judge_is_told_a_denial_of_something_else_is_not_a_contradiction():
+    assert "NOT a contradiction" in agent.JUDGE_PROMPT and "no job in a field" in agent.JUDGE_PROMPT
 
 def test_at_most_twelve_claims_are_checked():
     many = {**PROFILE, "certifications": [f"Certificate {n}" for n in range(20)]}

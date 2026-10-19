@@ -120,6 +120,13 @@ def ask(system_prompt: str, user_prompt: str, answer_shape):
     return ask_llm(system_prompt, user_prompt, answer_shape, model=settings.assessment_model, max_retries=6)
 
 
+# Personal qualities a transcript cannot prove or disprove, so they are not checked as claims.
+SOFT_SKILL = re.compile(
+    r"\b(typing|communication|teamwork|team player|leadership|time management|hard.?working|punctual|"
+    r"problem.solving|fast learner|quick learner|multitask\w*|adaptab\w+|creativ\w+|work ethic|self.motivated)\b",
+    re.IGNORECASE,
+)
+
 # ---------- 4. The steps ----------
 def list_claims(state: ClaimState) -> dict:
     """The CV claims worth checking, numbered K1, K2 ... Plain code, so the same CV gives the same list."""
@@ -154,7 +161,7 @@ def list_claims(state: ClaimState) -> dict:
     # Skills: only the ones the job asks for, so the list stays short and relevant.
     for skill in profile.get("skills", []):
         skill = tidy(skill)
-        if skill and any(names_term(r, skill) or names_term(skill, r) for r in wanted):
+        if skill and not SOFT_SKILL.search(skill) and any(names_term(r, skill) or names_term(skill, r) for r in wanted):
             found.append({"kind": "skill", "claim": f"Skill: {skill}", "terms": [skill]})
 
     # The same claim twice (a skill listed twice, say) is checked once.
@@ -195,7 +202,11 @@ JUDGE_PROMPT = (
     "For each claim you see the interview turns most likely to be about it, each with the question asked "
     "before it. Give each claim exactly one status:\n"
     "- supported: the candidate gave concrete detail that fits the claim (what they built, how, with what).\n"
-    "- contradicted: something the candidate said does not fit the claim (different years, role, employer, "
+    "- contradicted: the candidate's words directly deny or change THIS claim (other years, other employer, "
+    "or they say they never did or used this very thing). A denial of something different is NOT a "
+    "contradiction: saying they had no job in a field does not contradict a project, coursework or personal "
+    "work in it; saying they lack one tool does not contradict another. When unsure, use unsubstantiated or "
+    "not_discussed instead.\n"
     "or they say they did not do it). Only use this when the words clearly conflict.\n"
     "- unsubstantiated: the topic came up, but the candidate gave no real detail or only repeated the claim.\n"
     "- not_discussed: none of the turns shown is about this claim.\n"
