@@ -3,10 +3,11 @@ import { Link } from "react-router-dom";
 
 import { api } from "../api";
 import { getToken } from "../auth";
+import { CATEGORY, NAME } from "../brand";
 
 // The foot of every page. Only the company's hiring team uses this site (candidates only ever see
-// their own interview link), so the foot is one slim band: the name on the left, the workspace
-// links in a single line on the right, and the copyright under them.
+// their own interview link), so the foot is one slim band: the name and what the product is on the
+// left, the workspace links in a single line on the right, and the copyright under them.
 const LINKS = [
   { label: "Dashboard", to: "/" },
   { label: "Jobs", to: "/jobs" },
@@ -31,9 +32,9 @@ export default function SiteFooter() {
         <div className="foot-brand">
           <Link to="/" className="brand">
             <span className="brand-mark" aria-hidden="true" />
-            TalentSight
+            {NAME}
           </Link>
-          <p>Hire on evidence, not instinct.</p>
+          <p>{CATEGORY}</p>
         </div>
 
         <nav className="foot-links" aria-label="Workspace">
@@ -46,7 +47,9 @@ export default function SiteFooter() {
       </div>
 
       <div className="foot-bottom">
-        <span>© {new Date().getFullYear()} TalentSight</span>
+        <span>
+          © {new Date().getFullYear()} {NAME}
+        </span>
         {company && <span>For the hiring team at {company}</span>}
       </div>
     </footer>

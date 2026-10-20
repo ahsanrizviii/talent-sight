@@ -12,10 +12,12 @@ export default function PublicFrame({
   children,
   footer = true,
   full = false,
+  loginButton = true,
 }: {
   children: ReactNode;
   footer?: boolean;
   full?: boolean; // the scene covers the whole page rather than only the first screen
+  loginButton?: boolean; // the welcome page has its own Log in button, so it turns this one off
 }) {
   return (
     <div className={full ? "public full" : "public"}>
@@ -32,11 +34,14 @@ export default function PublicFrame({
           TalentSight
         </Link>
 
+        {/* The empty div stays when the button is hidden, so the name remains centred. */}
         <div className="public-end">
-          <Link className="button pill" to="/login">
-            Log in
-            <Arrow />
-          </Link>
+          {loginButton && (
+            <Link className="button pill" to="/login">
+              Log in
+              <Arrow />
+            </Link>
+          )}
         </div>
       </header>
 

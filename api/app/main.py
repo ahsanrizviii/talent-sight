@@ -74,6 +74,10 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="TalentSight API",
+    description=(
+        "TalentSight helps hiring teams find the right candidate faster by screening CVs, "
+        "capturing interviews and turning both into one evidence-backed assessment."
+    ),
     lifespan=lifespan,
     docs_url="/api/docs",
     openapi_url="/api/openapi.json",
