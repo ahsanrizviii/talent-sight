@@ -571,3 +571,18 @@ export type ScoreDimension = {
   by: "ai" | "code";
 };
 export type InterviewScoreResult = { dimensions: ScoreDimension[]; overall: number; answers: number };
+
+
+// The identity check (Module 13, F7)
+export type CandidateIdentity = { consent: boolean | null; templates: number; retention_days: number };
+export type IdentityState = {
+  session_id: number;
+  consent: boolean | null; // null = the candidate has not answered yet
+  templates: number;
+  id_checked: boolean;
+  name_matches: boolean;
+  checked_by: string;
+  checked_at: string | null;
+  state: "confirmed" | "name_mismatch" | "not_checked";
+  retention_days: number;
+};

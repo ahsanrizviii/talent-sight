@@ -7,6 +7,7 @@ import ChatPanel from "../components/ChatPanel";
 import TranscriptPanel from "../components/TranscriptPanel";
 import VideoRoom from "../components/VideoRoom";
 import type { Interview, JoinInfo } from "../types";
+import IdentityCheck from "../components/IdentityCheck";
 
 type Side = "transcript" | "chat";
 
@@ -103,7 +104,12 @@ export default function InterviewRoomPage() {
             <ChatPanel sessionId={interview.id} />
           </div>
         </div>
-        {showPanel && <CandidatePanel candidateId={interview.candidate_id} />}
+          {showPanel && (
+            <div className="interview-side">
+              <IdentityCheck sessionId={interview.id} />
+              <CandidatePanel candidateId={interview.candidate_id} />
+            </div>
+          )}
       </div>
     </>
   );

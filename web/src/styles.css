@@ -3587,3 +3587,55 @@ input.tick {
 
 /* ---------- Question chat: replies keep their line breaks ---------- */
 .chat-text { white-space: pre-wrap; }
+
+/* ---------------------------------------------------------------- identity check (Module 13, F7) */
+.interview-side {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+
+.identity-panel .notice {
+  margin: 8px 0 10px;
+}
+
+.id-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 8px 0;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.id-check input {
+  margin-top: 3px;
+}
+
+.identity-consent {
+  margin-top: 10px;
+}
+
+.consent-box {
+  margin: 16px 0;
+  padding: 14px 16px;
+  border: 1px solid var(--accent-line);
+  border-radius: var(--radius-s);
+  background: var(--accent-wash);
+}
+
+.consent-box h2 {
+  margin: 0 0 6px;
+  font-size: 17px;
+}
+
+.consent-box p {
+  margin: 0 0 8px;
+  line-height: 1.5;
+}
+
+.consent-buttons {
+  gap: 10px;
+  flex-wrap: wrap;
+}
