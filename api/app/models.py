@@ -323,6 +323,66 @@ class InterviewScore(Base):
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     seconds: Mapped[float | None] = mapped_column(Float)
 
+class IdentityRecord(Base):
+    """The identity check of one interview (Module 13, F7): the photo ID seen on camera, and consent.
+
+    consent is None until the candidate answers. Interviewer only (N9); deleted with the candidate (N19).
+    """
+
+    __tablename__ = "identity_records"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    session_id: Mapped[int] = mapped_column(ForeignKey("interview_sessions.id", ondelete="CASCADE"), unique=True)
+    candidate_id: Mapped[int] = mapped_column(ForeignKey("candidates.id", ondelete="CASCADE"), index=True)
+    consent: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    consent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    id_checked: Mapped[bool] = mapped_column(Boolean, default=False)    # the interviewer saw a photo ID on camera
+    name_matches: Mapped[bool] = mapped_column(Boolean, default=False)  # the name on it matches the CV
+    checked_by: Mapped[str] = mapped_column(String(255), default="")
+    checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class FaceTemplate(Base):
+    """One face template: 128 numbers made from one camera frame. Never a picture (N16, N17).
+
+    Kept only with consent, and deleted after the onboarding check, after BIOMETRIC_RETENTION_DAYS,
+    on request, and with the candidate (N19).
+    """
+
+    __tablename__ = "face_templates"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    candidate_id: Mapped[int] = mapped_column(ForeignKey("candidates.id", ondelete="CASCADE"), index=True)
+    session_id: Mapped[int] = mapped_column(ForeignKey("interview_sessions.id", ondelete="CASCADE"))
+    slot: Mapped[int] = mapped_column(Integer)  # 1, 2 or 3: early, middle and later in the interview
+    vector: Mapped[list] = mapped_column(JSON)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class OnboardingCheck(Base):
+    """The onboarding-day check of one new hire (Module 13, F7, Task 13.5.3).
+
+    A result other than "match" waits for a person's decision. Nothing is ever called fraud automatically.
+    """
+
+    __tablename__ = "onboarding_checks"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    candidate_id: Mapped[int] = mapped_column(ForeignKey("candidates.id", ondelete="CASCADE"), unique=True)
+    status: Mapped[str] = mapped_column(String(20), default="waiting")  # waiting (for the head turn) | done
+    direction: Mapped[str] = mapped_column(String(10), default="")     # left | right: the head turn asked for
+    challenge_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    original_id_checked: Mapped[bool] = mapped_column(Boolean, default=False)
+    outcome: Mapped[str] = mapped_column(String(20), default="")       # match | low_confidence | no_templates
+    best_score: Mapped[float | None] = mapped_column(Float)
+    checked_by: Mapped[str] = mapped_column(String(255), default="")
+    checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    decision: Mapped[str] = mapped_column(String(20), default="")      # "" | confirmed | not_confirmed
+    decision_note: Mapped[str] = mapped_column(Text, default="")
+    decided_by: Mapped[str] = mapped_column(String(255), default="")
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
 class CalendarEvent(Base):
     """The Google Calendar entry of one interview, kept so that moving or cancelling the interview
     changes that same entry instead of leaving a stale one behind.

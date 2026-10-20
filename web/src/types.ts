@@ -571,3 +571,34 @@ export type ScoreDimension = {
   by: "ai" | "code";
 };
 export type InterviewScoreResult = { dimensions: ScoreDimension[]; overall: number; answers: number };
+
+
+// The identity check (Module 13, F7)
+export type CandidateIdentity = { consent: boolean | null; templates: number; retention_days: number };
+export type IdentityState = {
+  session_id: number;
+  consent: boolean | null; // null = the candidate has not answered yet
+  templates: number;
+  id_checked: boolean;
+  name_matches: boolean;
+  checked_by: string;
+  checked_at: string | null;
+  state: "confirmed" | "name_mismatch" | "not_checked";
+  retention_days: number;
+};
+
+export type OnboardingStart = { direction: "left" | "right"; seconds: number };
+export type OnboardingCheckInfo = {
+  status: "waiting" | "done";
+  original_id_checked: boolean;
+  outcome: "" | "match" | "low_confidence" | "no_templates";
+  best_score: number | null;
+  needs_review: boolean;
+  decision: "" | "confirmed" | "not_confirmed";
+  decision_note: string;
+  decided_by: string;
+  decided_at: string | null;
+  checked_by: string;
+  checked_at: string | null;
+};
+export type OnboardingState = { templates_on_file: number; retention_days: number; check: OnboardingCheckInfo | null };

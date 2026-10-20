@@ -97,5 +97,9 @@ class Settings(BaseSettings):
     stt_model: str = "universal-3-6-pro"
     stt_host: str = "streaming.assemblyai.com"  # accounts in the EU use streaming.eu.assemblyai.com
 
+        # Identity check (Module 13, F7): how long face templates are kept, and where the face models are
+    biometric_retention_days: int = 60
+    face_model_dir: str = "/opt/models/face"
+
 
 settings = Settings()

@@ -3587,3 +3587,127 @@ input.tick {
 
 /* ---------- Question chat: replies keep their line breaks ---------- */
 .chat-text { white-space: pre-wrap; }
+
+/* ---------------------------------------------------------------- identity check (Module 13, F7) */
+.interview-side {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+
+.identity-panel .notice {
+  margin: 8px 0 10px;
+}
+
+.id-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 8px 0;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.id-check input {
+  margin-top: 3px;
+}
+
+.identity-consent {
+  margin-top: 10px;
+}
+
+.consent-box {
+  margin: 16px 0;
+  padding: 14px 16px;
+  border: 1px solid var(--accent-line);
+  border-radius: var(--radius-s);
+  background: var(--accent-wash);
+}
+
+.consent-box h2 {
+  margin: 0 0 6px;
+  font-size: 17px;
+}
+
+.consent-box p {
+  margin: 0 0 8px;
+  line-height: 1.5;
+}
+
+.consent-buttons {
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+/* ---------------------------------------------------------------- onboarding check (Module 13, F7) */
+.ob-note {
+  margin: 14px 0 10px;
+  padding: 10px 14px;
+  border-radius: var(--radius-s);
+  background: var(--accent-wash);
+  color: var(--ink-2);
+  font-size: 13.5px;
+  line-height: 1.5;
+}
+
+.ob-result {
+  margin: 12px 0;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-s);
+  background: rgba(255, 255, 255, 0.6);
+}
+
+.ob-review textarea {
+  width: 100%;
+  margin: 6px 0 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--glass-3);
+  color: var(--ink);
+  font: inherit;
+}
+
+.ob-buttons {
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.ob-start {
+  margin-top: 12px;
+}
+
+.ob-camera {
+  margin-top: 12px;
+}
+
+.ob-video {
+  display: block;
+  width: 100%;
+  max-width: 480px;
+  border-radius: var(--radius-s);
+  background: var(--well);
+  transform: scaleX(-1); /* a mirror view feels natural; the picture sent is not mirrored */
+}
+
+.ob-instruction {
+  margin: 10px 0;
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--ink);
+}
+
+.ob-delete {
+  margin-top: 12px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--unmet);
+  font: inherit;
+  font-size: 13px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}

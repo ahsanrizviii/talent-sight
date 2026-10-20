@@ -1,18 +1,22 @@
 import { useCallback, useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { api } from "../api";
+import FaceConsent from "../components/FaceConsent";
+import FaceFrames from "../components/FaceFrames";
 import SkyScene from "../components/SkyScene";
 import VideoRoom from "../components/VideoRoom";
-import type { InviteInfo, JoinInfo } from "../types";
+import type { CandidateIdentity, InviteInfo, JoinInfo } from "../types";
 
 // The candidate's page, opened from the link in the e-mail (Task 7.2.2).
 // No account and no menu: the private link is the only key, and the page shows nothing but the interview.
+// Before joining, the candidate answers the face-matching question (Module 13, F7); "no" is an equal choice.
 type Stage = "loading" | "invalid" | "interviewer" | "ready" | "in" | "ended";
 
 export default function JoinPage() {
   const { token } = useParams();
   const [stage, setStage] = useState<Stage>("loading");
   const [info, setInfo] = useState<InviteInfo | null>(null);
+  const [identity, setIdentity] = useState<CandidateIdentity | null>(null);
   const [note, setNote] = useState("");
   const [now, setNow] = useState(() => Date.now());
 
@@ -20,6 +24,7 @@ export default function JoinPage() {
     async (afterLeaving: boolean) => {
       try {
         setInfo(await api<InviteInfo>(`/invite/${token}`));
+        setIdentity(await api<CandidateIdentity>(`/invite/${token}/identity`).catch(() => null));
         setStage("ready");
         if (afterLeaving) setNote("You left the interview. You can come back while it is still open.");
       } catch (error) {
@@ -59,6 +64,7 @@ export default function JoinPage() {
 
   const opensAt = info ? new Date(info.opens_at).getTime() : 0;
   const open = info !== null && now >= opensAt;
+  const answered = !identity || identity.consent !== null; // if the question could not load, joining still works
   const when = info ? new Date(info.scheduled_at).toLocaleString([], { dateStyle: "full", timeStyle: "short" }) : "";
 
   return (
@@ -109,10 +115,12 @@ export default function JoinPage() {
             <ul className="muted">
               <li>Use a quiet place with good light.</li>
               <li>When the browser asks, allow the camera and the microphone.</li>
+              <li>Have your photo ID (national ID card or passport) with you.</li>
               <li>The interview is a video call with one interviewer. Nothing is recorded: what is said is only turned into text for the interviewer.</li>
             </ul>
+            {identity && token && <FaceConsent token={token} identity={identity} onChange={setIdentity} />}
             {note && <p className="success">{note}</p>}
-            {open ? (
+            {open && answered ? (
               <button className="button" onClick={() => setStage("in")}>
                 Join interview
               </button>
@@ -121,13 +129,22 @@ export default function JoinPage() {
                 <button className="button" disabled>
                   Join interview
                 </button>
-                <p className="muted small">The room opens at {new Date(info.opens_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}. This page turns it on by itself.</p>
+                <p className="muted small">
+                  {!answered
+                    ? "Please answer the identity check question above first."
+                    : `The room opens at ${new Date(info.opens_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}. This page turns it on by itself.`}
+                </p>
               </>
             )}
           </div>
         )}
 
-        {stage === "in" && <VideoRoom join={join} remoteLabel="Interviewer" onLeave={leave} speech={{ path: `/ws/invite/${token}/audio` }} />}
+        {stage === "in" && (
+          <>
+            <VideoRoom join={join} remoteLabel="Interviewer" onLeave={leave} speech={{ path: `/ws/invite/${token}/audio` }} />
+            {identity?.consent && token && <FaceFrames token={token} />}
+          </>
+        )}
       </main>
     </>
   );

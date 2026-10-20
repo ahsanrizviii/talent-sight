@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
-
+from app.identity import purge_expired_at_start
 from app import agent_runs
 from app.models import InterviewQuality, InterviewScore
 from app.agents.jd_agent import get_jd_agent
@@ -24,6 +24,7 @@ from app.routers import (
     company,
     evaluations,
     health,
+    identity,
     interview_chat,
     interview_quality,
     interview_score,
@@ -57,6 +58,7 @@ async def lifespan(app: FastAPI):
     mark_interrupted_checks()  # and for a CV claim check (Module 13)
     agent_runs.mark_interrupted(InterviewQuality)  # and for an interview quality review (Module 13)
     agent_runs.mark_interrupted(InterviewScore)  # and for an interview score (Module 13)
+    purge_expired_at_start()  # face templates past BIOMETRIC_RETENTION_DAYS are deleted (Module 13, F7)
     # The holiday calendar PDF(s) in knowledge/holidays: reading one (OCR + AI) takes about a minute,
     # so it runs in the background and the API is ready straight away. Files read before are skipped.
     threading.Thread(target=load_holiday_calendars, name="holiday-calendars", daemon=True).start()
@@ -120,3 +122,5 @@ app.include_router(claims.router)
 app.include_router(interview_chat.router)
 app.include_router(interview_quality.router)
 app.include_router(interview_score.router)
+app.include_router(identity.router)
+app.include_router(identity.candidate_router)
