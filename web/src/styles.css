@@ -3711,3 +3711,20 @@ input.tick {
   text-underline-offset: 3px;
   cursor: pointer;
 }
+
+
+/* ---------- Page states (Task 14.2) ---------- */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+.load-error h2 { margin-bottom: 6px; }
+.load-error p { margin-bottom: 14px; }
+.busy-note { margin-top: 8px; }

@@ -14,6 +14,7 @@ import VerdictBadge from "../components/VerdictBadge";
 import type { CandidateDetail, PersonRow } from "../types";
 import { shortDate } from "../when";
 import OnboardingCheckPanel from "../components/OnboardingCheckPanel";
+import { LoadError, Loading } from "../components/PageState";
 
 type Tab = "score" | "requirements" | "interview" | "assessment" | "claims" | "onboarding" | "cv";
 
@@ -64,13 +65,11 @@ export default function CandidatePage() {
     }
   }
 
-  if (error) return <p className="error">{error}</p>;
   if (!candidate) {
-    return (
-      <div className="card glass">
-        <div className="skeleton" />
-        <div className="skeleton" />
-      </div>
+    return error ? (
+      <LoadError message={error} back="/candidates" backLabel="Back to candidates" />
+    ) : (
+      <Loading label="Loading the candidate…" />
     );
   }
 
@@ -134,6 +133,7 @@ export default function CandidatePage() {
         </div>
       </div>
 
+      {error && <p className="error">{error}</p>}
       {candidate.status === "excluded" && (
         <div className="card notice">
           <strong>Excluded.</strong> {candidate.exclusion_reason}

@@ -3,6 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import { api } from "../api";
 import Icon from "../components/Icon";
 import JobPostBody from "../components/JobPostBody";
+import { LoadError, Loading } from "../components/PageState";
 import type { Job, PublicJob } from "../types";
 
 // Step 1 of the pipeline: the job as it is posted on the blog, with Edit on top.
@@ -24,8 +25,8 @@ export default function JobPostPage() {
       .catch((err) => setError(err.message));
   }, [id]);
 
-  if (error) return <p className="error">{error}</p>;
-  if (!job) return <p className="muted">Loading…</p>;
+  if (error) return <LoadError message={error} back={`/jobs/${id}/candidates`} backLabel="Back to the job" />;
+  if (!job) return <Loading label="Loading the job post…" />;
 
   const published = job.status === "published" && job.slug;
 

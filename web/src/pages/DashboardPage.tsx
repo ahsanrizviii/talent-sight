@@ -5,6 +5,7 @@ import { api } from "../api";
 import Avatar from "../components/Avatar";
 import CountUp from "../components/CountUp";
 import Empty from "../components/Empty";
+import { LoadError, Loading } from "../components/PageState";
 import Icon from "../components/Icon";
 import type { Me, Overview, SetupCheck } from "../types";
 import { lengthText, shortDateTime, untilText } from "../when";
@@ -92,7 +93,8 @@ export default function DashboardPage() {
     api<Me>("/auth/me").then(setMe).catch(() => undefined);
   }, []);
 
-  if (error) return <p className="error">{error}</p>;
+  if (error) return <LoadError message={error} back="/jobs" backLabel="Go to jobs" />;
+  if (!data) return <Loading label="Loading the dashboard…" />;
 
   const widest = Math.max(1, ...(data?.funnel.map((step) => step.value) ?? [1]));
 
