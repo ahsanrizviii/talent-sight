@@ -102,3 +102,61 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+/* ---------- the interview score card (Task 13.4.2) ---------- */
+.rv-overall {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.rv-overall strong {
+  font-size: 44px;
+  font-weight: 600;
+  letter-spacing: -0.04em;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+
+.rv-parts {
+  list-style: none;
+  margin: 16px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.rv-part-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+
+.rv-part-name {
+  font-weight: 500;
+  color: var(--ink);
+}
+
+.rv-part-score {
+  margin-left: auto;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.rv-part-reason {
+  margin: 6px 0 0;
+  color: var(--ink-2);
+}
+
+.rv-quote {
+  margin: 6px 0 0;
+  padding: 6px 12px;
+  border-left: 2px solid var(--accent-line);
+  background: var(--well);
+  border-radius: 0 8px 8px 0;
+  font-size: 13.5px;
+  line-height: 1.5;
+}

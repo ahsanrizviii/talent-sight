@@ -303,7 +303,26 @@ class InterviewQuality(Base):
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     seconds: Mapped[float | None] = mapped_column(Float)
-    
+
+
+class InterviewScore(Base):
+    """The interview's own score in six parts (Module 13, F9), kept apart from the CV score (Module 6).
+
+    One row per interview; scoring again replaces it. A new table, so create_all makes it.
+    """
+
+    __tablename__ = "interview_scores"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    session_id: Mapped[int] = mapped_column(ForeignKey("interview_sessions.id", ondelete="CASCADE"), unique=True)
+    status: Mapped[str] = mapped_column(String(20), default="running")  # running | done | failed
+    step: Mapped[str] = mapped_column(String(200), default="")
+    error: Mapped[str] = mapped_column(Text, default="")
+    result: Mapped[dict] = mapped_column(JSON, default=dict)  # {"dimensions", "overall", "answers"}
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    seconds: Mapped[float | None] = mapped_column(Float)
+
 class CalendarEvent(Base):
     """The Google Calendar entry of one interview, kept so that moving or cancelling the interview
     changes that same entry instead of leaving a stale one behind.

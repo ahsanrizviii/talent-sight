@@ -16,6 +16,7 @@ from app.models import (
     InterviewChatMessage,
     InterviewEvaluation,
     InterviewQuality,
+    InterviewScore,
     InterviewSession,
     InviteDelivery,
     JobProfile,
@@ -44,6 +45,7 @@ def what_is_kept(db: Session, candidate_id: int) -> dict[str, int]:
         "assessments": select(func.count()).select_from(Assessment).where(Assessment.candidate_id == candidate_id),
         "chat messages": select(func.count()).select_from(InterviewChatMessage).where(InterviewChatMessage.session_id.in_(sessions)),
         "interview quality reviews": select(func.count()).select_from(InterviewQuality).where(InterviewQuality.session_id.in_(sessions)),
+        "interview scores": select(func.count()).select_from(InterviewScore).where(InterviewScore.session_id.in_(sessions)),
         "claim checks": select(func.count()).select_from(ClaimCheck).where(ClaimCheck.candidate_id == candidate_id),
     }
     return {name: db.scalar(query) for name, query in counts.items()}
