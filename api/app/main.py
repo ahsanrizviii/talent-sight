@@ -22,6 +22,7 @@ from app.routers import (
     company,
     evaluations,
     health,
+    interview_chat,
     interviews,
     invite_batches,
     invites,
@@ -110,3 +111,4 @@ app.include_router(invite_batches.router)
 app.include_router(evaluations.router)
 app.include_router(assessments.router)
 app.include_router(claims.router)
+app.include_router(interview_chat.router)

@@ -15,6 +15,7 @@ from app.models import (
     Candidate,
     CandidateScore,
     ClaimCheck,
+    InterviewChatMessage,
     InterviewEvaluation,
     InterviewSession,
     InviteBatch,
@@ -60,6 +61,7 @@ def full_candidate(name: str = "Maya Rahman", job_id: int | None = None) -> tupl
         db.add(CalendarEvent(session_id=session.id, event_id=f"event-{person.id}", calendar_id="primary"))
         db.add(InviteDelivery(batch_id=batch.id, session_id=session.id, status="sent"))
         db.add(InterviewEvaluation(session_id=session.id, status="done", result={"pairs": []}))
+        db.add(InterviewChatMessage(session_id=session.id, role="interviewer", text="What should I ask next?"))
         db.add(ClaimCheck(candidate_id=person.id, session_id=session.id, status="done", result={"claims": []}))
         db.commit()
         return person.id, cv

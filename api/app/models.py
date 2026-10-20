@@ -268,7 +268,23 @@ class ClaimCheck(Base):
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     seconds: Mapped[float | None] = mapped_column(Float)
 
+class InterviewChatMessage(Base):
+    """One message in the interviewer's question chat for an interview (Module 13).
 
+    Interviewer only: the candidate never sees it (N9). It is deleted with the interview, and so with
+    the candidate (N19). A new table, so create_all makes it in an existing database.
+    """
+
+    __tablename__ = "interview_chat_messages"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    session_id: Mapped[int] = mapped_column(ForeignKey("interview_sessions.id", ondelete="CASCADE"), index=True)
+    role: Mapped[str] = mapped_column(String(20))  # interviewer | assistant
+    text: Mapped[str] = mapped_column(Text)
+    # The assistant's suggested questions: [{"question", "why", "source": {...}}]
+    suggestions: Mapped[list] = mapped_column(JSON, default=list)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    
 class CalendarEvent(Base):
     """The Google Calendar entry of one interview, kept so that moving or cancelling the interview
     changes that same entry instead of leaving a stale one behind.
