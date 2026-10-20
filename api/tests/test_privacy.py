@@ -18,6 +18,7 @@ from app.models import (
     InterviewChatMessage,
     InterviewEvaluation,
     InterviewQuality,
+    InterviewScore,
     InterviewSession,
     InviteBatch,
     InviteDelivery,
@@ -64,6 +65,7 @@ def full_candidate(name: str = "Maya Rahman", job_id: int | None = None) -> tupl
         db.add(InterviewEvaluation(session_id=session.id, status="done", result={"pairs": []}))
         db.add(InterviewChatMessage(session_id=session.id, role="interviewer", text="What should I ask next?"))
         db.add(InterviewQuality(session_id=session.id, status="done", result={"measures": {}}))
+        db.add(InterviewScore(session_id=session.id, status="done", result={"overall": 70}))    
         db.add(ClaimCheck(candidate_id=person.id, session_id=session.id, status="done", result={"claims": []}))
         db.commit()
         return person.id, cv
