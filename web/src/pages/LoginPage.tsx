@@ -57,7 +57,7 @@ export default function LoginPage({ startOn = "login" }: { startOn?: Mode }) {
         body: JSON.stringify(body),
       });
       saveToken(answer.access_token);
-      navigate("/");
+      navigate(nextPage(), { replace: true });
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -199,4 +199,11 @@ export default function LoginPage({ startOn = "login" }: { startOn?: Mode }) {
       </main>
     </PublicFrame>
   );
+}
+
+// Where to go after logging in: the page that asked for a login, or the dashboard.
+// Only paths on this site are accepted ("/candidates/5", never "//other-site.com").
+function nextPage(): string {
+  const next = new URLSearchParams(window.location.search).get("next") ?? "";
+  return next.startsWith("/") && !next.startsWith("//") ? next : "/";
 }
