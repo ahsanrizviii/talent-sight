@@ -96,3 +96,30 @@ def context_for(db: Session, session: InterviewSession) -> dict:
         "turns": turns,
         "coverage": coverage_for(db, session.id, requirements, turns),
     }
+
+
+
+
+def analysis_of(db: Session, session_id: int) -> InterviewEvaluation | None:
+    """The newest finished answer analysis of this interview (Module 9), or None."""
+    return db.scalar(
+        select(InterviewEvaluation)
+        .where(InterviewEvaluation.session_id == session_id, InterviewEvaluation.status == "done")
+        .order_by(InterviewEvaluation.finished_at.desc(), InterviewEvaluation.id.desc())
+        .limit(1)
+    )
+
+
+def review_context(db: Session, session: InterviewSession) -> dict:
+    """context_for plus the answer analysis: the question-answer pairs with their scores and the full
+    coverage (which also says which requirements are mandatory). Used by the interview quality review
+    and the interview score, after the answers have been analysed."""
+    analysed = analysis_of(db, session.id)
+    result = (analysed.result or {}) if analysed else {}
+    context = context_for(db, session)
+    return {
+        **context,
+        "turns": result.get("turns") or context["turns"],  # the same numbering the analysis used
+        "pairs": result.get("pairs", []),
+        "coverage": result.get("coverage") or context["coverage"],
+    }

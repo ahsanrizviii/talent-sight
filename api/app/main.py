@@ -5,6 +5,8 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
+from app import agent_runs
+from app.models import InterviewQuality
 from app.agents.jd_agent import get_jd_agent
 from app.assessment import mark_interrupted_assessments
 from app.claim_check import mark_interrupted_checks
@@ -23,6 +25,7 @@ from app.routers import (
     evaluations,
     health,
     interview_chat,
+    interview_quality,
     interviews,
     invite_batches,
     invites,
@@ -51,6 +54,7 @@ async def lifespan(app: FastAPI):
     mark_interrupted_evaluations()
     mark_interrupted_assessments()  # the same for a consolidated assessment (Module 10)
     mark_interrupted_checks()  # and for a CV claim check (Module 13)
+    agent_runs.mark_interrupted(InterviewQuality)  # and for an interview quality review (Module 13)
     # The holiday calendar PDF(s) in knowledge/holidays: reading one (OCR + AI) takes about a minute,
     # so it runs in the background and the API is ready straight away. Files read before are skipped.
     threading.Thread(target=load_holiday_calendars, name="holiday-calendars", daemon=True).start()
@@ -112,3 +116,4 @@ app.include_router(evaluations.router)
 app.include_router(assessments.router)
 app.include_router(claims.router)
 app.include_router(interview_chat.router)
+app.include_router(interview_quality.router)

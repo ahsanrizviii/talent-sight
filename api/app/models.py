@@ -284,6 +284,25 @@ class InterviewChatMessage(Base):
     # The assistant's suggested questions: [{"question", "why", "source": {...}}]
     suggestions: Mapped[list] = mapped_column(JSON, default=list)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+class InterviewQuality(Base):
+    """How well one interview was run (Module 13, F10): talk time, questions, coverage and advice.
+
+    One row per interview; reviewing again replaces it. Advice for the hiring team only: it never
+    changes the candidate's score, assessment or stage. A new table, so create_all makes it.
+    """
+
+    __tablename__ = "interview_quality"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    session_id: Mapped[int] = mapped_column(ForeignKey("interview_sessions.id", ondelete="CASCADE"), unique=True)
+    status: Mapped[str] = mapped_column(String(20), default="running")  # running | done | failed
+    step: Mapped[str] = mapped_column(String(200), default="")  # what the agent is doing now, for the screen
+    error: Mapped[str] = mapped_column(Text, default="")
+    result: Mapped[dict] = mapped_column(JSON, default=dict)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    seconds: Mapped[float | None] = mapped_column(Float)
     
 class CalendarEvent(Base):
     """The Google Calendar entry of one interview, kept so that moving or cancelling the interview
