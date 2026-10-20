@@ -86,7 +86,7 @@ def test_the_prompt_shows_requirements_cv_and_transcript_with_ids(ai):
     assert "[R3] PostgreSQL (not mentioned)" in prompt
     assert "[C1] Backend Engineer at Acme" in prompt
     assert "[T4, 01:21] Candidate: A little, we ran a few services on it." in prompt
-    assert prompt.endswith("The interviewer now asks: What should I ask about Kubernetes?")
+    assert prompt.endswith("The interviewer now writes: What should I ask about Kubernetes?")
 
 
 def test_before_the_interview_the_prompt_says_nothing_was_said(ai):
@@ -96,7 +96,7 @@ def test_before_the_interview_the_prompt_says_nothing_was_said(ai):
 
 def test_an_older_turn_about_the_same_thing_is_shown(ai):
     filler = [{"n": n, "speaker": "candidate" if n % 2 else "interviewer", "text": f"Small talk number {n}.", "start_ms": n * 1000, "end_ms": n * 1000 + 500}
-              for n in range(2, 30)]
+              for n in range(2, 60)]
     turns = [{"n": 1, "speaker": "candidate", "text": "I led the Kafka migration at Acme.", "start_ms": 0, "end_ms": 900}] + filler
     run("How do I check the Kafka migration they led?", turns=turns)
     assert "[T1, 00:00] Candidate: I led the Kafka migration" in ai.prompts[0]
@@ -175,3 +175,26 @@ def test_an_unavailable_ai_gives_an_error_state_not_a_crash(monkeypatch):
     state = run()
     assert state["error"] == "The AI service is not available right now. Please try again."
     assert "reply" not in state
+
+
+
+def test_a_plain_answer_has_no_cards_and_keeps_its_line_breaks(monkeypatch):
+    use(monkeypatch, FakeAI({"reply": "Python and Kubernetes came up.\n\n\nPostgreSQL did not.", "suggestions": []}))
+    state = run("Which requirements have we covered?")
+    assert state["suggestions"] == []
+    assert state["reply"] == "Python and Kubernetes came up.\n\nPostgreSQL did not."
+
+
+def test_general_questions_can_be_written_in_the_reply(monkeypatch):
+    use(monkeypatch, FakeAI({"reply": "1. What is a list comprehension?\n2. What does the GIL do?", "suggestions": []}))
+    state = run("Give me two Python questions")
+    assert state["reply"].splitlines()[0] == "1. What is a list comprehension?"
+    assert state["suggestions"] == []
+
+
+def test_a_personal_reply_is_rewritten_once_then_replaced(monkeypatch):
+    fake = use(monkeypatch, FakeAI({"reply": "You could ask whether she is married.", "suggestions": []}))
+    state = run("Anything else I can ask?")
+    assert len(fake.prompts) == 2
+    assert "personal matter" in fake.prompts[1]
+    assert state["reply"] == agent.DECLINED

@@ -83,7 +83,7 @@ export default function ChatPanel({ sessionId }: { sessionId: number }) {
         {loaded && messages.length === 0 && !pending && (
           <div className="chat-empty">
             <p className="muted small">
-              Ask for questions to put to the candidate. Answers use the CV, the job requirements and the transcript so far.
+                Ask me anything about this interview. I can see the CV, the job requirements and the transcript so far.
             </p>
             <div className="chat-starters">
               {STARTERS.map((starter) => (
@@ -142,7 +142,7 @@ export default function ChatPanel({ sessionId }: { sessionId: number }) {
           onKeyDown={onKeyDown}
           maxLength={1000}
           rows={2}
-          placeholder="Ask for a question… (Enter sends, Shift+Enter for a new line)"
+          placeholder="Ask anything about this interview… (Enter sends, Shift+Enter for a new line)"
           aria-label="Message to the question chat"
         />
         <button className="button" type="submit" disabled={!!pending || !text.trim()}>

@@ -3583,3 +3583,7 @@ input.tick {
   color: var(--ink);
   font: inherit;
 }
+
+
+/* ---------- Question chat: replies keep their line breaks ---------- */
+.chat-text { white-space: pre-wrap; }
