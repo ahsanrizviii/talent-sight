@@ -1,8 +1,13 @@
-import { Navigate, Outlet } from "react-router-dom";
+import { Navigate, Outlet, useLocation } from "react-router-dom";
 import { isLoggedIn } from "../auth";
 
-// Someone who is not logged in lands on the welcome page, where they can log in or
-// open an account, rather than on a bare login form.
+// Someone who is not logged in and opens the app lands on the welcome page. Someone who opened a
+// particular page (a candidate link from a colleague, say) goes straight to log in, and comes back
+// to that page afterwards.
 export default function RequireLogin() {
-  return isLoggedIn() ? <Outlet /> : <Navigate to="/welcome" replace />;
+  const location = useLocation();
+  if (isLoggedIn()) return <Outlet />;
+  if (location.pathname === "/") return <Navigate to="/welcome" replace />;
+  const next = location.pathname + location.search;
+  return <Navigate to={`/login?next=${encodeURIComponent(next)}`} replace />;
 }

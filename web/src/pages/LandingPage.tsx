@@ -6,6 +6,7 @@ import { isLoggedIn } from "../auth";
 import Arrow from "../components/Arrow";
 import Icon from "../components/Icon";
 import PublicFrame from "../components/PublicFrame";
+import { POSITIONING } from "../brand";
 import type { SignInOptions } from "../types";
 
 const STEPS = [
@@ -39,17 +40,14 @@ export default function LandingPage() {
   }, [navigate]);
 
   return (
-    <PublicFrame>
+    <PublicFrame loginButton={false}>
       <section className="hero">
         <h1 className="display">
           Hire on evidence,
           <br />
           not instinct
         </h1>
-        <p className="lead">
-          TalentSight reads every CV against the job you wrote, scores each candidate with the
-          reasoning attached, and transcribes the interview as it happens.
-        </p>
+        <p className="lead">{POSITIONING}</p>
 
         <div className="hero-actions">
           <Link className="button pill big" to="/login">

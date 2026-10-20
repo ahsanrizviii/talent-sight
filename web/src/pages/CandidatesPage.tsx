@@ -6,9 +6,11 @@ import Empty from "../components/Empty";
 import Icon from "../components/Icon";
 import InviteDialog from "../components/InviteDialog";
 import JobPipeline from "../components/JobPipeline";
+import { LoadError } from "../components/PageState";
 import type { CandidateRow, ChatSummary, ImportResult, Job, JobVisit, ScreeningRun, UploadResult } from "../types";
 
 type Tab = "ranked" | "excluded" | "other";
+type Busy = "" | "upload" | "import" | "screen-new" | "screen-all";
 
 const STATUS_LABELS: Record<string, string> = {
   uploaded: "Waiting to be screened",
@@ -28,7 +30,10 @@ export default function CandidatesPage() {
   const [tab, setTab] = useState<Tab>("ranked");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState<Busy>("");
+  const [loaded, setLoaded] = useState(false); // false until the first list arrives, so "empty" is never shown too early
+  const [loadError, setLoadError] = useState("");
+  const [lostContact, setLostContact] = useState(false); // the progress check stopped getting answers
   const [visit, setVisit] = useState<JobVisit | null>(null);
   const [inviting, setInviting] = useState(false);
   const wasRunning = useRef(false);
@@ -45,11 +50,13 @@ export default function CandidatesPage() {
   useEffect(() => {
     api<Job>(`/jobs/${id}`)
       .then(setJob)
-      .catch((err) => setError(err.message));
+      .catch((err) => setLoadError(err.message));
     api<ChatSummary[]>(`/jd-chat?job_id=${id}`)
       .then(setChats)
       .catch(() => undefined);
-    load().catch((err) => setError(err.message));
+    load()
+      .then(() => setLoaded(true))
+      .catch((err) => setLoadError(err.message));
   }, [id, load]);
 
   // Opening the job counts as a visit; the answer says how many CVs are new since the last one.
@@ -71,14 +78,21 @@ export default function CandidatesPage() {
     }
   }, [run?.status, candidates]);
 
+  // While a screening runs, ask every 2 seconds how far it is. A failed check is shown, not hidden.
   useEffect(() => {
     if (run?.status !== "running") return;
-    const timer = window.setInterval(() => load().catch(() => undefined), 2000);
+    const timer = window.setInterval(
+      () =>
+        load()
+          .then(() => setLostContact(false))
+          .catch(() => setLostContact(true)),
+      2000,
+    );
     return () => window.clearInterval(timer);
   }, [run?.status, load]);
 
-  async function act(work: () => Promise<string>) {
-    setBusy(true);
+  async function act(kind: Busy, work: () => Promise<string>) {
+    setBusy(kind);
     setError("");
     setMessage("");
     try {
@@ -87,7 +101,7 @@ export default function CandidatesPage() {
     } catch (err) {
       setError((err as Error).message);
     } finally {
-      setBusy(false);
+      setBusy("");
     }
   }
 
@@ -95,7 +109,7 @@ export default function CandidatesPage() {
     event.preventDefault();
     if (!files?.length) return;
     const form = event.target as HTMLFormElement;
-    act(async () => {
+    act("upload", async () => {
       const body = new FormData();
       Array.from(files).forEach((file) => body.append("files", file));
       const results = await api<UploadResult[]>(`/jobs/${id}/candidates`, { method: "POST", body });
@@ -110,7 +124,7 @@ export default function CandidatesPage() {
   }
 
   function importFromForm() {
-    act(async () => {
+    act("import", async () => {
       const result = await api<ImportResult>(`/jobs/${id}/candidates/import`, { method: "POST" });
       const failed = result.failed.map((f) => `${f.filename} (${f.error})`).join(", ");
       return `${result.imported} new CV(s) imported, ${result.skipped} already here.${failed ? ` Refused: ${failed}` : ""}`;
@@ -118,7 +132,7 @@ export default function CandidatesPage() {
   }
 
   function startScreening(again: boolean) {
-    act(async () => {
+    act(again ? "screen-all" : "screen-new", async () => {
       await api<ScreeningRun>(`/jobs/${id}/screening${again ? "?again=true" : ""}`, { method: "POST" });
       return "Screening started. You can leave this page; it keeps running.";
     });
@@ -130,6 +144,8 @@ export default function CandidatesPage() {
   const shown = { ranked, excluded, other }[tab];
   const running = run?.status === "running";
 
+  if (loadError) return <LoadError message={loadError} back="/jobs" backLabel="Back to jobs" />;
+
   return (
     <>
       <Link className="back-link" to="/jobs">
@@ -140,7 +156,11 @@ export default function CandidatesPage() {
       <div className="page-head">
         <div>
           <h1>{job?.title ?? "Job"}</h1>
-          <p>{candidates.length} CVs · {ranked.length} passed screening · {excluded.length} excluded</p>
+          <p>
+            {loaded
+              ? `${candidates.length} CVs · ${ranked.length} passed screening · ${excluded.length} excluded`
+              : "Loading the candidates…"}
+          </p>
         </div>
         <div className="row">
           {ranked.length > 0 && (
@@ -149,7 +169,7 @@ export default function CandidatesPage() {
             </button>
           )}
           <Link className="button secondary" to={`/jobs/${id}/compare`}>
-            Compare assessed
+            Compare candidates
           </Link>
           <Link className="button secondary" to={`/jobs/${id}`}>
             Edit the job
@@ -191,22 +211,24 @@ export default function CandidatesPage() {
         <h2>Add CVs</h2>
         <form className="row" onSubmit={upload}>
           <input type="file" multiple accept=".pdf,.docx" onChange={(event) => setFiles(event.target.files)} aria-label="CV files" />
-          <button className="button secondary" type="submit" disabled={busy || !files?.length}>
-            Upload CVs
+          <button className="button secondary" type="submit" disabled={!!busy || !files?.length}>
+            {busy === "upload" ? "Uploading…" : "Upload CVs"}
           </button>
-          <button className="button secondary" type="button" disabled={busy} onClick={importFromForm}>
-            Import from Google Form
+          <button className="button secondary" type="button" disabled={!!busy} onClick={importFromForm}>
+            {busy === "import" ? "Importing…" : "Import from Google Form"}
           </button>
         </form>
         <p className="muted small">PDF or DOCX, up to 5 MB each and 25 files at once.</p>
+        {busy === "upload" && <p className="muted small busy-note">Uploading and reading the files. A large batch can take a minute.</p>}
+        {busy === "import" && <p className="muted small busy-note">Fetching the CVs from the Google Form. This can take a minute.</p>}
 
         <p className="eyebrow">Screening</p>
         <div className="row">
-          <button className="button" type="button" disabled={busy || running} onClick={() => startScreening(false)}>
-            Screen the new CVs
+          <button className="button" type="button" disabled={!!busy || running} onClick={() => startScreening(false)}>
+            {busy === "screen-new" ? "Starting…" : "Screen the new CVs"}
           </button>
-          <button className="button secondary" type="button" disabled={busy || running} onClick={() => startScreening(true)}>
-            Screen everyone again
+          <button className="button secondary" type="button" disabled={!!busy || running} onClick={() => startScreening(true)}>
+            {busy === "screen-all" ? "Starting…" : "Screen everyone again"}
           </button>
         </div>
 
@@ -221,6 +243,11 @@ export default function CandidatesPage() {
               {run.failed ? `, ${run.failed} failed` : ""}
               {run.seconds !== null && ` · took ${Math.round(run.seconds)} s`}
             </p>
+            {running && lostContact && (
+              <p className="error small">
+                Lost contact with the server. The progress will update again when the connection is back.
+              </p>
+            )}
           </div>
         )}
 
@@ -241,7 +268,13 @@ export default function CandidatesPage() {
       </div>
 
       <div className="card glass flush">
-        {shown.length === 0 ? (
+        {!loaded ? (
+          <div className="pad" role="status" aria-busy="true">
+            <span className="sr-only">Loading the candidates…</span>
+            <div className="skeleton" />
+            <div className="skeleton" />
+          </div>
+        ) : shown.length === 0 ? (
           <Empty title={tab === "ranked" ? "No shortlist yet" : "Nothing here"}>
             {tab === "ranked"
               ? "Upload CVs above and run the screening. Everyone who meets the must-have requirements appears here, best score first."

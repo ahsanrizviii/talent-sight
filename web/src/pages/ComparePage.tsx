@@ -3,6 +3,7 @@ import { Link, useParams } from "react-router-dom";
 
 import { api } from "../api";
 import Empty from "../components/Empty";
+import { LoadError, Loading } from "../components/PageState";
 import Icon from "../components/Icon";
 import VerdictBadge from "../components/VerdictBadge";
 import type { ComparedCandidate, Comparison } from "../types";
@@ -41,8 +42,8 @@ export default function ComparePage() {
     );
   }
 
-  if (error) return <p className="error">{error}</p>;
-  if (!comparison) return <p className="muted">Loading...</p>;
+  if (error) return <LoadError message={error} back={`/jobs/${id}/candidates`} backLabel="Back to the job" />;
+  if (!comparison) return <Loading label="Loading the comparison…" />;
 
   // Keep the ranking order (best first), whatever order they were picked in.
   const shown = comparison.candidates.filter((c) => chosen.includes(c.candidate_id));

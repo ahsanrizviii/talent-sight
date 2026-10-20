@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { api } from "../api";
 import JobPipeline from "../components/JobPipeline";
+import { LoadError, Loading } from "../components/PageState";
 import type { Job, JobInput, Weights } from "../types";
 
 const EMPTY_JOB: JobInput = {
@@ -27,6 +28,8 @@ const WEIGHT_LABELS: Record<keyof Weights, string> = {
   jd_match: "Overall CV match",
 };
 
+type Busy = "" | "save" | "publish" | "delete";
+
 const toLines = (items: string[]) => items.join("\n");
 const fromLines = (text: string) => text.split("\n");
 const clean = (items: string[]) =>
@@ -38,6 +41,10 @@ export default function JobFormPage() {
 
   const [job, setJob] = useState<JobInput>(EMPTY_JOB);
   const [saved, setSaved] = useState<Job | null>(null);
+  const [loading, setLoading] = useState(!!id); // an existing job is loaded before the form is shown
+  const [loadError, setLoadError] = useState("");
+  const [dirty, setDirty] = useState(false); // changes on screen that are not saved yet
+  const [busy, setBusy] = useState<Busy>("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
@@ -48,15 +55,18 @@ export default function JobFormPage() {
         setJob(loaded);
         setSaved(loaded);
       })
-      .catch((err) => setError(err.message));
+      .catch((err) => setLoadError(err.message))
+      .finally(() => setLoading(false));
   }, [id]);
 
   function change<K extends keyof JobInput>(field: K, value: JobInput[K]) {
     setJob({ ...job, [field]: value });
+    setDirty(true);
   }
 
   function changeWeight(name: keyof Weights, value: number) {
     setJob({ ...job, weights: { ...job.weights, [name]: value } });
+    setDirty(true);
   }
 
   const weightTotal = Object.values(job.weights).reduce(
@@ -64,36 +74,44 @@ export default function JobFormPage() {
     0
   );
 
-  async function save(event: FormEvent) {
-    event.preventDefault();
-    setError("");
-    setMessage("");
-
+  // Saves what is on screen and returns the saved job.
+  async function persist(): Promise<Job> {
     const body = JSON.stringify({
       ...job,
       required_skills: clean(job.required_skills),
       preferred_skills: clean(job.preferred_skills),
       qualifications: clean(job.qualifications),
     });
+    const result = id
+      ? await api<Job>(`/jobs/${id}`, { method: "PUT", body })
+      : await api<Job>("/jobs", { method: "POST", body });
+    setSaved(result);
+    setDirty(false);
+    return result;
+  }
 
+  async function save(event: FormEvent) {
+    event.preventDefault();
+    setBusy("save");
+    setError("");
+    setMessage("");
     try {
-      const result = id
-        ? await api<Job>(`/jobs/${id}`, { method: "PUT", body })
-        : await api<Job>("/jobs", { method: "POST", body });
-
-      setSaved(result);
+      const result = await persist();
       setMessage("Saved.");
-
       if (!id) navigate(`/jobs/${result.id}`, { replace: true });
     } catch (err) {
       setError((err as Error).message);
+    } finally {
+      setBusy("");
     }
   }
 
   async function publish() {
+    setBusy("publish");
     setError("");
     setMessage("");
     try {
+      if (dirty) await persist(); // publish what is on screen, not an older saved version
       const result = await api<Job>(`/jobs/${id}/publish`, { method: "POST" });
       setSaved(result);
       setMessage(
@@ -103,18 +121,26 @@ export default function JobFormPage() {
       );
     } catch (err) {
       setError((err as Error).message);
+    } finally {
+      setBusy("");
     }
   }
 
   async function remove() {
-    if (!window.confirm("Delete this job and all its candidates?")) return;
+    if (!window.confirm("Delete this job and all its candidates? This cannot be undone.")) return;
+    setBusy("delete");
+    setError("");
     try {
       await api(`/jobs/${id}`, { method: "DELETE" });
       navigate("/jobs");
     } catch (err) {
       setError((err as Error).message);
+      setBusy("");
     }
   }
+
+  if (loadError) return <LoadError message={loadError} back="/jobs" backLabel="Back to jobs" />;
+  if (loading) return <Loading label="Loading the job…" />;
 
   return (
     <>
@@ -240,26 +266,35 @@ export default function JobFormPage() {
 
         {error && <p className="error">{error}</p>}
         {message && <p className="success">{message}</p>}
+        {dirty && id && !busy && <p className="muted small">You have unsaved changes.</p>}
 
         <div className="row">
           <button
             className="button"
             type="submit"
-            disabled={weightTotal !== 100}
+            disabled={!!busy || weightTotal !== 100}
           >
-            Save
+            {busy === "save" ? "Saving…" : "Save"}
           </button>
           {id && (
-            <button className="button secondary" type="button" onClick={publish}>
-              Publish
+            <button
+              className="button secondary"
+              type="button"
+              onClick={publish}
+              disabled={!!busy || weightTotal !== 100}
+            >
+              {busy === "publish" ? "Publishing…" : dirty ? "Save and publish" : "Publish"}
             </button>
           )}
           {id && (
-            <button className="button danger" type="button" onClick={remove}>
-              Delete
+            <button className="button danger" type="button" onClick={remove} disabled={!!busy}>
+              {busy === "delete" ? "Deleting…" : "Delete"}
             </button>
           )}
         </div>
+        {busy === "publish" && (
+          <p className="muted small busy-note">Posting to the blog can take a few seconds.</p>
+        )}
       </form>
     </>
   );
