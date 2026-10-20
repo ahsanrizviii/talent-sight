@@ -42,3 +42,5 @@ pytesseract==0.3.13
 
 # The assessment report as a PDF file (Module 10)
 reportlab==4.4.4
+
+opencv-python-headless==4.10.0.84
