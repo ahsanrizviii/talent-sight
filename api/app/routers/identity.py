@@ -7,6 +7,7 @@ router: the interviewer's photo-ID check and the identity state (interviewers on
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
+from typing import Literal
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -104,3 +105,86 @@ def delete_face_templates(candidate_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Candidate not found.")
     identity.delete_templates(db, candidate_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+
+# ---------- the onboarding-day check (Task 13.5.3) ----------
+class OnboardingStartIn(BaseModel):
+    original_id_checked: bool
+
+
+class OnboardingStartOut(BaseModel):
+    direction: str  # left | right: which way the new hire turns their head
+    seconds: int
+
+
+class OnboardingFinishIn(BaseModel):
+    front: str = Field(max_length=MAX_IMAGE_CHARS)   # read in memory, never stored
+    turned: str = Field(max_length=MAX_IMAGE_CHARS)
+
+
+class DecisionIn(BaseModel):
+    decision: Literal["confirmed", "not_confirmed"]
+    note: str = Field(default="", max_length=500)
+
+
+class OnboardingCheckOut(BaseModel):
+    status: str  # waiting | done
+    original_id_checked: bool
+    outcome: str  # match | low_confidence | no_templates
+    best_score: float | None
+    needs_review: bool
+    decision: str
+    decision_note: str
+    decided_by: str
+    decided_at: datetime | None
+    checked_by: str
+    checked_at: datetime | None
+
+
+class OnboardingOut(BaseModel):
+    templates_on_file: int
+    retention_days: int
+    check: OnboardingCheckOut | None
+
+
+def find_candidate(db: Session, candidate_id: int) -> Candidate:
+    candidate = db.get(Candidate, candidate_id)
+    if candidate is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Candidate not found.")
+    return candidate
+
+
+@router.get("/candidates/{candidate_id}/onboarding-check", response_model=OnboardingOut)
+def get_onboarding_check(candidate_id: int, db: Session = Depends(get_db)):
+    return identity.onboarding_state(db, find_candidate(db, candidate_id))
+
+
+@router.post("/candidates/{candidate_id}/onboarding-check/start", response_model=OnboardingStartOut)
+def start_onboarding_check(
+    candidate_id: int,
+    body: OnboardingStartIn,
+    db: Session = Depends(get_db),
+    interviewer: Interviewer = Depends(current_interviewer),
+):
+    row = identity.start_check(db, find_candidate(db, candidate_id), interviewer, body.original_id_checked)
+    return OnboardingStartOut(direction=row.direction, seconds=identity.CHALLENGE_SECONDS)
+
+
+@router.post("/candidates/{candidate_id}/onboarding-check/finish", response_model=OnboardingOut)
+def finish_onboarding_check(candidate_id: int, body: OnboardingFinishIn, db: Session = Depends(get_db)):
+    candidate = find_candidate(db, candidate_id)
+    identity.finish_check(db, candidate, body.front, body.turned)
+    return identity.onboarding_state(db, candidate)
+
+
+@router.post("/candidates/{candidate_id}/onboarding-check/decision", response_model=OnboardingOut)
+def decide_onboarding_check(
+    candidate_id: int,
+    body: DecisionIn,
+    db: Session = Depends(get_db),
+    interviewer: Interviewer = Depends(current_interviewer),
+):
+    candidate = find_candidate(db, candidate_id)
+    identity.decide(db, candidate, interviewer, body.decision, body.note)
+    return identity.onboarding_state(db, candidate)

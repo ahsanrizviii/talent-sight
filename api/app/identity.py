@@ -1,16 +1,5 @@
-"""The identity check (Module 13, F7): the photo ID seen at the interview, and face templates with consent.
-
-At the interview the interviewer looks at the candidate's photo ID on camera and ticks "ID checked" and
-"the name matches the CV". That human step is the real check. If the candidate agrees, three face
-templates (numbers, never pictures) are made from camera frames during the interview. On onboarding
-day HR compares a fresh camera frame with them (Task 13.5.3).
-
-Templates are deleted after the onboarding check, after BIOMETRIC_RETENTION_DAYS, on request, and with
-the candidate (N19). Logs never contain pictures or templates (N22). A mismatch is a prompt for a person
-to review, never an automatic decision.
-"""
-
 import logging
+import secrets
 from datetime import datetime, timedelta, timezone
 
 from fastapi import HTTPException, status
@@ -19,8 +8,9 @@ from sqlalchemy.orm import Session
 
 from app import face
 from app.db import SessionLocal
-from app.models import FaceTemplate, IdentityRecord, Interviewer, InterviewSession
+from app.models import Candidate, FaceTemplate, IdentityRecord, Interviewer, InterviewSession, OnboardingCheck
 from app.settings import settings
+
 
 log = logging.getLogger("talentsight.identity")
 
@@ -133,4 +123,124 @@ def state_of(db: Session, session: InterviewSession) -> dict:
         # confirmed | name_mismatch | not_checked
         "state": "confirmed" if id_checked and name_matches else "name_mismatch" if id_checked else "not_checked",
         "retention_days": settings.biometric_retention_days,
+    }
+
+
+
+
+# ---------- the onboarding-day check (Task 13.5.3) ----------
+DIRECTIONS = ("left", "right")
+CHALLENGE_SECONDS = 120   # the two pictures must be taken within this time
+SAME_PERSON_AT = 0.30     # the front and turned pictures must clearly show one person
+START_AGAIN = "The check has expired. Start the onboarding check again."
+
+
+def pick_direction() -> str:
+    """Left or right at random, so a recorded video cannot know which way to turn."""
+    return secrets.choice(DIRECTIONS)
+
+
+def check_of(db: Session, candidate_id: int) -> OnboardingCheck | None:
+    return db.scalar(select(OnboardingCheck).where(OnboardingCheck.candidate_id == candidate_id))
+
+
+def start_check(db: Session, candidate: Candidate, interviewer: Interviewer, original_id_checked: bool) -> OnboardingCheck:
+    if not original_id_checked:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Check the new hire's original photo ID first, in person or on a live call.")
+    row = check_of(db, candidate.id)
+    if row is None:
+        row = OnboardingCheck(candidate_id=candidate.id)
+        db.add(row)
+    row.status, row.direction = "waiting", pick_direction()
+    row.challenge_until = utcnow() + timedelta(seconds=CHALLENGE_SECONDS)
+    row.original_id_checked, row.checked_by, row.checked_at = True, interviewer.email, None
+    row.outcome, row.best_score = "", None
+    row.decision, row.decision_note, row.decided_by, row.decided_at = "", "", "", None
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+def read_or_refuse(image: str) -> face.Face:
+    try:
+        return face.read_face(image)
+    except face.FaceError as error:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(error)) from error
+    except face.FaceUnavailable as error:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(error)) from error
+
+
+def finish_check(db: Session, candidate: Candidate, front_image: str, turned_image: str) -> OnboardingCheck:
+    """Checks the head turn, then compares the face with the interview's templates.
+
+    A failed head turn or an unusable picture answers 422 and keeps the same challenge, so HR can
+    simply take the two pictures again. The pictures are never stored.
+    """
+    row = check_of(db, candidate.id)
+    if row is None or row.status != "waiting" or row.challenge_until is None or row.challenge_until < utcnow():
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, START_AGAIN)
+
+    templates = templates_on_file(db, candidate.id)
+    best = None
+    if not templates:
+        outcome = "no_templates"
+    else:
+        front, turned = read_or_refuse(front_image), read_or_refuse(turned_image)
+        if abs(front.turn) >= face.FACING_BELOW:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "In the first picture, the new hire must look straight at the camera.")
+        wanted = 1 if row.direction == "left" else -1
+        if turned.turn * wanted < face.TURNED_AT:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, f"The head turn was not seen. Ask them to turn their head to their {row.direction} and try again.")
+        if face.similarity(front.template, turned.template) < SAME_PERSON_AT:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "The two pictures do not show the same person. Take them again.")
+        best = max(face.similarity(front.template, template.vector) for template in templates)
+        outcome = "match" if best >= face.MATCH_AT else "low_confidence"
+
+    row.status, row.outcome, row.checked_at = "done", outcome, utcnow()
+    row.best_score = round(best, 3) if best is not None else None
+    row.direction, row.challenge_until = "", None
+    db.commit()
+    log.info("onboarding check done", extra={"event": f"onboarding_{outcome}", "candidate_id": candidate.id})
+    if outcome == "match":
+        delete_templates(db, candidate.id)  # the check is done, so the templates are no longer needed
+    db.refresh(row)
+    return row
+
+
+def decide(db: Session, candidate: Candidate, interviewer: Interviewer, decision: str, note: str) -> OnboardingCheck:
+    """A person's decision on a check that was not a match. Nothing is ever decided automatically."""
+    row = check_of(db, candidate.id)
+    if row is None or row.status != "done":
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Run the onboarding check first.")
+    if row.outcome == "match":
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Nothing to review: the face matched.")
+    row.decision, row.decision_note = decision, " ".join(note.split())
+    row.decided_by, row.decided_at = interviewer.email, utcnow()
+    db.commit()
+    delete_templates(db, candidate.id)  # the check is finished either way
+    db.refresh(row)
+    return row
+
+
+def onboarding_state(db: Session, candidate: Candidate) -> dict:
+    row = check_of(db, candidate.id)
+    check = None
+    if row is not None:
+        check = {
+            "status": row.status,
+            "original_id_checked": row.original_id_checked,
+            "outcome": row.outcome,
+            "best_score": row.best_score,
+            "needs_review": row.status == "done" and row.outcome != "match" and not row.decision,
+            "decision": row.decision,
+            "decision_note": row.decision_note,
+            "decided_by": row.decided_by,
+            "decided_at": row.decided_at,
+            "checked_by": row.checked_by,
+            "checked_at": row.checked_at,
+        }
+    return {
+        "templates_on_file": len(templates_on_file(db, candidate.id)),
+        "retention_days": settings.biometric_retention_days,
+        "check": check,
     }

@@ -19,6 +19,7 @@ FACES = {
     "maya-left": Face(template=[0.97, 0.2, 0.0], turn=0.4),
     "maya-right": Face(template=[0.97, 0.2, 0.0], turn=-0.4),
     "other": Face(template=[0.0, 1.0, 0.0], turn=0.0),
+    "other-left": Face(template=[0.2, 0.97, 0.0], turn=0.4),
 }
 
 
@@ -157,3 +158,102 @@ def test_similarity_and_head_turn_are_plain_maths():
     # eyes at x 100 and 140, nose at 130: a quarter of an eye width off the middle
     landmarks = [0, 0, 0, 0, 100, 50, 140, 50, 130, 70, 0, 0, 0, 0, 0.9]
     assert face.turn_of(landmarks) == pytest.approx(0.25 * face.LEFT_SIGN)
+
+
+
+# ---------- the onboarding-day check (Task 13.5.3) ----------
+@pytest.fixture
+def turn_left(monkeypatch):
+    monkeypatch.setattr(identity, "pick_direction", lambda: "left")
+
+
+def enrolled(client) -> int:
+    """A candidate who agreed and has three templates from the interview."""
+    _, token, candidate_id = live_interview()
+    consent(client, token)
+    for _ in range(3):
+        frame(client, token)
+    return candidate_id
+
+
+def start_check(client, headers, candidate_id: int, original_id_checked: bool = True):
+    return client.post(f"/api/candidates/{candidate_id}/onboarding-check/start", headers=headers, json={"original_id_checked": original_id_checked})
+
+
+def finish_check(client, headers, candidate_id: int, front: str = "maya", turned: str = "maya-left"):
+    return client.post(f"/api/candidates/{candidate_id}/onboarding-check/finish", headers=headers, json={"front": front, "turned": turned})
+
+
+def test_the_check_needs_the_original_photo_id_first(client, auth_headers):
+    response = start_check(client, auth_headers, enrolled(client), original_id_checked=False)
+    assert response.status_code == 400 and "photo ID" in response.json()["detail"]
+
+
+def test_the_same_person_matches_and_the_templates_are_deleted(client, auth_headers, turn_left):
+    candidate_id = enrolled(client)
+    assert start_check(client, auth_headers, candidate_id).json()["direction"] == "left"
+    state = finish_check(client, auth_headers, candidate_id).json()
+    assert state["check"]["outcome"] == "match" and state["check"]["needs_review"] is False
+    assert state["templates_on_file"] == 0 and stored(candidate_id) == []
+
+
+def test_a_head_turn_the_wrong_way_is_refused_and_can_be_retried(client, auth_headers, turn_left):
+    candidate_id = enrolled(client)
+    start_check(client, auth_headers, candidate_id)
+    response = finish_check(client, auth_headers, candidate_id, turned="maya-right")
+    assert response.status_code == 422 and "head turn was not seen" in response.json()["detail"]
+    assert finish_check(client, auth_headers, candidate_id).json()["check"]["outcome"] == "match"
+
+
+def test_the_first_picture_must_face_the_camera(client, auth_headers, turn_left):
+    candidate_id = enrolled(client)
+    start_check(client, auth_headers, candidate_id)
+    assert finish_check(client, auth_headers, candidate_id, front="maya-left").status_code == 422
+
+
+def test_two_different_people_in_the_two_pictures_are_refused(client, auth_headers, turn_left):
+    candidate_id = enrolled(client)
+    start_check(client, auth_headers, candidate_id)
+    response = finish_check(client, auth_headers, candidate_id, front="maya", turned="other-left")
+    assert response.status_code == 422 and "same person" in response.json()["detail"]
+
+
+def test_another_face_goes_to_a_person_and_is_never_decided_automatically(client, auth_headers, turn_left):
+    candidate_id = enrolled(client)
+    start_check(client, auth_headers, candidate_id)
+    state = finish_check(client, auth_headers, candidate_id, front="other", turned="other-left").json()
+    assert state["check"]["outcome"] == "low_confidence" and state["check"]["needs_review"] is True
+    assert state["check"]["decision"] == "" and state["templates_on_file"] == 3  # kept until a person decides
+    decided = client.post(
+        f"/api/candidates/{candidate_id}/onboarding-check/decision", headers=auth_headers,
+        json={"decision": "confirmed", "note": "Checked the passport again; new haircut."},
+    ).json()
+    assert decided["check"]["decision"] == "confirmed" and decided["check"]["needs_review"] is False
+    assert decided["check"]["decided_by"] == settings.seed_interviewer_email
+    assert decided["templates_on_file"] == 0
+
+
+def test_without_templates_the_result_says_so_and_needs_review(client, auth_headers):
+    _, _, candidate_id = live_interview()  # never agreed, so no templates
+    start_check(client, auth_headers, candidate_id)
+    state = finish_check(client, auth_headers, candidate_id).json()
+    assert state["check"]["outcome"] == "no_templates" and state["check"]["needs_review"] is True
+
+
+def test_an_expired_or_missing_challenge_must_be_started_again(client, auth_headers):
+    candidate_id = enrolled(client)
+    assert finish_check(client, auth_headers, candidate_id).status_code == 400
+    start_check(client, auth_headers, candidate_id)
+    with SessionLocal() as db:
+        row = identity.check_of(db, candidate_id)
+        row.challenge_until = datetime.now(timezone.utc) - timedelta(seconds=1)
+        db.commit()
+    assert finish_check(client, auth_headers, candidate_id).json()["detail"] == identity.START_AGAIN
+
+
+def test_a_match_needs_no_decision(client, auth_headers, turn_left):
+    candidate_id = enrolled(client)
+    start_check(client, auth_headers, candidate_id)
+    finish_check(client, auth_headers, candidate_id)
+    response = client.post(f"/api/candidates/{candidate_id}/onboarding-check/decision", headers=auth_headers, json={"decision": "confirmed"})
+    assert response.status_code == 400
