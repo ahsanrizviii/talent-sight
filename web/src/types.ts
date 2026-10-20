@@ -560,3 +560,14 @@ export type QualityResult = {
   recommendations: { text: string; turn: number | null; at: string | null }[];
   summary: string;
 };
+
+export type ScoreDimension = {
+  key: string;
+  label: string;
+  weight: number;
+  score: number;
+  reason: string;
+  evidence: { turn: number; at: string; text: string } | null;
+  by: "ai" | "code";
+};
+export type InterviewScoreResult = { dimensions: ScoreDimension[]; overall: number; answers: number };
