@@ -6,6 +6,7 @@ import InterviewSummary from "./InterviewSummary";
 import RescheduleBox from "./RescheduleBox";
 import QaAnalysis from "./QaAnalysis";
 import SavedTranscript from "./SavedTranscript";
+import InterviewQualityCard from "./InterviewQualityCard";
 
 // "localhost" and "127.0.0.1" mean "this computer", so a link containing them is useless to
 // anyone else: their own machine has no TalentSight on it. The card says so rather than
@@ -102,6 +103,7 @@ export default function InterviewCard({ candidateId, candidateStatus }: Props) {
 
       {interview && <InterviewSummary interview={interview} />}
       {interview?.status === "ended" && interview.started_at && <SavedTranscript sessionId={interview.id} candidateName={interview.candidate_name} />}
+      {interview?.status === "ended" && interview.started_at && <InterviewQualityCard sessionId={interview.id} />}
       {interview?.status === "ended" && interview.started_at && <QaAnalysis sessionId={interview.id} candidateName={interview.candidate_name} />}
       {active && (
         <div className="field">

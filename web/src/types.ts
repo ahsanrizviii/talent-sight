@@ -522,3 +522,41 @@ export type ChatSource = {
 export type ChatSuggestion = { question: string; why: string; source: ChatSource };
 export type InterviewChatMessage = { id: number; role: "interviewer" | "assistant"; text: string; suggestions: ChatSuggestion[]; created_at: string };
 export type ChatTurn = { question: InterviewChatMessage; answer: InterviewChatMessage };
+
+// A background review of one interview (Module 13): the interview quality and the interview score
+export type AgentRun<R> = {
+  session_id: number;
+  status: "running" | "done" | "failed";
+  step: string;
+  error: string;
+  started_at: string;
+  finished_at: string | null;
+  seconds: number | null;
+  outdated: boolean;
+  result: R;
+};
+
+export type QualityMeasures = {
+  minutes: number;
+  interviewer_talk_pct: number;
+  questions: number;
+  small_talk: number;
+  follow_ups: number;
+  longest_answer_s: number;
+  average_answer_s: number;
+  requirements: number;
+  explored: number;
+  weak: number;
+  not_explored: number;
+  coverage_pct: number;
+};
+
+export type QualityResult = {
+  measures: QualityMeasures;
+  compare: { interviews: number; average: Partial<Record<keyof QualityMeasures, number>> };
+  personal: { turn: number; at: string; text: string }[];
+  questions: { id: number; question: string; at: string; kind: string; label: string; note: string }[];
+  kinds: Record<string, number>;
+  recommendations: { text: string; turn: number | null; at: string | null }[];
+  summary: string;
+};
