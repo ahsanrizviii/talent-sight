@@ -509,3 +509,16 @@ export type ClaimCheck = {
   summary: Partial<Record<ClaimStatus | "claims" | "follow_ups", number>>;
   turns: { n: number; speaker: string; text: string; start_ms: number; end_ms: number }[];
 };
+
+// The question chat in the interview room (Module 13)
+export type ChatSource = {
+  id: string; // C3, T12 or R2
+  kind: "cv" | "transcript" | "requirement";
+  text: string;
+  turn?: number;
+  at?: string;
+  speaker?: Speaker;
+};
+export type ChatSuggestion = { question: string; why: string; source: ChatSource };
+export type InterviewChatMessage = { id: number; role: "interviewer" | "assistant"; text: string; suggestions: ChatSuggestion[]; created_at: string };
+export type ChatTurn = { question: InterviewChatMessage; answer: InterviewChatMessage };

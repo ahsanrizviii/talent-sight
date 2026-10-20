@@ -3,17 +3,22 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { api } from "../api";
 import { getToken } from "../auth";
 import CandidatePanel from "../components/CandidatePanel";
+import ChatPanel from "../components/ChatPanel";
 import TranscriptPanel from "../components/TranscriptPanel";
 import VideoRoom from "../components/VideoRoom";
 import type { Interview, JoinInfo } from "../types";
 
-// The interviewer's side of the video interview (Tasks 7.2.1 and 7.3.2).
+type Side = "transcript" | "chat";
+
+// The interviewer's side of the video interview (Tasks 7.2.1 and 7.3.2), with the live transcript
+// (Module 8) and the question chat (Module 13) in two tabs under the video.
 export default function InterviewRoomPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const [interview, setInterview] = useState<Interview | null>(null);
   const [error, setError] = useState("");
   const [showPanel, setShowPanel] = useState(true);
+  const [side, setSide] = useState<Side>("transcript");
 
   useEffect(() => {
     api<Interview>(`/interviews/${id}`)
@@ -82,7 +87,21 @@ export default function InterviewRoomPage() {
             onEnd={end}
             speech={{ path: `/ws/interviews/${id}/audio`, token: getToken() }}
           />
-          <TranscriptPanel sessionId={interview.id} candidateName={interview.candidate_name} />
+          <div className="tabs glass room-tabs" role="tablist">
+            <button role="tab" aria-selected={side === "transcript"} onClick={() => setSide("transcript")}>
+              Transcript
+            </button>
+            <button role="tab" aria-selected={side === "chat"} onClick={() => setSide("chat")}>
+              Question chat
+            </button>
+          </div>
+          {/* Both stay mounted, so switching tabs never drops the live transcript connection. */}
+          <div hidden={side !== "transcript"}>
+            <TranscriptPanel sessionId={interview.id} candidateName={interview.candidate_name} />
+          </div>
+          <div hidden={side !== "chat"}>
+            <ChatPanel sessionId={interview.id} />
+          </div>
         </div>
         {showPanel && <CandidatePanel candidateId={interview.candidate_id} />}
       </div>
