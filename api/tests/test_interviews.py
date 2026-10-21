@@ -218,3 +218,19 @@ def test_the_candidate_profile_is_for_interviewers_only(client, auth_headers):
     assert client.get(f"/api/candidates/{candidate_id}").status_code == 401  # no login
     assert client.get(f"/api/candidates/{candidate_id}", headers={"Authorization": f"Bearer {token}"}).status_code == 401  # invite token is not a login
     assert client.get(f"/api/candidates/{candidate_id}", headers=auth_headers).status_code == 200
+
+
+
+
+def test_every_interview_of_a_candidate_stays_listed(client, auth_headers):
+    """Booking a new interview keeps the earlier one on record (oldest first)."""
+    candidate_id = make_candidate()
+    assert client.get(f"/api/candidates/{candidate_id}/interviews", headers=auth_headers).json() == []
+    first = schedule(client, auth_headers, candidate_id).json()
+    client.post(f"/api/interviews/{first['id']}/end", headers=auth_headers)
+    second = schedule(client, auth_headers, candidate_id).json()
+
+    listed = client.get(f"/api/candidates/{candidate_id}/interviews", headers=auth_headers).json()
+    assert [item["id"] for item in listed] == [first["id"], second["id"]]
+    assert [item["status"] for item in listed] == ["ended", "scheduled"]
+    assert client.get(f"/api/candidates/{candidate_id}/interviews").status_code == 401  # interviewers only

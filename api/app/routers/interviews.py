@@ -203,6 +203,18 @@ def latest_interview(candidate_id: int, db: Session = Depends(get_db)):
     return to_out(db, session) if session else None
 
 
+@router.get("/candidates/{candidate_id}/interviews", response_model=list[SessionOut])
+def all_interviews(candidate_id: int, db: Session = Depends(get_db)):
+    """Every interview of this candidate, oldest first. A new interview never hides an earlier one:
+    each keeps its own transcript, answer analysis, quality review and score."""
+    sessions = db.scalars(
+        select(InterviewSession)
+        .where(InterviewSession.candidate_id == candidate_id)
+        .order_by(InterviewSession.id)
+    ).all()
+    return [to_out(db, session) for session in sessions]
+
+
 @router.get("/interviews/{session_id}", response_model=SessionOut)
 def get_interview(session_id: int, db: Session = Depends(get_db)):
     return to_out(db, find_session(db, session_id))
