@@ -1,30 +1,37 @@
-import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { api } from "../api";
-import type { CandidateDetail } from "../types";
+import type { CandidateDetail, Verdict } from "../types";
 
-// The interviewer's side panel during the interview (Task 7.3.2): who they are talking to,
-// how the CV scored, and the highlights worth asking about. It is only used on the interviewer's
-// page and it reads an interviewer-only endpoint, so a candidate can never see it (N9).
-export default function CandidatePanel({ candidateId }: { candidateId: number }) {
-  const [candidate, setCandidate] = useState<CandidateDetail | null>(null);
-  const [error, setError] = useState("");
+const MAX_PROBES = 5;
 
-  useEffect(() => {
-    api<CandidateDetail>(`/candidates/${candidateId}`)
-      .then(setCandidate)
-      .catch((err) => setError(err.message));
-  }, [candidateId]);
+// The requirements the CV did not fully show: what the interviewer should ask about.
+// Must-haves first, then partly shown before not shown at all.
+function worthProbing(verdicts: Verdict[]): Verdict[] {
+  return verdicts
+    .filter((verdict) => verdict.verdict !== "met")
+    .sort(
+      (a, b) =>
+        Number(b.mandatory) - Number(a.mandatory) ||
+        Number(a.verdict === "unmet") - Number(b.verdict === "unmet"),
+    )
+    .slice(0, MAX_PROBES);
+}
 
+type Props = { candidate: CandidateDetail | null; error: string };
+
+// The interviewer's side panel during the interview (Task 7.3.2, F7): who they are talking to,
+// how the CV scored, the highlights and the areas worth probing. It is only used on the interviewer's
+// page and its data comes from an interviewer-only endpoint, so a candidate can never see it (N9).
+export default function CandidatePanel({ candidate, error }: Props) {
   if (error) return <aside className="card glass panel"><p className="error small">{error}</p></aside>;
   if (!candidate) return <aside className="card glass panel"><p className="muted small">Loading profile...</p></aside>;
 
   const profile = candidate.profile;
   const roles = (profile.work_history ?? []).slice(0, 2);
   const degree = profile.education?.[0];
+  const probes = worthProbing(candidate.verdicts);
 
   return (
-    <aside className="card glass panel">
+    <aside className="card glass panel candidate-panel">
       <h2>{candidate.name || candidate.cv_filename}</h2>
       <p className="muted small">{candidate.email || "No e-mail"}</p>
       <p className="muted small">{candidate.phone || "No phone number"}</p>
@@ -55,6 +62,23 @@ export default function CandidatePanel({ candidateId }: { candidateId: number })
         <p className="muted small">This candidate has not been scored.</p>
       )}
 
+      {probes.length > 0 && (
+        <>
+          <h3>Worth probing</h3>
+          <ul className="probe-list small">
+            {probes.map((verdict, index) => (
+              <li key={`${verdict.requirement}-${index}`}>
+                <span>{verdict.requirement}</span>
+                <span className="muted">
+                  {verdict.verdict === "unmet" ? "not shown in the CV" : "partly shown in the CV"}
+                  {verdict.mandatory && " · must have"}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+
       <h3>CV highlights</h3>
       <p className="small">{profile.total_experience_years ?? 0} years of experience</p>
       {!!profile.skills?.length && (
@@ -80,7 +104,9 @@ export default function CandidatePanel({ candidateId }: { candidateId: number })
           {degree.degree}, {degree.institution}
         </p>
       )}
-      {!!profile.certifications?.length && <p className="small muted">Certifications: {profile.certifications.slice(0, 3).join(", ")}</p>}
+      {!!profile.certifications?.length && (
+        <p className="small muted">Certifications: {profile.certifications.slice(0, 3).join(", ")}</p>
+      )}
 
       <p className="small">
         <Link to={`/candidates/${candidate.id}`} target="_blank">
