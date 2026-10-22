@@ -27,7 +27,7 @@ flowchart LR
 ```
 
 - **web** serves the React app and passes `/api` (and the WebSocket for live audio) to the API.
-- **api** holds all business logic and the eight agents. The only code that talks to the language model is `app/llm.py`, so a failure becomes one clear error state (N6).
+- **api** holds all business logic and the nine agents. The only code that talks to the language model is `app/llm.py`, so a failure becomes one clear error state (N6).
 - **db** holds every record, the vectors used for matching and the LangGraph checkpoints.
 - **livekit** carries the video call. Browsers connect to it directly with a token from the API. Nothing is recorded.
 - During an interview each browser sends its microphone audio to the API, which streams it to AssemblyAI and saves the returned text as timestamped transcript lines for each speaker.
@@ -68,7 +68,7 @@ The CV screening result and the transcript are the two sources. The answer analy
 | Background run with progress | CV screening, answer analysis, assessment, claim check, interview quality, interview score | A background run with a status the page polls every 2 seconds. At startup a run left half-finished is marked interrupted |
 | Answered straight away | Question chat | A few seconds, because the interviewer is waiting during the interview |
 
-## The eight agents
+## The nine agents
 
 ### 1. Job writing agent (`jd_agent.py`)
 Turns a short brief into a job profile checked against the company hiring policies (RAG over a policy PDF), and asks the person to approve before saving and posting it.
@@ -163,6 +163,19 @@ flowchart LR
 ```
 
 Alignment comes from requirement coverage by plain code. The other five parts come from the AI, each with a reason and a candidate turn. The weights are fixed, so totals can be compared between candidates.
+
+### 9. Litmus agent (`litmus_agent.py`, F11, the innovation feature)
+Tests the screening scorer itself: does a CV score rest on the CV, or on who the candidate is? The copies of the profile are made by plain code, and the comparison is plain code; the AI is only the thing being tested.
+
+```mermaid
+flowchart LR
+  A[prepare: copies in code] --> B[reference] --> C[repeat]
+  C --> D{next copy?}
+  D -- yes --> E[variant] --> D
+  D -- no --> F[judge in code]
+```
+
+Each run uses the Screening agent's own `match_requirements`, `mandatory_gate` and `score_candidate`. The two unchanged runs give the chance band; a copy is flagged only when it moves more than that plus one 5-point step, or the must-have check changes. A result that is not steady waits for a person to acknowledge it. Details: [innovation-design.md](innovation-design.md).
 
 ## Access separation (N9)
 

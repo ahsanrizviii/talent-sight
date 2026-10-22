@@ -42,7 +42,14 @@ Also built: a live question chat for the interviewer, a dashboard, candidate and
 
 **Innovation feature (F11)**
 
-TODO-F11: name the feature, say what problem it solves and where to find it in the app (this section is required by the brief and must be written when the feature is built). The rationale document goes in `docs/`.
+**Litmus** checks that a CV score rests on the CV, not on who the candidate is.
+
+- **The problem:** the screening AI is told to ignore personal details, but nothing showed whether it does. A rule in a prompt is a promise, not a proof.
+- **What it does:** for one candidate it scores the unchanged profile twice (to measure chance), then scores controlled copies of the profile, each with one identity detail changed: contact details removed, two different made-up names, and university names removed. Plain code compares the scores. A copy is flagged only when a score moves more than chance plus one 5-point step, or the must-have check changes.
+- **Human in the loop:** a result that is not steady waits until an interviewer acknowledges it with a note. Litmus never changes a score, a verdict, the ranking or a stage.
+- **Audit and cost:** every check is kept as its own record with the model, the prompt version, the AI calls, the tokens and the cost.
+- **Where to find it:** the **Litmus** tab on a candidate's page, and the **Litmus** card at the bottom of a job's candidate page ("Check the top 5"). From the terminal: `docker compose exec api python -m scripts.litmus_run <job id>`.
+- **Documents:** the rationale is in [docs/innovation-rationale.md](docs/innovation-rationale.md), the design and the known limits in [docs/innovation-design.md](docs/innovation-design.md).
 
 ## Architecture
 
@@ -70,7 +77,7 @@ flowchart LR
   API --> SMTP["Mail server (SMTP)"]
 ```
 
-- **Eight LangGraph agents** do the AI work: job writing, CV screening, answer analysis, assessment, claim check, question chat, interview quality and interview scoring. In each one the AI proposes and plain code checks: scores are added up by code, every conclusion must name evidence that exists, and a failed check goes back to the AI once. Details and graphs: [docs/architecture.md](docs/architecture.md).
+- **Nine LangGraph agents** do the AI work: job writing, CV screening, answer analysis, assessment, claim check, question chat, interview quality, interview scoring and Litmus. In each one the AI proposes and plain code checks: scores are added up by code, every conclusion must name evidence that exists, and a failed check goes back to the AI once. Details and graphs: [docs/architecture.md](docs/architecture.md).
 - **Long jobs run in the background** and show their progress (screening, answer analysis, assessment and the other reviews). A restart marks a half-finished run as interrupted instead of leaving it stuck.
 - **Access is separated.** The hiring team logs in. A candidate only has their private interview link, which reaches nothing but their own join page; scores, rankings and assessments are never sent to a candidate.
 
@@ -155,6 +162,8 @@ All settings come from `.env`. `.env.example` lists them with placeholders; the 
 | `INTERVIEW_MINUTES`, `INTERVIEW_GAP_MINUTES`, `INTERVIEW_WINDOWS`, `WORK_DAYS` | optional | Interview length, gap and working hours; holidays come from the PDF in `api/knowledge/holidays/` |
 | `CV_MAX_MB` | optional | Largest CV file (default 5) |
 | `BIOMETRIC_RETENTION_DAYS` | optional | How long face templates are kept (default 60) |
+| `LLM_PRICE_INPUT_PER_MILLION`, `LLM_PRICE_OUTPUT_PER_MILLION` | optional | Groq list prices in US dollars, used to show what a Litmus check cost (defaults 0.15 and 0.60) |
+| `LITMUS_SHORTLIST_SIZE` | optional | How many top candidates "Check the top" checks at once (default 5) |
 | `CAREERS_EMAIL` | optional | Address shown on public job posts |
 
 ## Using it
