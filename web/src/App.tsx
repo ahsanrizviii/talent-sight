@@ -20,6 +20,7 @@ import LandingPage from "./pages/LandingPage";
 import LoginPage from "./pages/LoginPage";
 import NotFoundPage from "./pages/NotFoundPage";
 import PeoplePage from "./pages/PeoplePage";
+import SettingsPage from "./pages/SettingsPage";
 import VideoTestPage from "./pages/VideoTestPage";
 
 // Names the browser tab after the page, so an interviewer with the room and a profile open can tell them apart.
@@ -61,6 +62,7 @@ export default function App() {
             <Route path="/interview/:id" element={<InterviewRoomPage />} />
             <Route path="/jd-chat" element={<JdChatPage />} />
             <Route path="/jd-chat/:threadId" element={<JdChatPage />} />
+            <Route path="/settings" element={<SettingsPage />} />
             <Route path="/prototype/video" element={<VideoTestPage />} />
             {/* Any other address: a page that says so, instead of a blank screen */}
             <Route path="*" element={<NotFoundPage />} />
