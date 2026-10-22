@@ -1,0 +1,185 @@
+/* Litmus (F11): the candidate tab and the job card.
+ * Uses only the colours, glass and radii already defined in styles.css (the variables in :root),
+ * plus .as-step, .as-spinner and .as-foot from assessment.css and .cl-promise from claims.css.
+ */
+
+.pl-outcome {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 18px;
+  padding: 12px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-s);
+  background: rgba(255, 255, 255, 0.55);
+}
+
+.pl-outcome p {
+  margin: 0;
+  color: var(--ink-2);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.pl-outcome.pass {
+  border-color: var(--met-line);
+  background: var(--met-wash);
+}
+
+.pl-outcome.warn {
+  border-color: var(--partly-line);
+  background: var(--partly-wash);
+}
+
+.pl-noise {
+  margin: 14px 0 6px;
+  color: var(--ink-2);
+  line-height: 1.5;
+}
+
+.pl-table {
+  width: 100%;
+  margin-top: 12px;
+  border-collapse: collapse;
+}
+
+.pl-table th,
+.pl-table td {
+  padding: 9px 10px;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  vertical-align: top;
+}
+
+.pl-table th.right,
+.pl-table td.right {
+  text-align: right;
+}
+
+.pl-table .num {
+  font-variant-numeric: tabular-nums;
+}
+
+.pl-reference td {
+  background: var(--accent-wash);
+}
+
+.pl-flagged td {
+  background: var(--partly-wash);
+}
+
+.pl-detail td {
+  padding-top: 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.pl-skip td {
+  color: var(--ink-3);
+}
+
+.pl-delta.down {
+  color: var(--unmet);
+}
+
+.pl-delta.up {
+  color: var(--met);
+}
+
+.pl-reasons {
+  margin: 4px 0;
+  padding-left: 18px;
+  color: var(--ink);
+  font-size: 13.5px;
+}
+
+.pl-review {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 18px;
+  padding: 14px 16px;
+  border: 1px solid var(--partly-line);
+  border-radius: var(--radius-s);
+  background: var(--partly-wash);
+}
+
+.pl-review.done {
+  display: block;
+  border-color: var(--met-line);
+  background: var(--met-wash);
+}
+
+.pl-review.done p {
+  margin: 6px 0 0;
+}
+
+.pl-review label {
+  font-size: 14px;
+  color: var(--ink-2);
+}
+
+.pl-history {
+  margin-top: 12px;
+}
+
+.pl-history ul {
+  margin: 6px 0 0;
+  padding-left: 18px;
+}
+
+.pl-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.pl-stats div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-s);
+  background: rgba(255, 255, 255, 0.55);
+}
+
+.pl-stats strong {
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+
+.pl-stats span {
+  font-size: 12.5px;
+  color: var(--ink-2);
+}
+
+.pl-people {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 16px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pl-people li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+@media (max-width: 720px) {
+  .pl-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .pl-table.wide th:nth-child(2),
+  .pl-table.wide tr:not(.pl-detail):not(.pl-skip) td:nth-child(2) {
+    display: none;
+  }
+}

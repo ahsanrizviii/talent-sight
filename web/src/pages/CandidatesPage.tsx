@@ -7,6 +7,7 @@ import Icon from "../components/Icon";
 import InviteDialog from "../components/InviteDialog";
 import JobPipeline from "../components/JobPipeline";
 import { LoadError } from "../components/PageState";
+import LitmusCard from "../components/LitmusCard";
 import type { CandidateRow, ChatSummary, ImportResult, Job, JobVisit, ScreeningRun, UploadResult } from "../types";
 
 type Tab = "ranked" | "excluded" | "other";
@@ -323,6 +324,8 @@ export default function CandidatesPage() {
           </table>
         )}
       </div>
+
+      {id && <LitmusCard jobId={id} hasShortlist={ranked.length > 0} />}
     </>
   );
 }
