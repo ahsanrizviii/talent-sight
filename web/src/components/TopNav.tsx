@@ -68,7 +68,8 @@ export default function TopNav() {
 
   function search(event: FormEvent) {
     event.preventDefault();
-    navigate(`/candidates?q=${encodeURIComponent(query.trim())}`);
+    // Searches everyone who applied, not only the shortlist.
+    navigate(`/candidates?stage=all&q=${encodeURIComponent(query.trim())}`);
   }
 
   function logOut() {

@@ -9,8 +9,15 @@ import StageBadge, { stageLabel } from "../components/StageBadge";
 import type { JobRow, PersonRow, Stage } from "../types";
 import { shortDate } from "../when";
 
-// Only the shortlist is listed: people sent an interview invitation, and people already interviewed.
-const STAGES: Stage[] = ["interview", "interviewed"];
+// Every stage can be picked. With none picked, the list is the shortlist: people sent an interview
+// invitation, and people already interviewed. "all" lists everyone who applied.
+const STAGES: Stage[] = ["new", "screened", "excluded", "interview", "interviewed", "problem"];
+
+function subtitle(stage: string): string {
+  if (!stage) return "The shortlist: everyone sent an interview invitation, across every job.";
+  if (stage === "all") return "Everyone who applied, across every job.";
+  return `${stageLabel(stage as Stage)}, across every job.`;
+}
 
 const SORTS = [
   { value: "score", label: "Highest score" },
@@ -19,8 +26,8 @@ const SORTS = [
   { value: "job", label: "Job" },
 ];
 
-// The shortlist of every job in one table: everyone who was sent an interview invitation, and everyone
-// already interviewed. Everyone else is on the job's own ranking page.
+// Candidates of every job in one table. By default the shortlist (invited or interviewed); the stage
+// filter opens everyone, or one stage, which is where the dashboard's links point.
 export default function PeoplePage() {
   const [params, setParams] = useSearchParams();
   const [rows, setRows] = useState<PersonRow[] | null>(null);
@@ -86,7 +93,7 @@ export default function PeoplePage() {
     const url = URL.createObjectURL(new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8" }));
     const link = document.createElement("a");
     link.href = url;
-    link.download = `talentsight-shortlist-${new Date().toISOString().slice(0, 10)}.csv`;
+    link.download = `talentsight-${filters.stage || "shortlist"}-${new Date().toISOString().slice(0, 10)}.csv`;
     // The link must be on the page for Firefox to follow it, and the file address must stay valid
     // until the browser has started the download. Freeing it at once is what cancelled the download.
     document.body.appendChild(link);
@@ -102,7 +109,7 @@ export default function PeoplePage() {
       <div className="page-head">
         <div>
           <h1>Candidates</h1>
-          <p>The shortlist: everyone sent an interview invitation, across every job.</p>
+          <p>{subtitle(filters.stage)}</p>
         </div>
         <button className="button secondary" type="button" onClick={downloadCsv} disabled={!rows?.length}>
           <Icon name="download" />
@@ -132,7 +139,8 @@ export default function PeoplePage() {
         </select>
 
         <select value={filters.stage} onChange={(event) => set("stage", event.target.value)} aria-label="Stage">
-          <option value="">Every stage</option>
+          <option value="">Shortlist</option>
+          <option value="all">Everyone</option>
           {STAGES.map((stage) => (
             <option key={stage} value={stage}>
               {stageLabel(stage)}
@@ -185,9 +193,9 @@ export default function PeoplePage() {
             <div className="skeleton" />
           </div>
         ) : rows.length === 0 ? (
-          <Empty title={filtered ? "Nothing matches those filters" : "Nobody is shortlisted yet"}>
+          <Empty title={filtered ? "Nobody here" : "Nobody is shortlisted yet"}>
             {filtered
-              ? "Try a wider search, or clear the filters."
+              ? "Try a wider search, another stage, or clear the filters."
               : "Open a job, screen the CVs and invite the top candidates. Everyone you invite appears here."}
           </Empty>
         ) : (
