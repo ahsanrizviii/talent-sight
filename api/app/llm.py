@@ -3,9 +3,16 @@
 Every agent calls ask_llm(). If the model is down, slow or answers in the wrong
 shape, ask_llm() raises LLMUnavailable, and the agent turns that into a clear
 error state instead of crashing (N6).
+
+measure_usage() (F11) counts the AI calls, tokens and cost of everything asked inside it, so a
+piece of work can report what it cost. Outside measure_usage() nothing is counted or changed.
 """
 import logging
+import threading
+from contextlib import contextmanager
+from contextvars import ContextVar
 
+from langchain_core.callbacks import BaseCallbackHandler
 from langchain_groq import ChatGroq
 from pydantic import BaseModel
 
@@ -16,6 +23,55 @@ log = logging.getLogger("talentsight.llm")
 
 class LLMUnavailable(Exception):
     """The language model could not give a usable answer."""
+
+
+class UsageMeter(BaseCallbackHandler):
+    """Adds up the calls and tokens of every AI answer it is told about."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.calls = 0
+        self.input_tokens = 0
+        self.output_tokens = 0
+        self._lock = threading.Lock()  # agent steps can run in worker threads
+
+    def on_llm_end(self, response, **kwargs) -> None:
+        used_in, used_out = 0, 0
+        for generations in response.generations:
+            for generation in generations:
+                usage = getattr(getattr(generation, "message", None), "usage_metadata", None) or {}
+                used_in += usage.get("input_tokens", 0)
+                used_out += usage.get("output_tokens", 0)
+        if not (used_in or used_out):  # some versions only report it here
+            token_usage = (response.llm_output or {}).get("token_usage") or {}
+            used_in = token_usage.get("prompt_tokens", 0)
+            used_out = token_usage.get("completion_tokens", 0)
+        with self._lock:
+            self.calls += 1
+            self.input_tokens += used_in
+            self.output_tokens += used_out
+
+    def cost_usd(self) -> float:
+        """The cost at the list prices in the settings (US dollars per million tokens)."""
+        cost = (
+            self.input_tokens * settings.llm_price_input_per_million
+            + self.output_tokens * settings.llm_price_output_per_million
+        ) / 1_000_000
+        return round(cost, 6)
+
+
+current_meter: ContextVar[UsageMeter | None] = ContextVar("llm_usage_meter", default=None)
+
+
+@contextmanager
+def measure_usage():
+    """with measure_usage() as meter: ... -> meter.calls, meter.input_tokens, meter.cost_usd()"""
+    meter = UsageMeter()
+    token = current_meter.set(meter)
+    try:
+        yield meter
+    finally:
+        current_meter.reset(token)
 
 
 def ask_llm(
@@ -31,6 +87,9 @@ def ask_llm(
     max_retries: how often to retry when Groq is busy or the free per-minute limit is reached.
     """
     name = model or settings.llm_model
+    meter = current_meter.get()
+    # Only inside measure_usage(): the meter is told about the answer. Otherwise nothing changes.
+    config = {"callbacks": [meter]} if meter is not None else None
     try:
         chat = ChatGroq(
             model=name,
@@ -44,7 +103,7 @@ def ask_llm(
         )
         structured_model = chat.with_structured_output(answer_shape, method="json_schema")
         answer = structured_model.invoke(
-            [("system", system_prompt), ("human", user_prompt)]
+            [("system", system_prompt), ("human", user_prompt)], config=config
         )
     except Exception as error:
         log.warning(

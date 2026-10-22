@@ -14,9 +14,10 @@ import VerdictBadge from "../components/VerdictBadge";
 import type { CandidateDetail, PersonRow } from "../types";
 import { shortDate } from "../when";
 import OnboardingCheckPanel from "../components/OnboardingCheckPanel";
+import LitmusPanel from "../components/LitmusPanel";
 import { LoadError, Loading } from "../components/PageState";
 
-type Tab = "score" | "requirements" | "interview" | "assessment" | "claims" | "onboarding" | "cv";
+type Tab = "score" | "requirements" | "interview" | "assessment" | "claims" | "litmus" | "onboarding" | "cv";
 
 const KIND_LABELS = {
   skill: "Required skill",
@@ -86,6 +87,7 @@ export default function CandidatePage() {
     { value: "interview", label: "Interview" },
     { value: "assessment", label: "Assessment" },
     { value: "claims", label: "CV claims" },
+    { value: "litmus", label: "Litmus" },
     { value: "onboarding", label: "Onboarding" },
     { value: "cv", label: "CV" },
   ];
@@ -276,6 +278,7 @@ export default function CandidatePage() {
 
       {tab === "assessment" && <AssessmentPanel candidateId={candidate.id} />}
       {tab === "claims" && <ClaimCheckPanel candidateId={candidate.id} />}
+      {tab === "litmus" && <LitmusPanel candidateId={candidate.id} />}
        {tab === "onboarding" && <OnboardingCheckPanel candidateId={candidate.id} />}
       {tab === "cv" && (
         <CvViewer candidateId={candidate.id} filename={candidate.cv_filename} text={candidate.cv_text} />

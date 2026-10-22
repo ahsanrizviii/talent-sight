@@ -14,6 +14,7 @@ from app.db import init_db
 from app.evaluation import mark_interrupted_evaluations
 from app.holiday_calendar import load_holiday_calendars
 from app.knowledge import load_policies
+from app import litmus_run
 from app.logging_setup import setup_logging
 from app.references import load_references
 from app.routers import (
@@ -33,6 +34,7 @@ from app.routers import (
     invites,
     jd_chat,
     jobs,
+    litmus,
     public,
     setup,
     transcripts,
@@ -58,6 +60,7 @@ async def lifespan(app: FastAPI):
     mark_interrupted_checks()  # and for a CV claim check (Module 13)
     agent_runs.mark_interrupted(InterviewQuality)  # and for an interview quality review (Module 13)
     agent_runs.mark_interrupted(InterviewScore)  # and for an interview score (Module 13)
+    litmus_run.mark_interrupted()  # and for a Litmus check (F11)
     purge_expired_at_start()  # face templates past BIOMETRIC_RETENTION_DAYS are deleted (Module 13, F7)
     # The holiday calendar PDF(s) in knowledge/holidays: reading one (OCR + AI) takes about a minute,
     # so it runs in the background and the API is ready straight away. Files read before are skipped.
@@ -128,3 +131,4 @@ app.include_router(interview_quality.router)
 app.include_router(interview_score.router)
 app.include_router(identity.router)
 app.include_router(identity.candidate_router)
+app.include_router(litmus.router)
