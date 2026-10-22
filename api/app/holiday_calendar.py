@@ -1,7 +1,8 @@
 """Public holidays: the days the interview planner never books.
 
-Where they come from: a file in api/knowledge/holidays/ (normally a PDF list such as
-bangladesh-public-holidays-2026.pdf). When the API starts, load_holiday_calendars() reads every file
+Where they come from: a holiday calendar in the Library (normally a PDF list such as
+bangladesh-public-holidays-2026.pdf, added on the Library page; the first one ships in api/knowledge/holidays/).
+When the API starts, and after every change on the Library page, load_holiday_calendars() reads every file
 there that it has not read before (in the background, so the API is not held up), saves the public
 holidays and writes the list to the log. Weekends are not in these files: Saturday and Sunday are fixed
 in settings (WORK_DAYS).
@@ -38,7 +39,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import delete, extract, select
 from sqlalchemy.orm import Session
 
-from app import knowledge
+from app import knowledge, library
 from app.cv_text import CVReadError, pdf_text, tidy
 from app.db import SessionLocal
 from app.llm import LLMUnavailable, ask_llm
@@ -46,7 +47,8 @@ from app.models import Holiday, HolidayChunk, HolidaySource
 
 log = logging.getLogger("talentsight")
 
-HOLIDAY_FOLDER = Path(__file__).resolve().parent.parent / "knowledge" / "holidays"
+# None = the Library's holiday calendars (library.py). Tests point this at a folder of their own.
+HOLIDAY_FOLDER: Path | None = None
 FILE_TYPES = (".txt", ".pdf")
 # Part of each file's fingerprint: when the way files are read improves, raising this number makes
 # every file be read again at the next start, with no command to remember.
@@ -352,10 +354,10 @@ def calendar_status(db: Session, today: date) -> tuple[int, str]:
     ahead = len(db.scalars(select(Holiday.id).where(Holiday.day >= today)).all())
     sources = db.scalars(select(HolidaySource)).all()
     if not sources:
-        return ahead, "No holiday list has been read yet. Put the holiday file in api/knowledge/holidays and restart the API."
+        return ahead, "No holiday list has been read yet. Add the holiday calendar on the Library page."
     problems = [f"{s.file_name}: {s.error}" for s in sources if s.error]
     if not problems and ahead == 0:
-        problems = ["The holiday list has no days from today on. Add next year's holidays to api/knowledge/holidays."]
+        problems = ["The holiday list has no days from today on. Add next year's holiday calendar on the Library page."]
     return ahead, " ".join(problems)
 
 
@@ -418,14 +420,19 @@ def load_file(db: Session, path: Path, force: bool = False) -> str:
     return f"{path.name}: {len(days)} public holidays saved"
 
 
+def holiday_folder() -> Path:
+    return HOLIDAY_FOLDER if HOLIDAY_FOLDER is not None else library.reading_folder("holidays")
+
+
 def load_holiday_calendars(force: bool = False) -> list[str]:
-    """Reads every holiday file in the knowledge/holidays folder that has not been read yet.
-    Called once at start-up, in the background. Never raises: a problem is logged and tried again
+    """Reads every holiday calendar in the Library that has not been read yet.
+    Called at start-up and after a change on the Library page, in the background. Never raises: a problem is logged and tried again
     at the next start. A file that was taken out of the folder is forgotten (its days stay until a
     newer file for the same year replaces them)."""
-    if not HOLIDAY_FOLDER.is_dir():
+    found_in = holiday_folder()
+    if not found_in.is_dir():
         return []
-    paths = sorted(p for p in HOLIDAY_FOLDER.iterdir() if p.suffix.lower() in FILE_TYPES)
+    paths = sorted(p for p in found_in.iterdir() if p.suffix.lower() in FILE_TYPES)
     with SessionLocal() as db:
         names = {p.name for p in paths}
         for record in db.scalars(select(HolidaySource)).all():

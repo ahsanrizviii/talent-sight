@@ -6,6 +6,7 @@ import Empty from "../components/Empty";
 import Icon from "../components/Icon";
 import JobPostView from "../components/JobPostView";
 import type { ChatHistory, ChatState, ChatSummary } from "../types";
+import type { LibraryKind } from "./LibraryPage";
 import { shortDateTime } from "../when";
 
 type Message = { from: "you" | "ai"; text: string };
@@ -115,10 +116,25 @@ export default function JdChatPage() {
   const [past, setPast] = useState<ChatSummary[]>([]);
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
+  // The hiring-policy documents in the Library, and the ones this job must follow (all, unless untick).
+  const [policyFiles, setPolicyFiles] = useState<string[]>([]);
+  const [chosen, setChosen] = useState<string[]>([]);
 
   useEffect(() => {
     api<ChatSummary[]>("/jd-chat").then(setPast).catch(() => undefined);
   }, [threadId, chat?.status]);
+
+  useEffect(() => {
+    api<LibraryKind[]>("/library")
+      .then((kinds) => {
+        const names = (kinds.find((kind) => kind.kind === "policies")?.documents ?? [])
+          .filter((document) => document.status === "read")
+          .map((document) => document.name);
+        setPolicyFiles(names);
+        setChosen(names);
+      })
+      .catch(() => undefined);
+  }, []);
 
   if (threadId) return <PastChat threadId={threadId} />;
 
@@ -144,7 +160,16 @@ export default function JdChatPage() {
   function startAgain() {
     setChat(null);
     setMessages([]);
+    setChosen(policyFiles);
   }
+
+  function toggle(name: string) {
+    setChosen((old) => (old.includes(name) ? old.filter((item) => item !== name) : [...old, name]));
+  }
+
+  // Every document ticked is sent as [] ("all"), so a policy added to the Library later is used too.
+  const policySources = chosen.length === policyFiles.length ? [] : chosen;
+  const noPolicyChosen = policyFiles.length > 0 && chosen.length === 0;
 
   const finished = chat?.status === "done" || chat?.status === "failed";
   const waitingForApproval = chat?.status === "waiting" && chat.kind === "draft";
@@ -214,10 +239,26 @@ export default function JdChatPage() {
             </label>
             <textarea id="message" value={text} onChange={(event) => setText(event.target.value)} />
           </div>
+          {!chat && policyFiles.length > 0 && (
+            <fieldset className="policy-pick">
+              <legend>Company policies the AI must follow</legend>
+              {policyFiles.map((name) => (
+                <label key={name}>
+                  <input type="checkbox" checked={chosen.includes(name)} onChange={() => toggle(name)} />
+                  {name}
+                </label>
+              ))}
+              <span className="hint">
+                {noPolicyChosen ? "Tick at least one policy document." : "Add or replace policy documents on the "}
+                {!noPolicyChosen && <Link to="/library">Library page</Link>}
+                {!noPolicyChosen && "."}
+              </span>
+            </fieldset>
+          )}
           <button
             className="button"
-            disabled={busy || text.trim().length < (chat ? 1 : 10)}
-            onClick={() => send(chat ? { text } : { brief: text }, text)}
+            disabled={busy || text.trim().length < (chat ? 1 : 10) || (!chat && noPolicyChosen)}
+            onClick={() => send(chat ? { text } : { brief: text, policy_sources: policySources }, text)}
           >
             {!chat ? "Start" : waitingForApproval ? "Ask for changes" : "Send"}
           </button>

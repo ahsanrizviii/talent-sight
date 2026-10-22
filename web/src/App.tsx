@@ -16,6 +16,7 @@ import JobFormPage from "./pages/JobFormPage";
 import JobPostPage from "./pages/JobPostPage";
 import JobsPage from "./pages/JobsPage";
 import JoinPage from "./pages/JoinPage";
+import LibraryPage from "./pages/LibraryPage";
 import LandingPage from "./pages/LandingPage";
 import LoginPage from "./pages/LoginPage";
 import NotFoundPage from "./pages/NotFoundPage";
@@ -63,6 +64,7 @@ export default function App() {
             <Route path="/jd-chat" element={<JdChatPage />} />
             <Route path="/jd-chat/:threadId" element={<JdChatPage />} />
             <Route path="/settings" element={<SettingsPage />} />
+            <Route path="/library" element={<LibraryPage />} />
             <Route path="/prototype/video" element={<VideoTestPage />} />
             {/* Any other address: a page that says so, instead of a blank screen */}
             <Route path="*" element={<NotFoundPage />} />

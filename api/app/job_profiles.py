@@ -44,6 +44,7 @@ class JobOut(JobIn):
     status: str
     slug: str | None
     created_at: datetime
+    policy_sources: list[str] = []  # the hiring-policy documents the AI followed; [] = all of them
 
     @computed_field
     @property

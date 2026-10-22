@@ -16,6 +16,8 @@ router = APIRouter(prefix="/api/jd-chat", tags=["jd chat"], dependencies=[Depend
 
 class StartChat(BaseModel):
     brief: str = Field(min_length=10, max_length=4000)
+    # The hiring-policy documents (file names in the Library) the AI must follow; empty = all of them.
+    policy_sources: list[str] = Field(default_factory=list, max_length=20)
 
 
 class ChatReply(BaseModel):
@@ -91,7 +93,9 @@ def chat_state(thread_id: str) -> ChatState:
 @router.post("", response_model=ChatState)
 def start_chat(body: StartChat, db: Session = Depends(get_db)):
     thread_id = str(uuid.uuid4())
-    get_jd_agent().invoke({"brief": body.brief}, {"configurable": {"thread_id": thread_id}})
+    get_jd_agent().invoke(
+        {"brief": body.brief, "policy_sources": body.policy_sources}, {"configurable": {"thread_id": thread_id}}
+    )
     state = chat_state(thread_id)
     jd_history.start(db, thread_id, body.brief, state)
     return state

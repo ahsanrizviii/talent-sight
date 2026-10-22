@@ -1,5 +1,10 @@
 # Knowledge for the AI
 
+**These are the starting documents.** The first time the API starts, they are copied into the
+Library (the `library` Docker volume). From then on, add, replace or remove documents on the
+**Library** page of the app: the AI reads them again by itself, and nothing needs rebuilding.
+The steps below are only needed for a fresh install without the Library volume.
+
 `bjit-hiring-policies.pdf` holds the hiring policies the JD Agent follows (Module 4).
 They are **demo policies** written for this training project, modelled on how BJIT is
 likely to hire. They are not BJIT's official hiring policy.

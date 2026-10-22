@@ -21,6 +21,8 @@ def init_db() -> None:
     # is added here by hand. "IF NOT EXISTS" makes it safe to run at every start.
     with engine.begin() as connection:
         connection.execute(text("ALTER TABLE interview_sessions ADD COLUMN IF NOT EXISTS duration_minutes INTEGER"))
+        # The Library: which hiring-policy documents a job was written with ([] = all of them).
+        connection.execute(text("ALTER TABLE job_profiles ADD COLUMN IF NOT EXISTS policy_sources JSON NOT NULL DEFAULT '[]'"))
                 # Module 10: the assessments table existed since Module 2 without these columns.
         connection.execute(text("ALTER TABLE assessments ADD COLUMN IF NOT EXISTS status VARCHAR(20) NOT NULL DEFAULT 'done'"))
         connection.execute(text("ALTER TABLE assessments ADD COLUMN IF NOT EXISTS step VARCHAR(200) NOT NULL DEFAULT ''"))
