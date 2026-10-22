@@ -9,7 +9,7 @@ Each list is loaded with a handful of grouped queries instead of one query per c
 so a long list stays fast.
 """
 
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Literal
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
@@ -24,9 +24,11 @@ from app.models import (
     CandidateScore,
     InterviewSession,
     JobProfile,
+    LitmusCheck,
     RequirementVerdict,
     TranscriptSegment,
 )
+from app.settings import settings
 
 router = APIRouter(prefix="/api/workspace", tags=["workspace"], dependencies=[Depends(current_interviewer)])
 
@@ -37,6 +39,7 @@ SHORTLISTED = ("interview", "interviewed")  # sent an interview invitation (book
 LATE_MINUTES = 15  # a few minutes late is normal; after this, a scheduled interview "did not start"
 FORGOTTEN_MINUTES = 60  # a live interview this long past its planned end was most likely never ended
 RECENT_DAYS = 14  # interviews held in this many days are listed for review on the dashboard
+SHORT_SECONDS = 120  # an ended call shorter than this with nothing said is a test call or a false start
 
 
 def utcnow() -> datetime:
@@ -314,21 +317,29 @@ def all_candidates(
     db: Session = Depends(get_db),
     q: str = Query("", max_length=120, description="name, e-mail, file or job"),
     job_id: int | None = None,
-    stage: Literal["", "interview", "interviewed"] = Query(""),
+    stage: Literal["", "all", "new", "screened", "excluded", "interview", "interviewed", "problem"] = Query(
+        "", description="empty = the shortlist (invited or interviewed); all = everyone; or one stage"
+    ),
     source: Literal["", "upload", "google_form"] = Query(""),
     min_score: float | None = Query(None, ge=0, le=100),
     sort: Literal["score", "name", "added", "job"] = Query("score"),
 ):
-    """The shortlist: every candidate who was sent an interview invitation (and those already
-    interviewed), across every job, narrowed down however the recruiter wants. Everyone else is
-    seen on the job's own ranking page."""
-    rows = [r for r in people_rows(db) if r.stage in SHORTLISTED]
+    """Candidates across every job, narrowed down however the recruiter wants.
+
+    With no stage, the shortlist: everyone sent an interview invitation, and everyone already
+    interviewed. stage=all lists everyone; any other stage lists everyone at that stage, so the
+    dashboard's "Waiting to screen" and "Ready to invite" links open the right people."""
+    people = people_rows(db)
+    if stage == "":
+        rows = [r for r in people if r.stage in SHORTLISTED]
+    elif stage == "all":
+        rows = people
+    else:
+        rows = [r for r in people if r.stage == stage]
     if q.strip():
         rows = [r for r in rows if matches(r, q)]
     if job_id is not None:
         rows = [r for r in rows if r.job_id == job_id]
-    if stage:
-        rows = [r for r in rows if r.stage == stage]
     if source:
         rows = [r for r in rows if r.source == source]
     if min_score is not None:
@@ -349,12 +360,25 @@ INTERVIEW_SORTS = {
 }
 
 
+def local_day(moment: datetime) -> date:
+    """The calendar day of a moment in the interview time zone (INTERVIEW_UTC_OFFSET_MINUTES)."""
+    return (moment.astimezone(timezone.utc) + timedelta(minutes=settings.interview_utc_offset_minutes)).date()
+
+
+def is_test_call(row: InterviewRow) -> bool:
+    """An ended call with nothing said that lasted under two minutes (or never started)."""
+    return row.status == "ended" and row.transcript_lines == 0 and (row.duration_seconds or 0) < SHORT_SECONDS
+
+
 @router.get("/interviews", response_model=list[InterviewRow])
 def all_interviews(
     db: Session = Depends(get_db),
-    state: Literal["upcoming", "live", "past", "all"] = Query("all"),
-    q: str = Query("", max_length=120),
+    state: Literal["upcoming", "live", "not_ended", "past", "all"] = Query("all"),
+    q: str = Query("", max_length=120, description="candidate or job"),
     job_id: int | None = None,
+    date_from: date | None = Query(None, description="first day, in the interview time zone"),
+    date_to: date | None = Query(None, description="last day, in the interview time zone"),
+    hide_test_calls: bool = Query(False, description="leave out ended calls under 2 minutes with nothing said"),
     sort: Literal["", "soonest", "latest", "candidate", "job", "score", "state"] = Query("", description="empty = the usual order"),
 ):
     rows = interview_rows(db)
@@ -363,10 +387,19 @@ def all_interviews(
         rows = [r for r in rows if all(w in f"{r.candidate_name} {r.job_title}".lower() for w in words)]
     if job_id is not None:
         rows = [r for r in rows if r.job_id == job_id]
+    if date_from is not None:
+        rows = [r for r in rows if local_day(r.scheduled_at) >= date_from]
+    if date_to is not None:
+        rows = [r for r in rows if local_day(r.scheduled_at) <= date_to]
+    if hide_test_calls:
+        rows = [r for r in rows if not is_test_call(r)]
     if state == "upcoming":
         rows = [r for r in rows if r.status == "scheduled"]
     elif state == "live":
-        rows = [r for r in rows if r.status == "live"]
+        # Really running now. A call still "live" long after its end was simply never ended.
+        rows = [r for r in rows if r.status == "live" and not r.forgotten]
+    elif state == "not_ended":
+        rows = [r for r in rows if r.forgotten]
     elif state == "past":
         rows = [r for r in rows if r.status == "ended"]
 
@@ -461,7 +494,22 @@ def job_progress(job: JobRow, mine: list[PersonRow]) -> JobProgress:
     )
 
 
-def build_todo(jobs: list[JobRow], people: list[PersonRow], interviews: list[InterviewRow]) -> list[TodoItem]:
+def litmus_waiting(db: Session) -> set[int]:
+    """Candidates whose latest Litmus check (F11) waits for a person to acknowledge it."""
+    latest: dict[int, str] = {}
+    for candidate_id, review_status in db.execute(
+        select(LitmusCheck.candidate_id, LitmusCheck.review_status).order_by(LitmusCheck.id)
+    ).all():
+        latest[candidate_id] = review_status
+    return {candidate_id for candidate_id, review_status in latest.items() if review_status == "pending"}
+
+
+def build_todo(
+    jobs: list[JobRow],
+    people: list[PersonRow],
+    interviews: list[InterviewRow],
+    litmus_pending: set[int] | None = None,
+) -> list[TodoItem]:
     """What is worth doing next, most urgent first. Each line goes straight to the page that does it."""
     todo: list[TodoItem] = []
 
@@ -484,6 +532,18 @@ def build_todo(jobs: list[JobRow], people: list[PersonRow], interviews: list[Int
                     text=f"The interview with {interview.candidate_name} did not start",
                     action="Reschedule",
                     to=f"/candidates/{interview.candidate_id}",
+                    tone="warn",
+                )
+            )
+
+    # A flagged or inconclusive Litmus check is not finished until a person has read it.
+    for person in people:
+        if person.id in (litmus_pending or set()):
+            todo.append(
+                TodoItem(
+                    text=f"The Litmus check of {person.name} waits for your review",
+                    action="Review it",
+                    to=f"/candidates/{person.id}?tab=litmus",
                     tone="warn",
                 )
             )
@@ -578,7 +638,7 @@ def overview(db: Session = Depends(get_db)):
             FunnelStep(label="Invited", value=sum(1 for p in people if p.stage in ("interview", "interviewed"))),
             FunnelStep(label="Interviewed", value=sum(1 for p in people if p.stage == "interviewed")),
         ],
-        todo=build_todo(jobs, people, interviews),
+        todo=build_todo(jobs, people, interviews, litmus_waiting(db)),
         next_interview=upcoming[0] if upcoming else None,
         upcoming=upcoming[:5],
         jobs=[job_progress(job, [p for p in people if p.job_id == job.id]) for job in jobs if job.status == "published"],

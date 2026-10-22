@@ -68,7 +68,8 @@ export default function TopNav() {
 
   function search(event: FormEvent) {
     event.preventDefault();
-    navigate(`/candidates?q=${encodeURIComponent(query.trim())}`);
+    // Searches everyone who applied, not only the shortlist.
+    navigate(`/candidates?stage=all&q=${encodeURIComponent(query.trim())}`);
   }
 
   function logOut() {
@@ -128,6 +129,10 @@ export default function TopNav() {
                   <strong>{me?.name}</strong>
                   <span>{me?.email}</span>
                 </div>
+                <Link className="menu-item" to="/settings" onClick={() => setOpenMenu(false)}>
+                  <Icon name="settings" />
+                  Settings
+                </Link>
                 <button className="menu-item" type="button" onClick={logOut}>
                   <Icon name="logout" />
                   Log out

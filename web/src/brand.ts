@@ -28,6 +28,8 @@ const TITLES: [RegExp, string][] = [
   [/^\/interviews$/, "Interviews"],
   [/^\/interview\/\d+$/, "Interview room"],
   [/^\/jd-chat/, "Write a job with AI"],
+  [/^\/settings$/, "Settings"],
+  [/^\/library$/, "Library"],
   [/^\/prototype\/video$/, "Video test"],
 ];
 

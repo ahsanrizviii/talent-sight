@@ -1,0 +1,279 @@
+/* Layout and filter pieces added in the final UI pass (Module 14 follow-up).
+ * Uses only the colours, glass and radii already defined in styles.css (the variables in :root).
+ */
+
+/* ---------------------------------------------------------------- filter strip extras */
+
+.filters .date-filter,
+.filters .check-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.filters .date-filter input {
+  padding: 7px 10px;
+  font-size: 13.5px;
+}
+
+.filters.glass .date-filter input {
+  border-color: transparent;
+  background-color: rgba(255, 255, 255, 0.7);
+}
+
+.filters .check-filter input {
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  accent-color: var(--accent);
+}
+
+.filter-note {
+  margin: -8px 0 14px 14px;
+}
+
+/* ---------------------------------------------------------------- breadcrumbs */
+
+.crumbs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 14px;
+  font-size: 13.5px;
+  color: var(--ink-3);
+}
+
+.crumbs a {
+  color: var(--ink-3);
+}
+
+.crumbs a:hover {
+  color: var(--ink);
+}
+
+.crumbs [aria-current="page"] {
+  color: var(--ink-2);
+  font-weight: 500;
+}
+
+.crumb-sep {
+  color: var(--ink-4);
+}
+
+.head-chips {
+  gap: 8px;
+  margin-top: 8px;
+}
+
+/* ---------------------------------------------------------------- the pipeline strip */
+
+.steps {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 4px;
+  margin: 0 0 16px;
+  padding: 6px;
+  list-style: none;
+  border-radius: var(--radius);
+}
+
+.steps a,
+.steps div {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 100%;
+  padding: 8px 10px;
+  border-radius: var(--radius-s);
+  color: var(--ink-2);
+  transition: background 0.18s var(--ease);
+}
+
+.steps a:hover {
+  background: rgba(255, 255, 255, 0.7);
+}
+
+.step-dot {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.7);
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink-3);
+}
+
+.steps .done .step-dot {
+  border-color: var(--met-line);
+  background: var(--met-wash);
+  color: var(--met);
+}
+
+.step-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.25;
+}
+
+.step-text strong {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.step-text span {
+  overflow: hidden;
+  font-size: 12.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink-3);
+}
+
+/* ---------------------------------------------------------------- the job page: wide and narrow column */
+
+.job-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 16px;
+  align-items: start;
+}
+
+.job-main {
+  min-width: 0;
+}
+
+.job-aside .card h2 {
+  margin-bottom: 12px;
+  font-size: 17px;
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.stack input[type="file"] {
+  max-width: 100%;
+  font-size: 13px;
+}
+
+.glance h3 {
+  margin: 14px 0 7px;
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+.chip.quiet {
+  background: transparent;
+  color: var(--ink-3);
+}
+
+.weights {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 13px;
+}
+
+.weights li {
+  display: grid;
+  grid-template-columns: 1fr 70px 38px;
+  align-items: center;
+  gap: 8px;
+  color: var(--ink-2);
+}
+
+.weights strong {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.weight-bar {
+  height: 6px;
+  border-radius: var(--pill);
+  background: var(--track);
+  overflow: hidden;
+}
+
+.weight-bar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+}
+
+.glance-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  margin-top: 16px;
+  font-size: 13.5px;
+}
+
+/* ---------------------------------------------------------------- settings */
+
+.settings-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.checks {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.checks li {
+  display: grid;
+  grid-template-columns: 104px 1fr;
+  gap: 10px;
+  align-items: start;
+}
+
+.checks li .badge {
+  justify-content: center;
+}
+
+.checks p {
+  margin: 3px 0 0;
+}
+
+.danger-zone {
+  margin-top: 28px;
+}
+
+@media (max-width: 1080px) {
+  .job-layout,
+  .settings-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .steps {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 680px) {
+  .steps {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

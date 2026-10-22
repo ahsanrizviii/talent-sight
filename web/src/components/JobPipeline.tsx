@@ -51,14 +51,14 @@ export default function JobPipeline({
     {
       label: "Posted",
       done: published,
-      value: !published ? "Not yet" : job.blog_url ? "On the blog" : "Published",
+      value: !published ? "Not yet" : job.blog_url ? "On the blog ↗" : "Published",
       note: job.blog_url ? "Open the blog post ↗" : published ? "Published" : "Publish the job to post it",
       href: job.blog_url ?? undefined,
     },
     {
-      label: "CVs collected",
+      label: "CVs",
       done: list.length > 0,
-      value: String(list.length),
+      value: `${list.length} received`,
       note: `${list.length - fromForm} uploaded · ${fromForm} from the Google Form`,
       to: `/jobs/${job.id}/cvs`,
     },
@@ -72,7 +72,7 @@ export default function JobPipeline({
     {
       label: "Ranked",
       done: ranked.length > 0,
-      value: String(ranked.length),
+      value: top ? `Top: ${top.name || top.cv_filename}` : `${ranked.length} ranked`,
       note: top
         ? `Top: ${top.name || top.cv_filename}${top.overall !== null ? ` (${top.overall})` : ""}`
         : "No ranked candidates yet",
@@ -80,20 +80,24 @@ export default function JobPipeline({
     },
   ];
 
+  // One thin strip instead of five big tiles: each step is a dot (a tick when done), its name and
+  // its value. The longer note is the step's tooltip.
   return (
-    <ol className="pipeline" aria-label="Hiring pipeline">
+    <ol className="steps glass" aria-label="Hiring pipeline">
       {steps.map((step, index) => {
         const body = (
           <>
-            <span className="step-label">
-              {index + 1} · {step.label} {step.done && <span className="step-check">✓</span>}
+            <span className="step-dot" aria-hidden="true">
+              {step.done ? "✓" : index + 1}
             </span>
-            <span className="step-value">{step.value}</span>
-            <span className="step-note">{step.note}</span>
+            <span className="step-text">
+              <strong>{step.label}</strong>
+              <span>{step.value}</span>
+            </span>
           </>
         );
         return (
-          <li key={step.label} className={step.done ? "done" : ""}>
+          <li key={step.label} className={step.done ? "done" : ""} title={step.note}>
             {step.href ? (
               <a href={step.href} target="_blank" rel="noreferrer">
                 {body}
