@@ -144,6 +144,11 @@ class OnboardingCheckOut(BaseModel):
 
 class OnboardingOut(BaseModel):
     templates_on_file: int
+    templates_taken_at: datetime | None = None    # when the newest face template was made
+    templates_expire_at: datetime | None = None   # when the first one is deleted (BIOMETRIC_RETENTION_DAYS)
+    templates_interview_at: datetime | None = None  # the interview they come from
+    interview_held: bool = False                  # an interview really took place
+    consent: bool | None = None                   # the candidate's answer to face matching, None = never asked
     retention_days: int
     check: OnboardingCheckOut | None
 

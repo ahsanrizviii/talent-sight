@@ -239,8 +239,28 @@ def onboarding_state(db: Session, candidate: Candidate) -> dict:
             "checked_by": row.checked_by,
             "checked_at": row.checked_at,
         }
+    # What is on file, so the onboarding tab can say it before anyone starts the camera.
+    templates = templates_on_file(db, candidate.id)
+    taken = max((t.created_at for t in templates), default=None)
+    expires = min((t.expires_at for t in templates), default=None)
+    source = db.get(InterviewSession, templates[-1].session_id) if templates else None
+    held = db.scalar(
+        select(func.count()).select_from(InterviewSession).where(
+            InterviewSession.candidate_id == candidate.id,
+            InterviewSession.status == "ended",
+            InterviewSession.started_at.is_not(None),
+        )
+    )
+    latest_record = db.scalar(
+        select(IdentityRecord).where(IdentityRecord.candidate_id == candidate.id).order_by(IdentityRecord.id.desc()).limit(1)
+    )
     return {
-        "templates_on_file": len(templates_on_file(db, candidate.id)),
+        "templates_on_file": len(templates),
+        "templates_taken_at": taken,
+        "templates_expire_at": expires,
+        "templates_interview_at": (source.started_at or source.scheduled_at) if source else None,
+        "interview_held": bool(held),
+        "consent": latest_record.consent if latest_record else None,
         "retention_days": settings.biometric_retention_days,
         "check": check,
     }
