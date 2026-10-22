@@ -23,6 +23,7 @@ from app.models import (
     InviteDelivery,
     JobProfile,
     OnboardingCheck,
+    LitmusCheck,
     RequirementVerdict,
     SessionParticipant,
     TranscriptSegment,
@@ -53,6 +54,7 @@ def what_is_kept(db: Session, candidate_id: int) -> dict[str, int]:
         "face templates": select(func.count()).select_from(FaceTemplate).where(FaceTemplate.candidate_id == candidate_id),
         "onboarding checks": select(func.count()).select_from(OnboardingCheck).where(OnboardingCheck.candidate_id == candidate_id),
         "claim checks": select(func.count()).select_from(ClaimCheck).where(ClaimCheck.candidate_id == candidate_id),
+        "litmus checks": select(func.count()).select_from(LitmusCheck).where(LitmusCheck.candidate_id == candidate_id),
     }
     return {name: db.scalar(query) for name, query in counts.items()}
 

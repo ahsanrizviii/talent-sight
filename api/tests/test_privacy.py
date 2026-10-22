@@ -26,6 +26,7 @@ from app.models import (
     InviteDelivery,
     JobProfile,
     OnboardingCheck,
+    LitmusCheck,
     RequirementVerdict,
     SessionParticipant,
     TranscriptSegment,
@@ -73,6 +74,7 @@ def full_candidate(name: str = "Maya Rahman", job_id: int | None = None) -> tupl
         db.add(FaceTemplate(candidate_id=person.id, session_id=session.id, slot=1, vector=[0.1, 0.2], expires_at=now))
         db.add(OnboardingCheck(candidate_id=person.id, status="done", outcome="match"))
         db.add(ClaimCheck(candidate_id=person.id, session_id=session.id, status="done", result={"claims": []}))
+        db.add(LitmusCheck(candidate_id=person.id, status="done", result={"outcome": "steady"}))
         db.commit()
         return person.id, cv
 

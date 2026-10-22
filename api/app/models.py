@@ -531,3 +531,38 @@ class InterviewEvaluation(Base):
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     seconds: Mapped[float | None] = mapped_column(Float)
+
+class LitmusCheck(Base):
+    """One Litmus check of one candidate's CV score (F11).
+
+    Every check is its own row: checking again adds a row, so earlier checks are never rewritten.
+    Only the scores of the controlled copies are kept, never the copies themselves. Interviewer only
+    (N9), deleted with the candidate (N19). It never changes the candidate's score or stage.
+    A new table, so create_all makes it in an existing database.
+    """
+
+    __tablename__ = "litmus_checks"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    candidate_id: Mapped[int] = mapped_column(ForeignKey("candidates.id", ondelete="CASCADE"), index=True)
+    status: Mapped[str] = mapped_column(String(20), default="running")  # queued | running | done | failed
+    step: Mapped[str] = mapped_column(String(200), default="")  # what the agent is doing now, for the screen
+    error: Mapped[str] = mapped_column(Text, default="")
+    result: Mapped[dict] = mapped_column(JSON, default=dict)  # the report from app/litmus.py judge()
+    input_hash: Mapped[str] = mapped_column(String(64), default="")  # profile + job + weights at the time
+
+    # The person who read a flagged result: "" (nothing to review) | pending | acknowledged
+    review_status: Mapped[str] = mapped_column(String(20), default="")
+    review_note: Mapped[str] = mapped_column(Text, default="")
+    reviewed_by: Mapped[int | None] = mapped_column(ForeignKey("interviewers.id", ondelete="SET NULL"), nullable=True)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    # What the check used and cost
+    llm_calls: Mapped[int] = mapped_column(Integer, default=0)
+    input_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    output_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    cost_usd: Mapped[float] = mapped_column(Float, default=0.0)
+
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    seconds: Mapped[float | None] = mapped_column(Float)
