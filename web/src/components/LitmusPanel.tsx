@@ -214,7 +214,7 @@ export default function LitmusPanel({ candidateId }: { candidateId: number }) {
                 <td />
               </tr>
               {(done.result.variants ?? []).map((copy) => (
-                <CopyRow key={copy.key} copy={copy} />
+                <CopyRow key={copy.key} copy={copy} outcome={done.result.outcome ?? "steady"} />
               ))}
             </tbody>
           </table>
@@ -260,18 +260,35 @@ function shown(run: RunSummary | { overall?: number | null; excluded?: boolean }
 function Noise({ check }: { check: LitmusCheck }) {
   const noise = check.result.noise;
   if (!noise) return null;
-  const widest = Math.max(0, ...Object.values(noise.dimensions));
   return (
-    <p className="small pl-noise">
-      <strong>Chance band.</strong> The unchanged profile was scored twice. It moved by {widest} points at most on one
-      dimension ({noise.overall} overall)
-      {noise.gate_changed ? ", and the must-have check changed between the two runs" : ""}. A copy is flagged only when
-      it moves more than that plus one 5-point step.
-    </p>
+    <div className="small pl-noise">
+      <p>
+        <strong>Chance band.</strong> The unchanged profile was scored twice, to see how much the score moves by
+        chance alone ({noise.overall} overall
+        {noise.gate_changed ? "; the must-have check also changed between the two runs" : ""}). A copy is flagged only
+        when a dimension moves more than its band plus one 5-point step.
+      </p>
+      <ul className="pl-bands">
+        {Object.entries(noise.dimensions).map(([key, band]) => (
+          <li key={key} className={band > 10 ? "wide" : ""}>
+            <span>{DIMENSIONS[key] ?? key}</span>
+            <strong>±{band}</strong>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 
-function CopyRow({ copy }: { copy: LitmusCopy }) {
+// The badge of one copy. "Steady" is only said when the whole check is steady: when the unchanged
+// profile itself moved too much, a copy inside that range is "within chance", not proof of anything.
+function copyBadge(copy: LitmusCopy, outcome: LitmusOutcome): { label: string; tone: string } {
+  if (copy.flagged) return { label: "Flagged", tone: "warn" };
+  if (outcome === "inconclusive") return { label: "Within chance", tone: "" };
+  return { label: "Steady", tone: "pass" };
+}
+
+function CopyRow({ copy, outcome }: { copy: LitmusCopy; outcome: LitmusOutcome }) {
   if (!copy.applicable) {
     return (
       <tr className="pl-skip">
@@ -284,6 +301,7 @@ function CopyRow({ copy }: { copy: LitmusCopy }) {
   }
   const moved = Object.entries(copy.dimension_changes ?? {}).filter(([, delta]) => delta !== 0);
   const verdicts = copy.verdict_changes ?? [];
+  const badge = copyBadge(copy, outcome);
   return (
     <>
       <tr className={copy.flagged ? "pl-flagged" : ""}>
@@ -294,7 +312,7 @@ function CopyRow({ copy }: { copy: LitmusCopy }) {
           {signed(copy.overall_change)}
         </td>
         <td>
-          <span className={`badge ${copy.flagged ? "warn" : "pass"}`}>{copy.flagged ? "Flagged" : "Steady"}</span>
+          <span className={`badge ${badge.tone}`}>{badge.label}</span>
         </td>
       </tr>
       {(copy.flagged || moved.length > 0 || verdicts.length > 0) && (

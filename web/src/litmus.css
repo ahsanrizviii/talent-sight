@@ -37,6 +37,34 @@
   line-height: 1.5;
 }
 
+.pl-noise p {
+  margin: 0 0 8px;
+}
+
+/* The chance band of each dimension. A band wider than 10 points is what makes a check inconclusive. */
+.pl-bands {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pl-bands li {
+  display: inline-flex;
+  gap: 6px;
+  padding: 4px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--pill);
+  background: rgba(255, 255, 255, 0.55);
+}
+
+.pl-bands li.wide {
+  border-color: var(--partly-line);
+  background: var(--partly-wash);
+}
+
 .pl-table {
   width: 100%;
   margin-top: 12px;
