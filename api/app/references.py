@@ -7,13 +7,12 @@ from pypdf import PdfReader
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
-from app import knowledge
+from app import knowledge, library
 from app.db import SessionLocal
 from app.models import ReferenceChunk
 
 log = logging.getLogger("talentsight.references")
 
-SKILLS_DIR = Path(__file__).resolve().parent.parent / "knowledge" / "skills"
 
 
 def split_reference(markdown: str, source: str) -> list[dict]:
@@ -84,15 +83,13 @@ def pdf_to_markdown(text: str) -> list[str]:
 
 
 def read_references() -> list[dict]:
-    """Every section of every document in the skills folder, in a fixed order.
+    """Every section of every skills reference document in the Library, in a fixed order.
 
-    The folder holds one PDF with all the skills. A Markdown file (one skill per file) still works,
-    so a new skill can be added without rebuilding the PDF.
+    One PDF holds all the skills. A Markdown file (one skill per file) still works, so a new skill
+    can be added on the Library page without rebuilding the PDF.
     """
-    if not SKILLS_DIR.is_dir():
-        return []
     found: list[dict] = []
-    for path in sorted(SKILLS_DIR.iterdir()):
+    for path in library.files_of("skills"):
         if path.suffix == ".md":
             found += split_reference(path.read_text(encoding="utf-8"), path.name)
         elif path.suffix == ".pdf":

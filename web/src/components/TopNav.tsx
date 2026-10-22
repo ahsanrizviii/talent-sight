@@ -12,6 +12,7 @@ const SECTIONS = [
   { to: "/jobs", label: "Jobs" },
   { to: "/candidates", label: "Candidates" },
   { to: "/interviews", label: "Interviews" },
+  { to: "/library", label: "Library" },
 ];
 
 // The bar at the top of every working page, laid out like the welcome page: the sections on the

@@ -47,6 +47,13 @@ def cv_files_in_temp_folder(monkeypatch, tmp_path):
     
     monkeypatch.setattr(settings, "cv_upload_dir", str(tmp_path / "cv_uploads"))
 
+
+@pytest.fixture(autouse=True)
+def library_in_temp_folder(monkeypatch, tmp_path):
+    """autouse = applied to every test. Tests never write to the real Library volume: each test gets an
+    empty library folder. Until the API start-up sets it up, the documents that ship with the code are read."""
+    monkeypatch.setattr(settings, "library_dir", str(tmp_path / "library"))
+
 @pytest.fixture(autouse=True)
 def no_real_google_form(monkeypatch):
     """autouse = applied to every test. Tests must never call the real Google Form or Drive."""

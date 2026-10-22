@@ -49,6 +49,8 @@ class JobProfile(Base):
     min_experience_years: Mapped[int] = mapped_column(Integer, default=0)
     selection_criteria: Mapped[str] = mapped_column(Text, default="")
     weights: Mapped[dict] = mapped_column(JSON, default=lambda: dict(DEFAULT_WEIGHTS))
+    # The hiring-policy documents the JD Agent followed for this job (file names in the Library); [] = all
+    policy_sources: Mapped[list] = mapped_column(JSON, default=list)
     status: Mapped[str] = mapped_column(String(20), default="draft")  
     slug: Mapped[str | None] = mapped_column(String(250), unique=True)  
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

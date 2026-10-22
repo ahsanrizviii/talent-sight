@@ -38,6 +38,10 @@ class Settings(BaseSettings):
     cv_max_files: int = 25                   # most CVs in one upload
     cv_max_chars: int = 8000                 # CV text sent to the AI is cut here, to stay inside Groq's free limits
 
+    # The Library (documents the AI reads: hiring policies, skills references, holiday calendars),
+    # on its own Docker volume so documents added on the website survive a rebuild.
+    library_dir: str = "/data/library"
+
     # Applications through one shared Google Form (Module 5)
     google_form_id: str = ""          # from the form's EDIT link: docs.google.com/forms/d/<THIS PART>/edit
     google_form_url: str = ""         # the form's SHARE link: https://docs.google.com/forms/d/e/.../viewform

@@ -159,10 +159,11 @@ All settings come from `.env`. `.env.example` lists them with placeholders; the 
 | `BLOGGER_BLOG_ID`, `BLOGGER_BLOG_URL` | optional | Publishing job posts to a blog |
 | `GOOGLE_CALENDAR_ID` | optional | Calendar for interview entries; empty = off |
 | `GOOGLE_FORM_ID`, `GOOGLE_FORM_URL`, `GOOGLE_FORM_JOB_FIELD` | optional | Importing CVs from a Google Form |
-| `INTERVIEW_MINUTES`, `INTERVIEW_GAP_MINUTES`, `INTERVIEW_WINDOWS`, `WORK_DAYS` | optional | Interview length, gap and working hours; holidays come from the PDF in `api/knowledge/holidays/` |
+| `INTERVIEW_MINUTES`, `INTERVIEW_GAP_MINUTES`, `INTERVIEW_WINDOWS`, `WORK_DAYS` | optional | Interview length, gap and working hours; holidays come from the calendar on the Library page |
 | `CV_MAX_MB` | optional | Largest CV file (default 5) |
 | `BIOMETRIC_RETENTION_DAYS` | optional | How long face templates are kept (default 60) |
 | `LLM_PRICE_INPUT_PER_MILLION`, `LLM_PRICE_OUTPUT_PER_MILLION` | optional | Groq list prices in US dollars, used to show what a Litmus check cost (defaults 0.15 and 0.60) |
+| `LIBRARY_DIR` | optional | Where the Library keeps its documents (default `/data/library`, the `library` Docker volume) |
 | `LITMUS_SHORTLIST_SIZE` | optional | How many top candidates "Check the top" checks at once (default 5) |
 | `CAREERS_EMAIL` | optional | Address shown on public job posts |
 

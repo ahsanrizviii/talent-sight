@@ -22,6 +22,7 @@ MAX_DRAFT_ATTEMPTS = 2
 
 class JDState(AgentState, total=False):
     brief: str  
+    policy_sources: list[str]  # the hiring-policy documents chosen in the Library; empty = all
     questions: list[str]  
     question_rounds: int  
     policies: list[str]  
@@ -90,7 +91,7 @@ def ask_for_details(state: JDState) -> dict:
 
 def find_policies(state: JDState) -> dict:
     with SessionLocal() as db:
-        chunks = search_policies(db, state["brief"], limit=5)
+        chunks = search_policies(db, state["brief"], limit=5, sources=state.get("policy_sources") or None)
     return {"policies": [f"[{chunk.source}] {chunk.text}" for chunk in chunks]}
 
 
@@ -130,6 +131,7 @@ def ask_for_approval(state: JDState) -> dict:
 def save_and_publish(state: JDState) -> dict:
     with SessionLocal() as db:
         job = JobProfile(**JobIn(**state["draft"]).model_dump())
+        job.policy_sources = list(state.get("policy_sources") or [])
         db.add(job)
         db.flush()  # the database gives the job its id, which the web address needs
         slug = publish_job_post(job)

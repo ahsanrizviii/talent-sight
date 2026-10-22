@@ -14,6 +14,7 @@ from app.db import init_db
 from app.evaluation import mark_interrupted_evaluations
 from app.holiday_calendar import load_holiday_calendars
 from app.knowledge import load_policies
+from app import library as document_library
 from app import litmus_run
 from app.logging_setup import setup_logging
 from app.references import load_references
@@ -34,6 +35,7 @@ from app.routers import (
     invites,
     jd_chat,
     jobs,
+    library,
     litmus,
     public,
     setup,
@@ -52,6 +54,7 @@ async def lifespan(app: FastAPI):
     # Runs once when the API starts, before it accepts any request.
     init_db()
     seed_interviewer()
+    document_library.set_up()  # the Library volume is filled once from api/knowledge (Task 4.3.2 follow-up)
     load_policies()
     load_references()  # the skills reference documents for the Evaluation Agent (Module 9)
     mark_interrupted_runs()
@@ -132,3 +135,4 @@ app.include_router(interview_score.router)
 app.include_router(identity.router)
 app.include_router(identity.candidate_router)
 app.include_router(litmus.router)
+app.include_router(library.router)

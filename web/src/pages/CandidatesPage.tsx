@@ -396,6 +396,10 @@ function JobGlance({ job, hasChat, chatId }: { job: Job; hasChat: boolean; chatI
         {job.qualifications.length > 0 && <> · {job.qualifications.join("; ")}</>}
       </p>
 
+      {job.policy_sources && job.policy_sources.length > 0 && (
+        <p className="small muted">Written with the policies: {job.policy_sources.join(", ")}</p>
+      )}
+
       <h3>How candidates are weighed</h3>
       <ul className="weights">
         {WEIGHT_LABELS.map(([key, label]) => (

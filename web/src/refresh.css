@@ -277,3 +277,61 @@
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+/* ---------------------------------------------------------------- the Library */
+
+.library-kind .card-head p {
+  margin: 4px 0 0;
+}
+
+.library-add {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 22px 18px;
+  border-top: 1px solid var(--line);
+}
+
+.library-add input[type="file"] {
+  max-width: 100%;
+  padding: 6px 8px;
+  font-size: 13px;
+}
+
+/* Choosing the policy documents when a job is written with the AI */
+.policy-pick {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0 0 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-s);
+}
+
+.policy-pick legend {
+  padding: 0 6px;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--ink-2);
+}
+
+.policy-pick label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+}
+
+.policy-pick input {
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  accent-color: var(--accent);
+}
+
+.policy-pick .hint {
+  font-size: 12.5px;
+  color: var(--ink-4);
+}

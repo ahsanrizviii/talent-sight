@@ -25,6 +25,7 @@ export type Job = JobInput & {
   slug: string | null;
   blog_url: string | null;
   created_at: string;
+  policy_sources?: string[]; // the hiring-policy documents the AI followed (Library); empty = all
 };
 
 export type ChatState = {
