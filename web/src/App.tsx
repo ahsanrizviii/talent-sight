@@ -9,6 +9,7 @@ import CandidatesPage from "./pages/CandidatesPage";
 import ComparePage from "./pages/ComparePage";
 import DashboardPage from "./pages/DashboardPage";
 import InterviewRoomPage from "./pages/InterviewRoomPage";
+import IdentityCheckPage from "./pages/IdentityCheckPage";
 import InterviewsPage from "./pages/InterviewsPage";
 import JdChatPage from "./pages/JdChatPage";
 import JobCvsPage from "./pages/JobCvsPage";
@@ -21,6 +22,8 @@ import LandingPage from "./pages/LandingPage";
 import LoginPage from "./pages/LoginPage";
 import NotFoundPage from "./pages/NotFoundPage";
 import PeoplePage from "./pages/PeoplePage";
+import ResultDetailPage from "./pages/ResultDetailPage";
+import ResultsPage from "./pages/ResultsPage";
 import SettingsPage from "./pages/SettingsPage";
 import VideoTestPage from "./pages/VideoTestPage";
 
@@ -61,6 +64,9 @@ export default function App() {
             <Route path="/candidates/:id" element={<CandidatePage />} />
             <Route path="/interviews" element={<InterviewsPage />} />
             <Route path="/interview/:id" element={<InterviewRoomPage />} />
+            <Route path="/results" element={<ResultsPage />} />
+            <Route path="/results/:sessionId" element={<ResultDetailPage />} />
+            <Route path="/identity" element={<IdentityCheckPage />} />
             <Route path="/jd-chat" element={<JdChatPage />} />
             <Route path="/jd-chat/:threadId" element={<JdChatPage />} />
             <Route path="/settings" element={<SettingsPage />} />

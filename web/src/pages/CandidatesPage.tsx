@@ -1,15 +1,22 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 
 import { api } from "../api";
 import Empty from "../components/Empty";
 import Icon from "../components/Icon";
 import InviteDialog from "../components/InviteDialog";
-import JobPipeline from "../components/JobPipeline";
+import InvitationsStage from "../components/InvitationsStage";
+import JobStageBar, { type JobStage } from "../components/JobStageBar";
 import Breadcrumbs from "../components/Breadcrumbs";
+import OnboardingStage from "../components/OnboardingStage";
 import { LoadError } from "../components/PageState";
 import LitmusCard from "../components/LitmusCard";
-import type { CandidateRow, ChatSummary, ImportResult, Job, JobVisit, ScreeningRun, UploadResult } from "../types";
+import ReportStage from "../components/ReportStage";
+import RoundsStage from "../components/RoundsStage";
+import type { CandidateRow, ChatSummary, HiringSummary, ImportResult, Job, JobVisit, ScreeningRun, UploadResult } from "../types";
+import "../hiring.css";
+
+const JOB_STAGES: JobStage[] = ["screening", "invitations", "interviews", "report", "onboarding"];
 
 type Tab = "ranked" | "excluded" | "other";
 type Busy = "" | "upload" | "import" | "screen-new" | "screen-all";
@@ -21,11 +28,16 @@ const STATUS_LABELS: Record<string, string> = {
   failed: "Screening failed",
 };
 
-// One job's own page. The shortlist is the main thing, so it takes the wide column; screening, adding
-// CVs and the job's own details sit in the narrow column beside it. The pipeline strip on top says
-// how far the job has got in one line.
+// One job's own page, in five stages: CV screening, invitations, the interview rounds, the report
+// and onboarding. The stage bar on top says how far each stage has got and opens it. In the CV
+// screening stage the shortlist takes the wide column; screening, adding CVs and the job's own
+// details sit in the narrow column beside it.
 export default function CandidatesPage() {
   const { id } = useParams();
+  const [params, setParams] = useSearchParams();
+  const asked = params.get("stage") as JobStage | null;
+  const stage: JobStage = asked && JOB_STAGES.includes(asked) ? asked : "screening";
+  const [summary, setSummary] = useState<HiringSummary | null>(null);
   const [job, setJob] = useState<Job | null>(null);
   const [candidates, setCandidates] = useState<CandidateRow[]>([]);
   const [run, setRun] = useState<ScreeningRun | null>(null);
@@ -51,6 +63,33 @@ export default function CandidatesPage() {
     setCandidates(list);
     setRun(latest);
   }, [id]);
+
+  const loadSummary = useCallback(() => {
+    api<HiringSummary>(`/jobs/${id}/hiring`)
+      .then(setSummary)
+      .catch(() => undefined); // the bar is a summary: the stage below shows any real error
+  }, [id]);
+
+  useEffect(() => {
+    loadSummary();
+  }, [loadSummary]);
+
+  function openStage(next: JobStage, round?: number) {
+    const query = new URLSearchParams(params);
+    query.set("stage", next);
+    if (round) query.set("round", String(round));
+    else if (next !== "interviews") query.delete("round");
+    setParams(query, { replace: true });
+  }
+
+  // The round shown in the Interviews stage: the one in the address, or else the first round that
+  // is not closed yet (the one that needs attention).
+  const rounds = summary?.rounds ?? [];
+  const askedRound = Number(params.get("round") ?? "");
+  const round =
+    askedRound >= 1 && askedRound <= Math.max(1, rounds.length)
+      ? askedRound
+      : (rounds.find((r) => r.state !== "closed")?.number ?? rounds[rounds.length - 1]?.number ?? 1);
 
   useEffect(() => {
     api<Job>(`/jobs/${id}`)
@@ -103,6 +142,7 @@ export default function CandidatesPage() {
     try {
       setMessage(await work());
       await load();
+      loadSummary();
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -207,15 +247,40 @@ export default function CandidatesPage() {
         </div>
       )}
 
-      {job && <JobPipeline job={job} candidates={candidates} />}
+      <JobStageBar summary={summary} stage={stage} onPick={(next) => openStage(next)} />
 
       {inviting && id && (
-        <InviteDialog jobId={id} ranked={ranked} onClose={() => setInviting(false)} onSent={() => load().catch(() => undefined)} />
+        <InviteDialog
+          jobId={id}
+          ranked={ranked}
+          onClose={() => setInviting(false)}
+          onSent={() => {
+            load().catch(() => undefined);
+            loadSummary();
+          }}
+        />
       )}
 
       {error && <p className="error">{error}</p>}
       {message && <p className="success">{message}</p>}
 
+      {id && stage === "invitations" && (
+        <InvitationsStage jobId={id} canInvite={ranked.length > 0} onInvite={() => setInviting(true)} onChange={loadSummary} />
+      )}
+      {id && stage === "interviews" && summary && (
+        <RoundsStage
+          jobId={id}
+          summary={summary}
+          round={round}
+          onPickRound={(number) => openStage("interviews", number)}
+          onChange={loadSummary}
+          onGoToScreening={() => openStage("screening")}
+        />
+      )}
+      {id && stage === "report" && <ReportStage jobId={id} onChange={loadSummary} />}
+      {id && stage === "onboarding" && <OnboardingStage jobId={id} />}
+
+      {stage === "screening" && (
       <div className="job-layout">
         <div className="job-main">
           <div className="tabs glass" role="tablist">
@@ -355,6 +420,7 @@ export default function CandidatesPage() {
           {job && <JobGlance job={job} hasChat={!!chats[0]} chatId={chats[0]?.thread_id} />}
         </aside>
       </div>
+      )}
     </>
   );
 }
@@ -412,6 +478,16 @@ function JobGlance({ job, hasChat, chatId }: { job: Job; hasChat: boolean; chatI
           </li>
         ))}
       </ul>
+
+      <h3>Hiring process</h3>
+      <ol className="small glance-rounds">
+        {job.interview_rounds.map((round, index) => (
+          <li key={index}>
+            <strong>{round.name}</strong>
+            {round.focus && <span className="muted"> · {round.focus}</span>}
+          </li>
+        ))}
+      </ol>
 
       <div className="glance-links">
         <Link to={`/jobs/${job.id}/post`}>Read the job post</Link>

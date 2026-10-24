@@ -13,6 +13,8 @@ const LINKS = [
   { label: "Jobs", to: "/jobs" },
   { label: "Candidates", to: "/candidates" },
   { label: "Interviews", to: "/interviews" },
+  { label: "Results", to: "/results" },
+  { label: "Identity check", to: "/identity" },
 ];
 
 export default function SiteFooter() {

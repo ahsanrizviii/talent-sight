@@ -98,7 +98,7 @@ export default function ClaimCheckPanel({ candidateId }: { candidateId: number }
 
       {!check && (
         <p className="muted small">
-          Needs a screened candidate and an analysed interview (Interview tab, “Analyse answers”). The roles, projects,
+          Needs a screened candidate and an analysed interview (Results page, “Analyse answers”). The roles, projects,
           certifications, total experience and job skills in the CV are each compared with the candidate’s own words.
         </p>
       )}

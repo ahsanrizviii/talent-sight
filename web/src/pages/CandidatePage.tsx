@@ -10,7 +10,6 @@ import CvViewer from "../components/CvViewer";
 import Icon from "../components/Icon";
 import InterviewCard from "../components/InterviewCard";
 import LitmusPanel from "../components/LitmusPanel";
-import OnboardingCheckPanel from "../components/OnboardingCheckPanel";
 import { LoadError, Loading } from "../components/PageState";
 import ScorePanel from "../components/ScorePanel";
 import StageBadge from "../components/StageBadge";
@@ -18,15 +17,15 @@ import VerdictBadge from "../components/VerdictBadge";
 import type { CandidateDetail, PersonRow } from "../types";
 import { shortDate } from "../when";
 
-// Four tabs, one per stage of hiring: what the CV says and how it scored, the interview, the
-// report that brings both together, and the first day at work.
-type Tab = "cv" | "interview" | "report" | "onboarding";
+// Three tabs: what the CV says and how it scored, the interviews (one per round), and the report
+// that brings them together. Each interview's analysis is on the Results page, and the first-day
+// identity check on the Identity check page.
+type Tab = "cv" | "interview" | "report";
 
 const TABS: { value: Tab; label: string }[] = [
   { value: "cv", label: "Score & CV" },
-  { value: "interview", label: "Interview" },
+  { value: "interview", label: "Interviews" },
   { value: "report", label: "Report" },
-  { value: "onboarding", label: "Onboarding" },
 ];
 
 // Links made before the tabs were grouped (?tab=assessment, ?tab=litmus...) still open the right place:
@@ -41,7 +40,7 @@ const LINKS: Record<string, { tab: Tab; section?: string }> = {
   report: { tab: "report" },
   assessment: { tab: "report" },
   claims: { tab: "report", section: "claims" },
-  onboarding: { tab: "onboarding" },
+  onboarding: { tab: "report" },
 };
 
 const KIND_LABELS = {
@@ -275,8 +274,6 @@ export default function CandidatePage() {
           </section>
         </>
       )}
-
-      {tab === "onboarding" && <OnboardingCheckPanel candidateId={candidate.id} />}
 
       <div className="card glass danger-zone">
         <div className="row between">

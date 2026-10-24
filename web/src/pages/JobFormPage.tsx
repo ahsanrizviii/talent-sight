@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { api } from "../api";
 import JobPipeline from "../components/JobPipeline";
 import { LoadError, Loading } from "../components/PageState";
-import type { Job, JobInput, Weights } from "../types";
+import type { InterviewRound, Job, JobInput, Weights } from "../types";
 
 const EMPTY_JOB: JobInput = {
   title: "",
@@ -19,7 +19,10 @@ const EMPTY_JOB: JobInput = {
     qualifications: 15,
     jd_match: 15,
   },
+  interview_rounds: [{ name: "Interview", focus: "" }],
 };
+
+const MAX_ROUNDS = 6;
 
 const WEIGHT_LABELS: Record<keyof Weights, string> = {
   technical_skills: "Technical skills",
@@ -69,6 +72,31 @@ export default function JobFormPage() {
     setDirty(true);
   }
 
+  // The hiring process: the interview rounds in order.
+  const rounds = job.interview_rounds?.length ? job.interview_rounds : EMPTY_JOB.interview_rounds;
+
+  function changeRound(index: number, field: keyof InterviewRound, value: string) {
+    change(
+      "interview_rounds",
+      rounds.map((round, at) => (at === index ? { ...round, [field]: value } : round)),
+    );
+  }
+
+  function moveRound(index: number, step: -1 | 1) {
+    const next = [...rounds];
+    const [moved] = next.splice(index, 1);
+    next.splice(index + step, 0, moved);
+    change("interview_rounds", next);
+  }
+
+  function removeRound(index: number) {
+    change("interview_rounds", rounds.filter((_, at) => at !== index));
+  }
+
+  function addRound() {
+    change("interview_rounds", [...rounds, { name: `Round ${rounds.length + 1}`, focus: "" }]);
+  }
+
   const weightTotal = Object.values(job.weights).reduce(
     (sum, value) => sum + value,
     0
@@ -81,6 +109,12 @@ export default function JobFormPage() {
       required_skills: clean(job.required_skills),
       preferred_skills: clean(job.preferred_skills),
       qualifications: clean(job.qualifications),
+      interview_rounds: (() => {
+        const named = rounds
+          .map((round) => ({ name: round.name.trim(), focus: round.focus.trim() }))
+          .filter((round) => round.name);
+        return named.length ? named : EMPTY_JOB.interview_rounds;
+      })(),
     });
     const result = id
       ? await api<Job>(`/jobs/${id}`, { method: "PUT", body })
@@ -252,6 +286,56 @@ export default function JobFormPage() {
               </label>
             ))}
           </div>
+        </div>
+
+        <div className="field">
+          <label>Hiring process: interview rounds, in order</label>
+          <div className="rounds-editor">
+            {rounds.map((round, index) => (
+              <div className="round-edit" key={index}>
+                <span className="round-number">{index + 1}</span>
+                <input
+                  aria-label={`Name of round ${index + 1}`}
+                  value={round.name}
+                  maxLength={80}
+                  placeholder="For example: HR interview"
+                  onChange={(e) => changeRound(index, "name", e.target.value)}
+                />
+                <input
+                  className="grow"
+                  aria-label={`What round ${index + 1} covers`}
+                  value={round.focus}
+                  maxLength={300}
+                  placeholder="What it covers, for example: communication and motivation"
+                  onChange={(e) => changeRound(index, "focus", e.target.value)}
+                />
+                <button className="button quiet small" type="button" disabled={index === 0} onClick={() => moveRound(index, -1)} aria-label="Move up">
+                  ↑
+                </button>
+                <button
+                  className="button quiet small"
+                  type="button"
+                  disabled={index === rounds.length - 1}
+                  onClick={() => moveRound(index, 1)}
+                  aria-label="Move down"
+                >
+                  ↓
+                </button>
+                <button className="button quiet small" type="button" disabled={rounds.length === 1} onClick={() => removeRound(index)}>
+                  Remove
+                </button>
+              </div>
+            ))}
+          </div>
+          {rounds.length < MAX_ROUNDS && (
+            <button className="button quiet small" type="button" onClick={addRound}>
+              Add a round
+            </button>
+          )}
+          <p className="muted small">
+            Candidates are invited to round 1 from the shortlist. When a round is over, you close it on the job page and choose who goes on to the
+            next round. The e-mails name the round.
+          </p>
         </div>
 
         <div className="field">

@@ -7,7 +7,7 @@ import Empty from "../components/Empty";
 import Icon from "../components/Icon";
 import RescheduleBox from "../components/RescheduleBox";
 import SavedTranscript from "../components/SavedTranscript";
-import type { InterviewRow, JobRow } from "../types";
+import type { InterviewRow, Job, JobRow } from "../types";
 import { clockTime, lengthText, shortDate, untilText } from "../when";
 
 type State = "upcoming" | "live" | "not_ended" | "past" | "all";
@@ -21,7 +21,7 @@ const TABS: { value: State; label: string }[] = [
 ];
 
 // Filters other than the tab and the sort, kept in the address bar so a filtered list can be shared.
-const FILTERS = ["q", "job_id", "date_from", "date_to", "hide_test_calls"];
+const FILTERS = ["q", "job_id", "round", "date_from", "date_to", "hide_test_calls"];
 
 const SORTS = [
   { value: "", label: "Usual order" },
@@ -33,12 +33,14 @@ const SORTS = [
   { value: "state", label: "State" },
 ];
 
-// Every interview in one place: what is next, what is running, and the transcripts of
-// everything that has already happened. Booked interviews can be moved from here.
+// Every interview in one place, for running them: what is next, what is running, which round each
+// one is, and the room to start it. Booked interviews can be moved from here. The analysis of a
+// finished interview is on the Results page.
 export default function InterviewsPage() {
   const [params, setParams] = useSearchParams();
   const [rows, setRows] = useState<InterviewRow[] | null>(null);
   const [jobs, setJobs] = useState<JobRow[]>([]);
+  const [jobDetail, setJobDetail] = useState<Job | null>(null);
   const [open, setOpen] = useState<number | null>(null);
   const [moving, setMoving] = useState<number | null>(null);
   const [reload, setReload] = useState(0);
@@ -48,6 +50,7 @@ export default function InterviewsPage() {
   const q = params.get("q") ?? "";
   const sort = params.get("sort") ?? "";
   const jobId = params.get("job_id") ?? "";
+  const round = params.get("round") ?? "";
   const dateFrom = params.get("date_from") ?? "";
   const dateTo = params.get("date_to") ?? "";
   const hideTestCalls = params.get("hide_test_calls") === "true";
@@ -57,6 +60,7 @@ export default function InterviewsPage() {
     const next = new URLSearchParams(params);
     if (value) next.set(key, value);
     else next.delete(key);
+    if (key === "job_id") next.delete("round"); // rounds belong to one job
     setParams(next, { replace: true });
   }
 
@@ -70,6 +74,13 @@ export default function InterviewsPage() {
     api<JobRow[]>("/workspace/jobs").then(setJobs).catch(() => undefined);
   }, []);
 
+  // The round filter lists the chosen job's own rounds.
+  useEffect(() => {
+    setJobDetail(null);
+    if (!jobId) return;
+    api<Job>(`/jobs/${jobId}`).then(setJobDetail).catch(() => undefined);
+  }, [jobId]);
+
   useEffect(() => {
     setRows(null);
     setError("");
@@ -79,6 +90,7 @@ export default function InterviewsPage() {
         q,
         sort,
         job_id: jobId,
+        round,
         date_from: dateFrom,
         date_to: dateTo,
         hide_test_calls: hideTestCalls ? "true" : "",
@@ -86,7 +98,7 @@ export default function InterviewsPage() {
     )
       .then(setRows)
       .catch((err) => setError(err.message));
-  }, [state, q, sort, jobId, dateFrom, dateTo, hideTestCalls, reload]);
+  }, [state, q, sort, jobId, round, dateFrom, dateTo, hideTestCalls, reload]);
 
   return (
     <>
@@ -121,11 +133,19 @@ export default function InterviewsPage() {
             aria-label="Search interviews"
           />
         </div>
-        <select value={jobId} onChange={(event) => set("job_id", event.target.value)} aria-label="Job">
+        <select value={jobId} onChange={(event) => set("job_id", event.target.value)} aria-label="Job title">
           <option value="">Every job</option>
           {jobs.map((job) => (
             <option key={job.id} value={job.id}>
               {job.title}
+            </option>
+          ))}
+        </select>
+        <select value={round} onChange={(event) => set("round", event.target.value)} aria-label="Round" disabled={!jobDetail}>
+          <option value="">{jobDetail ? "Every round" : "Pick a job to filter by round"}</option>
+          {jobDetail?.interview_rounds.map((item, index) => (
+            <option key={index} value={index + 1}>
+              Round {index + 1} · {item.name}
             </option>
           ))}
         </select>
@@ -198,6 +218,7 @@ export default function InterviewsPage() {
               <tr>
                 <th>Candidate</th>
                 <th>Job</th>
+                <th>Round</th>
                 <th>When</th>
                 <th>State</th>
                 <th>Transcript</th>
@@ -215,6 +236,10 @@ export default function InterviewsPage() {
                       </span>
                     </td>
                     <td className="muted">{row.job_title}</td>
+                    <td className="nowrap">
+                      {row.round_total > 1 ? `Round ${row.round_number}` : "Interview"}
+                      <span className="cell-sub">{row.round_name}</span>
+                    </td>
                     <td className="nowrap">
                       {shortDate(row.scheduled_at)} at {clockTime(row.scheduled_at)}
                       <span className="cell-sub">
@@ -257,6 +282,11 @@ export default function InterviewsPage() {
                             {moving === row.id ? "Close" : "Reschedule"}
                           </button>
                         )}
+                        {row.status === "ended" && row.started_at && (
+                          <Link className="button quiet small" to={`/results/${row.id}`}>
+                            Results
+                          </Link>
+                        )}
                         <Link
                           className={row.status === "live" && !row.forgotten ? "button small" : "button secondary small"}
                           to={`/interview/${row.id}`}
@@ -267,14 +297,14 @@ export default function InterviewsPage() {
                               ? "Join now"
                               : row.status === "ended"
                                 ? "Open"
-                                : "Open room"}
+                                : "Start interview"}
                         </Link>
                       </span>
                     </td>
                   </tr>
                   {moving === row.id && (
                     <tr className="reschedule-row">
-                      <td colSpan={6}>
+                      <td colSpan={7}>
                         <RescheduleBox
                           sessionId={row.id}
                           currentAt={row.scheduled_at}
