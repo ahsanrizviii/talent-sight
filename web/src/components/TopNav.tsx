@@ -13,7 +13,7 @@ const SECTIONS = [
   { to: "/candidates", label: "Candidates" },
   { to: "/interviews", label: "Interviews" },
   { to: "/results", label: "Results" },
-  { to: "/identity", label: "Identity check" },
+  { to: "/identity", label: "Identity" },
   { to: "/library", label: "Library" },
 ];
 
