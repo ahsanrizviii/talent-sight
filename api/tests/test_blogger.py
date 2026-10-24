@@ -34,8 +34,10 @@ def test_publishing_posts_the_job_on_the_blog(client, auth_headers, monkeypatch)
     assert arguments["label"] == published["slug"]
     assert published["blog_url"] == f"{BLOG}/search/label/{published['slug']}"
 
+    # Publishing again replaces the post with the job as it is now: the old post goes first.
     client.post(f"/api/jobs/{job_id}/publish", headers=auth_headers)
-    assert len(calls) == 1 
+    assert [name for name, _ in calls] == ["publish_job", "remove_job", "publish_job"]
+    assert calls[1] == ("remove_job", {"label": published["slug"]})
 
     client.delete(f"/api/jobs/{job_id}", headers=auth_headers)
     assert calls[-1] == ("remove_job", {"label": published["slug"]})

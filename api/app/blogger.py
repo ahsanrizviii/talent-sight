@@ -39,6 +39,10 @@ def build_post_html(job: JobProfile) -> str:
     if job.qualifications:
         parts.append(f"<h3>Qualifications</h3><ul>{items(job.qualifications)}</ul>")
     parts.append(f"<p>Minimum experience: {job.min_experience_years} years</p>")
+    rounds = [r for r in (job.interview_rounds or []) if (r.get("name") or "").strip()]
+    if len(rounds) > 1:
+        steps = "".join(f"<li>{html.escape(r['name'].strip())}</li>" for r in rounds)
+        parts.append(f"<h3>Hiring process</h3><ol>{steps}</ol>")
     form = apply_url(job.slug)
     if form:
         parts.append(
