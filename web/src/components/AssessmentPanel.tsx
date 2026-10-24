@@ -107,7 +107,7 @@ export default function AssessmentPanel({ candidateId }: { candidateId: number }
 
       {!assessment && (
         <p className="muted small">
-          Needs a screened candidate and an analysed interview (Interview tab, “Analyse answers”). The position and the
+          Needs a screened candidate and an analysed interview (Results page, “Analyse answers”). The position and the
           component scores are worked out by fixed rules; the AI writes the strengths, weaknesses and follow-ups, and
           each one points to the CV line or transcript quote behind it.
         </p>

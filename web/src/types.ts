@@ -8,6 +8,9 @@ export type Weights = {
   jd_match: number;
 };
 
+// One round of the hiring process, for example "HR interview" or "Technical round 1".
+export type InterviewRound = { name: string; focus: string };
+
 export type JobInput = {
   title: string;
   description: string;
@@ -17,6 +20,7 @@ export type JobInput = {
   min_experience_years: number;
   selection_criteria: string;
   weights: Weights;
+  interview_rounds: InterviewRound[];
 };
 
 export type Job = JobInput & {
@@ -136,7 +140,11 @@ export type Interview = {
   id: number;
   candidate_id: number;
   candidate_name: string;
+  job_id: number;
   job_title: string;
+  round_number: number;
+  round_name: string;
+  round_total: number;
   scheduled_at: string;
   invite_expires_at: string;
   status: "scheduled" | "live" | "ended";
@@ -178,7 +186,16 @@ export type Transcript = { session_id: number; status: "scheduled" | "live" | "e
 // ---------- Looking across every job at once (UI refresh) ----------
 
 // Where a candidate stands in the hiring process, in one word.
-export type Stage = "new" | "screened" | "excluded" | "interview" | "interviewed" | "problem";
+export type Stage =
+  | "new"
+  | "screened"
+  | "excluded"
+  | "interview"
+  | "interviewed"
+  | "finalist"
+  | "onboarding"
+  | "rejected"
+  | "problem";
 
 export type PersonRow = {
   id: number;
@@ -208,6 +225,10 @@ export type InterviewRow = {
   candidate_name: string;
   job_id: number;
   job_title: string;
+  round_number: number;
+  round_name: string;
+  round_total: number;
+  interview_score: number | null; // this interview's own score (F9)
   scheduled_at: string;
   status: "scheduled" | "live" | "ended";
   started_at: string | null;
@@ -603,3 +624,138 @@ export type OnboardingCheckInfo = {
   checked_at: string | null;
 };
 export type OnboardingState = { templates_on_file: number; retention_days: number; check: OnboardingCheckInfo | null };
+// ---------- Hiring rounds: the job page after screening ----------
+
+export type RunState = "" | "running" | "done" | "failed";
+
+export type RoundRow = {
+  candidate_id: number;
+  name: string;
+  email: string;
+  session_id: number;
+  interview_status: "scheduled" | "live" | "ended";
+  attended: boolean;
+  cancelled: boolean;
+  scheduled_at: string;
+  started_at: string | null;
+  score: number | null; // the interview score (F9), 0-100
+  cv_score: number | null;
+  analysis_status: RunState;
+  score_status: RunState;
+  quality_status: RunState;
+  decision: "" | "passed" | "rejected";
+  rank: number | null;
+};
+
+export type RoundView = {
+  number: number;
+  name: string;
+  focus: string;
+  total: number;
+  is_last: boolean;
+  state: "not_started" | "open" | "closed";
+  closure: { rule: string; value: number | null; passed: number; rejected: number; closed_at: string } | null;
+  invited: number;
+  waiting: number;
+  held: number;
+  scored: number;
+  rows: RoundRow[];
+};
+
+export type CloseResult = {
+  passed: number;
+  rejected: number;
+  next_round: number | null;
+  batch_id: number | null;
+  booked: number;
+  not_placed: number;
+};
+
+export type ReportRow = {
+  candidate_id: number;
+  name: string;
+  email: string;
+  cv_score: number | null;
+  round_scores: { number: number; name: string; score: number | null }[];
+  assessment_status: RunState;
+  report_score: number | null;
+  position: string;
+  claims_status: RunState;
+  claims_flagged: number;
+  decision: "" | "onboarding" | "rejected";
+  rank: number | null;
+};
+
+export type CheckState = "waiting" | "in_progress" | "verified" | "not_confirmed" | "needs_decision";
+
+export type OnboardingRow = {
+  candidate_id: number;
+  name: string;
+  email: string;
+  job_id: number;
+  job_title: string;
+  report_score: number | null;
+  onboarding_date: string | null;
+  selected_at: string;
+  check_state: CheckState;
+  checked_at: string | null;
+  best_score: number | null;
+};
+
+export type EmailRow = {
+  key: string;
+  kind: "invitation" | "rejection" | "onboarding";
+  candidate_id: number;
+  name: string;
+  email: string;
+  round_number: number | null;
+  round_name: string;
+  status: "queued" | "sent" | "failed";
+  error: string;
+  created_at: string;
+  sent_at: string | null;
+};
+
+export type RoundSummary = {
+  number: number;
+  name: string;
+  focus: string;
+  state: "not_started" | "open" | "closed";
+  invited: number;
+  waiting: number;
+  held: number;
+  scored: number;
+  is_last: boolean;
+  passed: number | null;
+  rejected: number | null;
+};
+
+export type HiringSummary = {
+  cvs: number;
+  screened: number;
+  passed_screening: number;
+  emails: { total: number; sent: number; queued: number; failed: number };
+  rounds: RoundSummary[];
+  finalists: number;
+  undecided: number;
+  selected: number;
+  verified: number;
+};
+
+export type ResultRow = {
+  session_id: number;
+  candidate_id: number;
+  candidate_name: string;
+  job_id: number;
+  job_title: string;
+  round_number: number;
+  round_name: string;
+  round_total: number;
+  held_at: string;
+  duration_seconds: number | null;
+  interview_score: number | null;
+  analysis_status: RunState;
+  score_status: RunState;
+  quality_status: RunState;
+  decision: "" | "passed" | "rejected";
+};

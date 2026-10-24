@@ -205,6 +205,12 @@ export default function JdChatPage() {
             {chat.draft.weights.experience}%, qualifications {chat.draft.weights.qualifications}%, overall match{" "}
             {chat.draft.weights.jd_match}%
           </p>
+          {!!chat.draft.interview_rounds?.length && (
+            <p className="muted small">
+              Hiring process:{" "}
+              {chat.draft.interview_rounds.map((round, index) => `${index + 1}. ${round.name}${round.focus ? ` (${round.focus})` : ""}`).join(" · ")}
+            </p>
+          )}
           <button className="button" disabled={busy} onClick={() => send({ approve: true }, "Approve and publish.")}>
             Approve and publish
           </button>

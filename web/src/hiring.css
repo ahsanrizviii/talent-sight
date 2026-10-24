@@ -1,0 +1,140 @@
+/* Hiring rounds: the job page's stages, the Results page and the Identity check page. */
+
+/* The stage bar is the job page's tab strip: buttons instead of links, the open stage marked. */
+.stage-bar button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  height: 100%;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: var(--radius-s);
+  background: transparent;
+  color: var(--ink-2);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.18s var(--ease);
+}
+
+.stage-bar button:hover {
+  background: rgba(255, 255, 255, 0.7);
+}
+
+.stage-bar .current button {
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+
+.stage-bar .current .step-dot {
+  border-color: var(--accent-line);
+  color: var(--accent);
+}
+
+/* One tab per interview round, each with its state. */
+.round-tabs button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.round-state {
+  padding: 1px 8px;
+  border-radius: var(--pill);
+  font-size: 11.5px;
+  font-weight: 500;
+  background: rgba(22, 32, 44, 0.06);
+  color: var(--ink-3);
+}
+
+.round-state-open {
+  background: var(--accent-wash);
+  color: var(--accent);
+}
+
+.round-state-closed {
+  background: var(--met-wash);
+  color: var(--met);
+}
+
+.round-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.run-badges {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.run-badges .badge {
+  font-size: 11.5px;
+  padding: 2px 8px;
+}
+
+tr.clickable {
+  cursor: pointer;
+}
+
+tr.clickable:hover td {
+  background: rgba(255, 255, 255, 0.55);
+}
+
+tr.chosen td {
+  background: var(--accent-wash);
+}
+
+/* The choose-who-passes dialog */
+.modal.wide {
+  width: min(900px, 100%);
+}
+
+.tie-box {
+  margin: 8px 0;
+  padding: 12px 14px;
+  border: 1px solid var(--accent-line);
+  border-radius: var(--radius-s);
+  background: var(--accent-wash);
+}
+
+.tie-box ul {
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tie-box li {
+  padding: 3px 0;
+}
+
+/* The identity check: the list on the left, the person being checked on the right. */
+.identity-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+@media (max-width: 980px) {
+  .identity-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .stage-bar {
+    grid-template-columns: 1fr;
+  }
+}
+
+.glance-rounds {
+  margin: 4px 0 12px;
+  padding-left: 18px;
+}
+
+.glance-rounds li {
+  padding: 2px 0;
+}

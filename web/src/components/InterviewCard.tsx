@@ -3,10 +3,7 @@ import { Link } from "react-router-dom";
 import { api } from "../api";
 import type { Interview } from "../types";
 import Icon from "./Icon";
-import InterviewQualityCard from "./InterviewQualityCard";
-import InterviewScoreCard from "./InterviewScoreCard";
 import InterviewSummary from "./InterviewSummary";
-import QaAnalysis from "./QaAnalysis";
 import RescheduleBox from "./RescheduleBox";
 import SavedTranscript from "./SavedTranscript";
 
@@ -39,9 +36,10 @@ function headline(interview: Interview): { state: string; when: string } {
 
 type Props = { candidateId: number; candidateStatus: string };
 
-// Every interview of one candidate (Tasks 7.1.2 and 7.1.3), oldest first. Each one keeps its own
-// transcript, answer analysis, quality review and score, and folds open or shut. The newest one
-// opens by default; booking a new interview folds the earlier ones away.
+// Every interview of one candidate (Tasks 7.1.2 and 7.1.3), oldest first, each named by its round.
+// Each one keeps its own transcript and folds open or shut; its answer analysis, score and quality
+// review are on the Results page. The newest one opens by default; booking a new interview folds
+// the earlier ones away. A new interview is always for the round the candidate is in now.
 export default function InterviewCard({ candidateId, candidateStatus }: Props) {
   const [interviews, setInterviews] = useState<Interview[]>([]);
   const [loaded, setLoaded] = useState(false);
@@ -217,7 +215,9 @@ export default function InterviewCard({ candidateId, candidateStatus }: Props) {
               onClick={() => toggle(interview)}
             >
               <Icon name="forward" size={15} />
-              <span className="interview-toggle-title">Interview {index + 1}</span>
+              <span className="interview-toggle-title">
+                {interview.round_total > 1 ? `Round ${interview.round_number} · ${interview.round_name}` : `Interview ${index + 1}`}
+              </span>
               <span className="interview-toggle-state">{state}</span>
               {at && <span className="muted small">{at}</span>}
             </button>
@@ -228,10 +228,11 @@ export default function InterviewCard({ candidateId, candidateStatus }: Props) {
                 {tookPlace(interview) && (
                   <>
                     <SavedTranscript sessionId={interview.id} candidateName={interview.candidate_name} />
-                    {/* The answer analysis comes first: the quality review and the score are built on it. */}
-                    <QaAnalysis sessionId={interview.id} candidateName={interview.candidate_name} />
-                    <InterviewQualityCard sessionId={interview.id} />
-                    <InterviewScoreCard sessionId={interview.id} />
+                    <div className="row">
+                      <Link className="button secondary" to={`/results/${interview.id}`}>
+                        See the answer analysis, score and quality review
+                      </Link>
+                    </div>
                   </>
                 )}
                 {interview.id === latest?.id && latestControls(interview)}

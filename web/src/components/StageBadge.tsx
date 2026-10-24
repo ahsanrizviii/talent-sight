@@ -7,6 +7,9 @@ const LABELS: Record<Stage, string> = {
   excluded: "Excluded",
   interview: "Interview booked",
   interviewed: "Interviewed",
+  finalist: "Passed all rounds",
+  onboarding: "Selected",
+  rejected: "Not progressed",
   problem: "Needs a look",
 };
 

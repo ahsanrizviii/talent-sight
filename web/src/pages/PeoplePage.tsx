@@ -11,7 +11,7 @@ import { shortDate } from "../when";
 
 // Every stage can be picked. With none picked, the list is the shortlist: people sent an interview
 // invitation, and people already interviewed. "all" lists everyone who applied.
-const STAGES: Stage[] = ["new", "screened", "excluded", "interview", "interviewed", "problem"];
+const STAGES: Stage[] = ["new", "screened", "excluded", "interview", "interviewed", "finalist", "onboarding", "rejected", "problem"];
 
 function subtitle(stage: string): string {
   if (!stage) return "The shortlist: everyone sent an interview invitation, across every job.";
