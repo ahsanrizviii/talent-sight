@@ -4,7 +4,7 @@ from typing import Annotated
 from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validator
 
 from app.blogger import blog_url_for
-from app.models import DEFAULT_WEIGHTS, JobProfile
+from app.models import DEFAULT_ROUNDS, DEFAULT_WEIGHTS, JobProfile
 
 
 class Weights(BaseModel):
@@ -24,6 +24,19 @@ class Weights(BaseModel):
 # One skill or qualification: not empty, and short enough to be one item, not a pasted paragraph (N8).
 Item = Annotated[str, Field(min_length=1, max_length=200)]
 
+MAX_ROUNDS = 6
+
+
+class InterviewRound(BaseModel):
+    """One round of the hiring process, for example "HR interview" or "Technical round 1"."""
+
+    name: str = Field(min_length=1, max_length=80)
+    focus: str = Field(default="", max_length=300)  # what this round covers, in a few words
+
+
+def default_rounds() -> list[InterviewRound]:
+    return [InterviewRound(**item) for item in DEFAULT_ROUNDS]
+
 class JobIn(BaseModel):
 
     title: str = Field(min_length=3, max_length=200)
@@ -34,6 +47,8 @@ class JobIn(BaseModel):
     min_experience_years: int = Field(default=0, ge=0, le=40)
     selection_criteria: str = Field(default="", max_length=2000)
     weights: Weights = Field(default_factory=Weights)
+    # The interview rounds, in order. Every job has at least one.
+    interview_rounds: list[InterviewRound] = Field(default_factory=default_rounds, min_length=1, max_length=MAX_ROUNDS)
 
 
 class JobOut(JobIn):
