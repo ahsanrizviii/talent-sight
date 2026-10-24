@@ -16,12 +16,15 @@ from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app import schedule_rules
+from app import hiring_rounds, round_info, round_progress, schedule_rules
 from app.db import get_db
 from app.deps import current_interviewer
 from app.models import (
     Candidate,
     CandidateScore,
+    InterviewEvaluation,
+    InterviewQuality,
+    InterviewScore,
     InterviewSession,
     JobProfile,
     LitmusCheck,
@@ -33,8 +36,11 @@ from app.settings import settings
 router = APIRouter(prefix="/api/workspace", tags=["workspace"], dependencies=[Depends(current_interviewer)])
 
 # Where a candidate stands. One word per candidate, so a whole pipeline can be read down a column.
-STAGES = ("new", "screened", "excluded", "interview", "interviewed", "problem")
-SHORTLISTED = ("interview", "interviewed")  # sent an interview invitation (booked), or already interviewed
+# finalist = passed every interview round; onboarding = selected after the report; rejected = did not
+# pass a round, or was not selected after the report.
+STAGES = ("new", "screened", "excluded", "interview", "interviewed", "finalist", "onboarding", "rejected", "problem")
+# Sent an interview invitation (booked), already interviewed, or further along.
+SHORTLISTED = ("interview", "interviewed", "finalist", "onboarding")
 
 LATE_MINUTES = 15  # a few minutes late is normal; after this, a scheduled interview "did not start"
 FORGOTTEN_MINUTES = 60  # a live interview this long past its planned end was most likely never ended
@@ -79,6 +85,10 @@ class InterviewRow(BaseModel):
     candidate_name: str
     job_id: int
     job_title: str
+    round_number: int = 1
+    round_name: str = ""
+    round_total: int = 1
+    interview_score: float | None = None  # this interview's own score (F9)
     scheduled_at: datetime
     status: str
     started_at: datetime | None
@@ -195,11 +205,25 @@ def held(session: InterviewSession) -> bool:
     return session.status == "ended" and session.started_at is not None
 
 
-def stage_of(candidate: Candidate, session: InterviewSession | None) -> str:
+def stage_of(
+    candidate: Candidate,
+    session: InterviewSession | None,
+    rounds: dict[int, str] | None = None,
+    hiring: str = "",
+    total_rounds: int = 1,
+) -> str:
+    """rounds = {round number: passed | rejected}; hiring = the decision after the report ("" = none)."""
+    rounds = rounds or {}
     if candidate.status in ("unreadable", "failed"):
         return "problem"
+    if hiring == "onboarding":
+        return "onboarding"
+    if hiring == "rejected" or "rejected" in rounds.values():
+        return "rejected"
     if session is not None and session.status in ("scheduled", "live"):
         return "interview"
+    if rounds.get(total_rounds) == "passed":
+        return "finalist"
     if session is not None and held(session):
         return "interviewed"
     # No interview, or only a cancelled one: the candidate is back where screening left them.
@@ -219,15 +243,17 @@ def seconds_between(session: InterviewSession) -> int | None:
 def people_rows(db: Session) -> list[PersonRow]:
     """Every candidate of every job, ranked inside their own job."""
     pairs = db.execute(
-        select(Candidate, JobProfile.title).join(JobProfile, Candidate.job_profile_id == JobProfile.id)
+        select(Candidate, JobProfile).join(JobProfile, Candidate.job_profile_id == JobProfile.id)
     ).all()
     counts = verdict_counts(db)
     overalls = scores(db)
     sessions = latest_interviews(db)
     lines = transcript_lines(db)
+    round_decisions, hiring = round_progress.stage_maps(db)
 
     rows = []
-    for candidate, job_title in pairs:
+    for candidate, job in pairs:
+        job_title = job.title
         session = sessions.get(candidate.id)
         mine = counts.get(candidate.id, {})
         rows.append(
@@ -238,7 +264,9 @@ def people_rows(db: Session) -> list[PersonRow]:
                 cv_filename=candidate.cv_filename,
                 source=candidate.source,
                 status=candidate.status,
-                stage=stage_of(candidate, session),
+                stage=stage_of(
+                    candidate, session, round_decisions.get(candidate.id), hiring.get(candidate.id, ""), round_info.total_rounds(job)
+                ),
                 created_at=candidate.created_at,
                 job_id=candidate.job_profile_id,
                 job_title=job_title,
@@ -262,13 +290,26 @@ def people_rows(db: Session) -> list[PersonRow]:
     return rows
 
 
+def interview_scores(db: Session) -> dict[int, float]:
+    """{session id: the interview's own score} for every scored interview."""
+    found = {}
+    for session_id, result in db.execute(
+        select(InterviewScore.session_id, InterviewScore.result).where(InterviewScore.status == "done")
+    ).all():
+        overall = (result or {}).get("overall")
+        if isinstance(overall, (int, float)):
+            found[session_id] = float(overall)
+    return found
+
+
 def interview_rows(db: Session) -> list[InterviewRow]:
     triples = db.execute(
-        select(InterviewSession, Candidate, JobProfile.title)
+        select(InterviewSession, Candidate, JobProfile)
         .join(Candidate, InterviewSession.candidate_id == Candidate.id)
         .join(JobProfile, Candidate.job_profile_id == JobProfile.id)
     ).all()
     lines = transcript_lines(db)
+    by_session = interview_scores(db)
     totals = scores(db)
     now = utcnow()
     late = timedelta(minutes=LATE_MINUTES)
@@ -280,7 +321,11 @@ def interview_rows(db: Session) -> list[InterviewRow]:
             candidate_id=candidate.id,
             candidate_name=candidate.name or candidate.cv_filename,
             job_id=candidate.job_profile_id,
-            job_title=job_title,
+            job_title=job.title,
+            round_number=session.round_number or 1,
+            round_name=round_info.round_of(job, session.round_number or 1)["name"],
+            round_total=round_info.total_rounds(job),
+            interview_score=by_session.get(session.id),
             scheduled_at=session.scheduled_at,
             status=session.status,
             started_at=session.started_at,
@@ -292,7 +337,7 @@ def interview_rows(db: Session) -> list[InterviewRow]:
             overdue=session.status == "scheduled" and session.scheduled_at + late < now,
             forgotten=session.status == "live" and (session.started_at or session.scheduled_at) + planned_end(session) < now,
         )
-        for session, candidate, job_title in triples
+        for session, candidate, job in triples
     ]
 
 
@@ -317,7 +362,9 @@ def all_candidates(
     db: Session = Depends(get_db),
     q: str = Query("", max_length=120, description="name, e-mail, file or job"),
     job_id: int | None = None,
-    stage: Literal["", "all", "new", "screened", "excluded", "interview", "interviewed", "problem"] = Query(
+    stage: Literal[
+        "", "all", "new", "screened", "excluded", "interview", "interviewed", "finalist", "onboarding", "rejected", "problem"
+    ] = Query(
         "", description="empty = the shortlist (invited or interviewed); all = everyone; or one stage"
     ),
     source: Literal["", "upload", "google_form"] = Query(""),
@@ -376,6 +423,7 @@ def all_interviews(
     state: Literal["upcoming", "live", "not_ended", "past", "all"] = Query("all"),
     q: str = Query("", max_length=120, description="candidate or job"),
     job_id: int | None = None,
+    round_number: int | None = Query(None, alias="round", ge=1, description="one interview round"),
     date_from: date | None = Query(None, description="first day, in the interview time zone"),
     date_to: date | None = Query(None, description="last day, in the interview time zone"),
     hide_test_calls: bool = Query(False, description="leave out ended calls under 2 minutes with nothing said"),
@@ -387,6 +435,8 @@ def all_interviews(
         rows = [r for r in rows if all(w in f"{r.candidate_name} {r.job_title}".lower() for w in words)]
     if job_id is not None:
         rows = [r for r in rows if r.job_id == job_id]
+    if round_number is not None:
+        rows = [r for r in rows if r.round_number == round_number]
     if date_from is not None:
         rows = [r for r in rows if local_day(r.scheduled_at) >= date_from]
     if date_to is not None:
@@ -635,8 +685,11 @@ def overview(db: Session = Depends(get_db)):
             FunnelStep(label="CVs received", value=len(people)),
             FunnelStep(label="Screened", value=sum(1 for p in people if p.status in ("screened", "excluded"))),
             FunnelStep(label="Passed screening", value=sum(1 for p in people if p.status == "screened")),
-            FunnelStep(label="Invited", value=sum(1 for p in people if p.stage in ("interview", "interviewed"))),
-            FunnelStep(label="Interviewed", value=sum(1 for p in people if p.stage == "interviewed")),
+            FunnelStep(label="Invited", value=sum(1 for p in people if p.interview_id is not None)),
+            FunnelStep(
+                label="Interviewed",
+                value=sum(1 for p in people if p.stage in ("interviewed", "finalist", "onboarding") or (p.stage == "rejected" and p.interview_status == "ended")),
+            ),
         ],
         todo=build_todo(jobs, people, interviews, litmus_waiting(db)),
         next_interview=upcoming[0] if upcoming else None,
@@ -653,3 +706,111 @@ def this_week(db: Session = Depends(get_db)):
     limit = utcnow() + timedelta(days=7)
     rows = [i for i in interview_rows(db) if i.status != "ended" and i.scheduled_at <= limit]
     return sorted(rows, key=lambda i: i.scheduled_at)
+
+
+# ---------- Results: every interview that took place, with its analysis (hiring rounds) ----------
+
+
+class ResultRow(BaseModel):
+    session_id: int
+    candidate_id: int
+    candidate_name: str
+    job_id: int
+    job_title: str
+    round_number: int
+    round_name: str
+    round_total: int
+    held_at: datetime
+    duration_seconds: int | None
+    interview_score: float | None
+    analysis_status: str  # "" | running | done | failed
+    score_status: str
+    quality_status: str
+    decision: str  # "" | passed | rejected: what the hiring team decided for this round
+
+
+@router.get("/results", response_model=list[ResultRow])
+def all_results(
+    db: Session = Depends(get_db),
+    q: str = Query("", max_length=120, description="candidate or job"),
+    job_id: int | None = None,
+    round_number: int | None = Query(None, alias="round", ge=1),
+    sort: Literal["latest", "score", "candidate", "job"] = Query("latest"),
+):
+    """Every interview that really took place, across all jobs and rounds, with the state of its
+    answer analysis, interview score and quality review. One row per interview."""
+    rows = [r for r in interview_rows(db) if r.status == "ended" and r.started_at is not None]
+    if q.strip():
+        words = q.lower().split()
+        rows = [r for r in rows if all(w in f"{r.candidate_name} {r.job_title}".lower() for w in words)]
+    if job_id is not None:
+        rows = [r for r in rows if r.job_id == job_id]
+    if round_number is not None:
+        rows = [r for r in rows if r.round_number == round_number]
+    ids = [r.id for r in rows]
+    analysis = hiring_rounds.run_states(db, InterviewEvaluation, ids)
+    scoring = hiring_rounds.run_states(db, InterviewScore, ids)
+    quality = hiring_rounds.run_states(db, InterviewQuality, ids)
+    decisions, _ = round_progress.stage_maps(db)
+    out = [
+        ResultRow(
+            session_id=r.id,
+            candidate_id=r.candidate_id,
+            candidate_name=r.candidate_name,
+            job_id=r.job_id,
+            job_title=r.job_title,
+            round_number=r.round_number,
+            round_name=r.round_name,
+            round_total=r.round_total,
+            held_at=r.started_at,
+            duration_seconds=r.duration_seconds,
+            interview_score=r.interview_score,
+            analysis_status=analysis.get(r.id, ""),
+            score_status=scoring.get(r.id, ""),
+            quality_status=quality.get(r.id, ""),
+            decision=decisions.get(r.candidate_id, {}).get(r.round_number, ""),
+        )
+        for r in rows
+    ]
+    keys = {
+        "latest": (lambda r: r.held_at, True),
+        "score": (lambda r: (r.interview_score is None, -(r.interview_score or 0)), False),
+        "candidate": (lambda r: (r.candidate_name.lower(), r.round_number), False),
+        "job": (lambda r: (r.job_title.lower(), r.round_number, -(r.interview_score or 0)), False),
+    }
+    key, newest_first = keys[sort]
+    return sorted(out, key=key, reverse=newest_first)
+
+
+# ---------- Identity check: everyone selected for onboarding, across all jobs ----------
+
+
+class IdentityRow(BaseModel):
+    candidate_id: int
+    name: str
+    email: str
+    job_id: int
+    job_title: str
+    report_score: float | None
+    onboarding_date: date | None
+    selected_at: datetime
+    check_state: str  # waiting | in_progress | verified | not_confirmed | needs_decision
+    checked_at: datetime | None
+    best_score: float | None
+
+
+@router.get("/identity-checks", response_model=list[IdentityRow])
+def identity_checks(
+    db: Session = Depends(get_db),
+    job_id: int | None = None,
+    state: Literal["", "waiting", "in_progress", "verified", "not_confirmed", "needs_decision"] = Query(""),
+    q: str = Query("", max_length=120),
+):
+    """The people to check on their first day: everyone selected for onboarding, with their status."""
+    rows = hiring_rounds.onboarding_rows(db, job_id)
+    if state:
+        rows = [r for r in rows if r["check_state"] == state]
+    if q.strip():
+        words = q.lower().split()
+        rows = [r for r in rows if all(w in f"{r['name']} {r['email']} {r['job_title']}".lower() for w in words)]
+    return rows

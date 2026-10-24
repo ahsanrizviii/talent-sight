@@ -26,6 +26,7 @@ from app.routers import (
     company,
     evaluations,
     health,
+    hiring,
     identity,
     interview_chat,
     interview_quality,
@@ -126,6 +127,7 @@ app.include_router(workspace.router)
 app.include_router(setup.router)
 app.include_router(company.router)
 app.include_router(invite_batches.router)
+app.include_router(hiring.router)
 app.include_router(evaluations.router)
 app.include_router(assessments.router)
 app.include_router(claims.router)
