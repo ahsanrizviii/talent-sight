@@ -29,3 +29,10 @@ def init_db() -> None:
         connection.execute(text("ALTER TABLE assessments ADD COLUMN IF NOT EXISTS error TEXT NOT NULL DEFAULT ''"))
         connection.execute(text("ALTER TABLE assessments ADD COLUMN IF NOT EXISTS finished_at TIMESTAMPTZ"))
         connection.execute(text("ALTER TABLE assessments ADD COLUMN IF NOT EXISTS seconds DOUBLE PRECISION"))
+        # Hiring rounds: the job's interview rounds, and which round each interview and invitation batch is for.
+        connection.execute(text(
+            "ALTER TABLE job_profiles ADD COLUMN IF NOT EXISTS interview_rounds JSON NOT NULL "
+            "DEFAULT '[{\"name\": \"Interview\", \"focus\": \"\"}]'"
+        ))
+        connection.execute(text("ALTER TABLE interview_sessions ADD COLUMN IF NOT EXISTS round_number INTEGER NOT NULL DEFAULT 1"))
+        connection.execute(text("ALTER TABLE invite_batches ADD COLUMN IF NOT EXISTS round_number INTEGER NOT NULL DEFAULT 1"))

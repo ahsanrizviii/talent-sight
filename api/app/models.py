@@ -5,6 +5,8 @@ from sqlalchemy import JSON, Boolean, Date, DateTime, Float, ForeignKey, Integer
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 DEFAULT_WEIGHTS = {"technical_skills": 40, "experience": 30, "qualifications": 15, "jd_match": 15}
+# A job with no hiring process written down has one interview round.
+DEFAULT_ROUNDS = [{"name": "Interview", "focus": ""}]
 
 
 class Base(DeclarativeBase):
@@ -51,6 +53,8 @@ class JobProfile(Base):
     weights: Mapped[dict] = mapped_column(JSON, default=lambda: dict(DEFAULT_WEIGHTS))
     # The hiring-policy documents the JD Agent followed for this job (file names in the Library); [] = all
     policy_sources: Mapped[list] = mapped_column(JSON, default=list)
+    # The hiring process: the interview rounds in order, [{"name", "focus"}]. Added by init_db to older databases.
+    interview_rounds: Mapped[list] = mapped_column(JSON, default=lambda: [dict(r) for r in DEFAULT_ROUNDS])
     status: Mapped[str] = mapped_column(String(20), default="draft")  
     slug: Mapped[str | None] = mapped_column(String(250), unique=True)  
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
@@ -199,6 +203,8 @@ class InterviewSession(Base):
     # How long this interview is booked for (1 hour for every new interview). Empty for interviews
     # made before this column existed: those use INTERVIEW_MINUTES. (Added to old databases by init_db.)
     duration_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Which interview round of the job this is (1 = the first). Added by init_db to older databases.
+    round_number: Mapped[int] = mapped_column(Integer, default=1)
 
 class SessionParticipant(Base):
     """Who was in an interview and when (Module 7).
@@ -481,6 +487,7 @@ class InviteBatch(Base):
     created_by: Mapped[int | None] = mapped_column(ForeignKey("interviewers.id", ondelete="SET NULL"), nullable=True)
     total: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    round_number: Mapped[int] = mapped_column(Integer, default=1)  # the round these invitations are for
 
 
 class InviteDelivery(Base):
@@ -568,3 +575,74 @@ class LitmusCheck(Base):
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     seconds: Mapped[float | None] = mapped_column(Float)
+
+
+
+class RoundDecision(Base):
+    """Whether one candidate passed one interview round of their job (hiring rounds).
+
+    Made when the hiring team closes the round: passed goes on to the next round (or to the report
+    after the last one); rejected gets a rejection e-mail. score is the round's interview score then.
+    """
+
+    __tablename__ = "round_decisions"
+    __table_args__ = (UniqueConstraint("candidate_id", "round_number"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    job_profile_id: Mapped[int] = mapped_column(ForeignKey("job_profiles.id", ondelete="CASCADE"), index=True)
+    candidate_id: Mapped[int] = mapped_column(ForeignKey("candidates.id", ondelete="CASCADE"), index=True)
+    round_number: Mapped[int] = mapped_column(Integer)
+    outcome: Mapped[str] = mapped_column(String(20))  # passed | rejected
+    score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    decided_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class RoundClosure(Base):
+    """One closed interview round of a job: the rule the hiring team used and how many went through."""
+
+    __tablename__ = "round_closures"
+    __table_args__ = (UniqueConstraint("job_profile_id", "round_number"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    job_profile_id: Mapped[int] = mapped_column(ForeignKey("job_profiles.id", ondelete="CASCADE"), index=True)
+    round_number: Mapped[int] = mapped_column(Integer)
+    rule: Mapped[str] = mapped_column(String(20))  # pass_mark | top_n | manual
+    value: Mapped[float | None] = mapped_column(Float, nullable=True)  # the pass mark or N
+    passed: Mapped[int] = mapped_column(Integer, default=0)
+    rejected: Mapped[int] = mapped_column(Integer, default=0)
+    closed_by: Mapped[int | None] = mapped_column(ForeignKey("interviewers.id", ondelete="SET NULL"), nullable=True)
+    closed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class HiringDecision(Base):
+    """The decision after the report stage: selected for onboarding, or rejected. One per candidate."""
+
+    __tablename__ = "hiring_decisions"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    job_profile_id: Mapped[int] = mapped_column(ForeignKey("job_profiles.id", ondelete="CASCADE"), index=True)
+    candidate_id: Mapped[int] = mapped_column(ForeignKey("candidates.id", ondelete="CASCADE"), unique=True)
+    decision: Mapped[str] = mapped_column(String(20))  # onboarding | rejected
+    report_score: Mapped[float | None] = mapped_column(Float, nullable=True)  # the assessment total then
+    onboarding_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    decided_by: Mapped[int | None] = mapped_column(ForeignKey("interviewers.id", ondelete="SET NULL"), nullable=True)
+    decided_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class CandidateEmail(Base):
+    """A rejection or onboarding e-mail to one candidate, sent in the background.
+
+    Interview invitations are kept in invite_deliveries; the job's Invitations stage lists both.
+    """
+
+    __tablename__ = "candidate_emails"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    job_profile_id: Mapped[int] = mapped_column(ForeignKey("job_profiles.id", ondelete="CASCADE"), index=True)
+    candidate_id: Mapped[int] = mapped_column(ForeignKey("candidates.id", ondelete="CASCADE"), index=True)
+    kind: Mapped[str] = mapped_column(String(20))  # rejection | onboarding
+    round_number: Mapped[int | None] = mapped_column(Integer, nullable=True)  # the round they did not pass; None = after the report
+    status: Mapped[str] = mapped_column(String(10), default="queued")  # queued | sent | failed
+    error: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
