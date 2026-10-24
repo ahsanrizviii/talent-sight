@@ -47,6 +47,11 @@ class DraftWeights(BaseModel):
     qualifications: int
     jd_match: int
 
+class DraftRound(BaseModel):
+    name: str = Field(description="Short name of the round, for example 'HR interview' or 'Technical round 1'")
+    focus: str = Field(description="What this round covers, in a few words")
+
+
 class JobDraft(BaseModel):
     title: str
     description: str = Field(description="The full job post as plain text, in the company's job-post format")
@@ -56,6 +61,11 @@ class JobDraft(BaseModel):
     min_experience_years: int
     selection_criteria: str = Field(description="One or two sentences on how candidates will be judged")
     weights: DraftWeights = Field(description="Scoring weights in percent; the four numbers must add up to 100")
+    interview_rounds: list[DraftRound] = Field(
+        default_factory=list,
+        description="The interview rounds of the hiring process, in order, exactly as the brief describes them "
+        "(at most 6). Empty when the brief does not describe the rounds.",
+    )
 
 CHECK_PROMPT = (
     "You help a hiring manager write a job post. Read their brief and check whether it gives "
@@ -65,8 +75,13 @@ CHECK_PROMPT = (
 DRAFT_PROMPT = (
     "You write job posts for a company. Follow the company policies you are given exactly. "
     "Use only job-related requirements. Never mention or ask for age, gender, religion, nationality, "
-    "marital status or any other personal characteristic."
+    "marital status or any other personal characteristic. "
+    "If the brief describes the hiring process (the interview rounds), list those rounds in interview_rounds, "
+    "in the same order, each with a short name and what it covers. Never invent rounds the brief does not mention."
 )
+
+# A brief that says nothing about the hiring process gives a job with one interview round.
+ONE_ROUND = [{"name": "Interview", "focus": ""}]
 
 
 def check_brief(state: JDState) -> dict:
@@ -105,7 +120,14 @@ def write_draft(state: JDState) -> dict:
         draft = ask_llm(DRAFT_PROMPT, prompt, JobDraft)
     except LLMUnavailable as error:
         return {"error": str(error)}
-    return {"draft": draft.model_dump(), "feedback": "", "draft_attempts": state.get("draft_attempts", 0) + 1}
+    result = draft.model_dump()
+    rounds = [
+        {"name": r["name"].strip()[:80], "focus": r.get("focus", "").strip()[:300]}
+        for r in result.get("interview_rounds", [])
+        if r.get("name", "").strip()
+    ]
+    result["interview_rounds"] = rounds[:6] or [dict(r) for r in ONE_ROUND]
+    return {"draft": result, "feedback": "", "draft_attempts": state.get("draft_attempts", 0) + 1}
 
 
 def check_draft(state: JDState) -> dict:
