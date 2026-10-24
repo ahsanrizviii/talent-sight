@@ -21,7 +21,7 @@ from email.utils import formataddr, parseaddr
 from urllib.parse import urlparse
 from html import escape
 
-from app import company_profile, mail_template, mail_writer, schedule_rules
+from app import company_profile, mail_template, mail_writer, round_info, schedule_rules
 from app.models import Candidate, InterviewSession, JobProfile
 from app.settings import settings
 
@@ -147,8 +147,9 @@ def calendar_invite(
     host = urlparse(settings.public_base_url).hostname or "talentsight"
     cancelled = method == "CANCEL"
     when = "%Y%m%dT%H%M%SZ"
+    round_name = round_info.round_of(job, session.round_number or 1)["name"]
     description = (
-        f"Video interview for the {title} position at {company_name}.\nJoin: {link}\n"
+        f"{round_name}: video interview for the {title} position at {company_name}.\nJoin: {link}\n"
         f"The link opens {settings.join_early_minutes} minutes before the start. It is made only for you."
     )
     lines = [
@@ -164,7 +165,7 @@ def calendar_invite(
         f"SEQUENCE:{int(stamp.timestamp())}",
         f"DTSTART:{start:{when}}",
         f"DTEND:{end:{when}}",
-        f"SUMMARY:{_ics_escape(f'Interview at {company_name}: {title}')}",
+        f"SUMMARY:{_ics_escape(f'{round_name} at {company_name}: {title}')}",
         f"DESCRIPTION:{_ics_escape(description)}",
         f"LOCATION:{_ics_escape(link)}",
         f"URL:{link}",
@@ -224,7 +225,12 @@ def build_message(
     minutes = schedule_rules.minutes_of(session)
     day, hours = date_and_time(session.scheduled_at, minutes)
 
-    wording, written_by = mail_writer.write_invite(candidate.name, job.title, rescheduled)
+    number = session.round_number or 1
+    this_round = round_info.round_of(job, number)
+    total = round_info.total_rounds(job)
+    # A job with one round keeps the plain wording; with several, the e-mail names the round.
+    named, focus = (this_round["name"], this_round["focus"]) if total > 1 else ("", this_round["focus"])
+    wording, written_by = mail_writer.write_invite(candidate.name, job.title, rescheduled, named, focus, next_round=number > 1)
     subject, intro, closing = wording.subject, wording.intro, wording.closing
     heading = f"Your interview at {details.name} has a new time" if rescheduled else f"Invitation for Interview at {details.name}"
     greeting = f"Dear {name}," if name else "Dear candidate,"
@@ -235,6 +241,10 @@ def build_message(
         ("Duration", f"{minutes} minutes"),
         ("Format", "Online video call"),
     ]
+    if total > 1:
+        rows.insert(1, ("Round", f"{this_round['name']} (round {number} of {total})"))
+    if this_round["focus"]:
+        rows.insert(2 if total > 1 else 1, ("What it covers", this_round["focus"]))
     rules = [
         f"The button works from {settings.join_early_minutes} minutes before the start time.",
         "The link is made only for you. Please do not share it.",
@@ -325,11 +335,13 @@ def deliver(message: EmailMessage, server: MailServer) -> None:
         smtp.send_message(message)
 
 
-def _send(session: InterviewSession, candidate: Candidate, job: JobProfile, make, what: str) -> str:
+def _send(session: InterviewSession | None, candidate: Candidate, job: JobProfile, make, what: str) -> str:
     """Builds and sends one message. Returns "" when sent, otherwise a short reason. Never raises.
 
-    make(server) builds the message once the mail server is known.
+    make(server) builds the message once the mail server is known. session is None for an e-mail
+    that belongs to no interview (a rejection or an onboarding e-mail).
     """
+    session_id = session.id if session is not None else None
     address = candidate.email.strip()
     server = mail_server()
     if not address:
@@ -349,29 +361,77 @@ def _send(session: InterviewSession, candidate: Candidate, job: JobProfile, make
             log.warning(
                 f"{what} e-mail refused the login",
                 exc_info=error,
-                extra={"event": "invite_email_failed", "session_id": session.id, "candidate_id": candidate.id},
+                extra={"event": "invite_email_failed", "session_id": session_id, "candidate_id": candidate.id},
             )
             return "The mail server refused the login. Check SMTP_USER and SMTP_PASSWORD, then send it again."
         except (OSError, smtplib.SMTPException, ValueError) as error:
             log.warning(
                 f"{what} e-mail failed",
                 exc_info=error,
-                extra={"event": "invite_email_failed", "session_id": session.id, "candidate_id": candidate.id},
+                extra={"event": "invite_email_failed", "session_id": session_id, "candidate_id": candidate.id},
             )
             return "The e-mail could not be sent. Copy the link and send it yourself."
         log.info(
             f"{what} e-mail sent",
-            extra={"event": "invite_email_sent", "session_id": session.id, "candidate_id": candidate.id, "via": server.host},
+            extra={"event": "invite_email_sent", "session_id": session_id, "candidate_id": candidate.id, "via": server.host},
         )
         return ""
 
-    log.warning(f"{what} e-mail not sent", extra={"event": "invite_email_skipped", "session_id": session.id, "reason": reason})
+    log.warning(f"{what} e-mail not sent", extra={"event": "invite_email_skipped", "session_id": session_id, "reason": reason})
     return reason
 
 
 def send_invite(session: InterviewSession, candidate: Candidate, job: JobProfile, rescheduled: bool = False) -> str:
     """Sends the invitation. Returns "" when it was sent, otherwise a short reason. Never raises."""
     return _send(session, candidate, job, lambda server: build_message(session, candidate, job, rescheduled, server), "invite")
+
+
+def build_outcome(
+    candidate: Candidate, job: JobProfile, kind: str, round_number: int | None, onboarding_day: str = ""
+) -> EmailMessage:
+    """The rejection (kind "rejection") or onboarding e-mail. The AI writes the wording; the rest is fixed."""
+    details = company_profile.current()
+    title = company_profile.one_line(job.title)
+    name = company_profile.one_line(candidate.name)
+    round_name = round_info.round_of(job, round_number)["name"] if round_number else ""
+    wording, written_by = mail_writer.write_outcome(candidate.name, job.title, kind, round_name)
+    greeting = f"Dear {name}," if name else "Dear candidate,"
+    rows = [("Position", title)]
+    if kind == "onboarding" and onboarding_day:
+        rows.append(("First day", onboarding_day))
+    if kind == "onboarding":
+        rows.append(("Please bring", "Your original photo ID"))
+    contact_text, contact_html = _contact_line(details)
+    footer_text, footer_html = _footer(details)
+    sign_off = f"Best regards,\nThe {details.name} hiring team"
+    heading = f"Welcome to {details.name}" if kind == "onboarding" else f"Your application at {details.name}"
+
+    message = EmailMessage()
+    message["Subject"] = wording.subject
+    message["To"] = candidate.email.strip()
+    detail_lines = "\n".join(f"{label}: {value}" for label, value in rows)
+    message.set_content(
+        f"{greeting}\n\n{wording.intro}\n\n{detail_lines}\n\n"
+        f"{contact_text + chr(10) + chr(10) if contact_text else ''}"
+        f"{wording.closing}\n\n{sign_off}\n\n--\n{footer_text}\n"
+    )
+    body = (
+        mail_template.paragraph(greeting)
+        + mail_template.paragraph(wording.intro)
+        + mail_template.details_table(rows)
+        + contact_html
+        + mail_template.paragraph(wording.closing)
+        + mail_template.paragraph(sign_off).replace("\n", "<br>")
+    )
+    message.add_alternative(mail_template.page(details.name, heading, body, footer_html), subtype="html")
+    message["X-TalentSight-Wording"] = written_by
+    return message
+
+
+def send_outcome(candidate: Candidate, job: JobProfile, kind: str, round_number: int | None, onboarding_day: str = "") -> str:
+    """Sends a rejection or onboarding e-mail. Returns "" when sent, otherwise a short reason. Never raises."""
+    reason = _send(None, candidate, job, lambda server: build_outcome(candidate, job, kind, round_number, onboarding_day), kind)
+    return reason.replace(" Copy the link and send it yourself.", "")  # there is no link in these e-mails
 
 
 def send_cancellation(session: InterviewSession, candidate: Candidate, job: JobProfile) -> str:
