@@ -25,7 +25,7 @@ log = logging.getLogger("talentsight.agent_runs")
 
 CRASHED = "Something went wrong while the AI worked. Please try again."
 INTERRUPTED = "This was cut off by a restart. Please run it again."
-NOT_ANALYSED = "Analyse the interview answers first (Interview tab, “Analyse answers”)."
+NOT_ANALYSED = "Analyse the interview answers first (Results page, “Analyse answers”)."
 BUSY = "This is already running for this interview."
 
 

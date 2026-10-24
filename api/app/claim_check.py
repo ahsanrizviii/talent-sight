@@ -32,7 +32,7 @@ NEXT_STEP = {
 CRASHED = "Something went wrong while checking the CV claims. Please try again."
 INTERRUPTED = "The claim check was cut off by a restart. Please run it again."
 NOT_SCREENED = "Screen this candidate first, so their CV has been read."
-NOT_ANALYSED = "Analyse the interview answers first (Interview tab)."
+NOT_ANALYSED = "Analyse the interview answers first (Results page)."
 
 
 def utcnow() -> datetime:
