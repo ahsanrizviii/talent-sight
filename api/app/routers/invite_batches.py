@@ -19,7 +19,7 @@ from sqlalchemy.orm import Session
 from app import holiday_calendar, planner, schedule_rules, scheduling
 from app.db import SessionLocal, get_db
 from app.deps import current_interviewer
-from app.models import Candidate, Interviewer, InterviewSession, InviteBatch, InviteDelivery, JobProfile
+from app.models import Candidate, Interviewer, InterviewSession, InviteBatch, InviteDelivery, JobProfile, RoundClosure
 from app.routers.candidates import list_candidates
 from app.routers.interviews import calendar_for, expiry_for, new_invite_token, send_invite_for
 
@@ -53,6 +53,7 @@ class SkippedCandidate(BaseModel):
 
 class DeliveryOut(BaseModel):
     session_id: int
+    round_number: int
     candidate_id: int
     name: str
     email: str
@@ -95,9 +96,11 @@ def find_job(db: Session, job_id: int) -> JobProfile:
     return job
 
 
-def already_invited(db: Session, candidate_id: int) -> str:
-    """Why this candidate gets no new invitation, or "" when they can be invited."""
-    for session in db.scalars(select(InterviewSession).where(InterviewSession.candidate_id == candidate_id)):
+def already_invited(db: Session, candidate_id: int, round_number: int = 1) -> str:
+    """Why this candidate gets no new invitation to this round, or "" when they can be invited."""
+    for session in db.scalars(
+        select(InterviewSession).where(InterviewSession.candidate_id == candidate_id, InterviewSession.round_number == round_number)
+    ):
         if session.status in ("scheduled", "live"):
             return "Already has an interview booked."
         if session.started_at is not None:
@@ -113,6 +116,7 @@ def batch_out(db: Session, batch: InviteBatch) -> BatchOut:
         rows.append(
             DeliveryOut(
                 session_id=session.id,
+                round_number=session.round_number or 1,
                 candidate_id=candidate.id,
                 name=candidate.name or candidate.cv_filename,
                 email=candidate.email,
@@ -168,6 +172,41 @@ def invite_info(job_id: int, db: Session = Depends(get_db)):
     return InviteInfo(holidays_ahead=ahead, calendar_problem=problem)
 
 
+def book_round(
+    db: Session, job_id: int, candidate_ids: list[int], start_date: date, round_number: int, interviewer_id: int | None
+) -> tuple[InviteBatch | None, int]:
+    """Books a free 1-hour slot for each candidate, in the order given (the first gets the earliest),
+    creates their interviews for this round and one invitation batch. Commits. Sending is deliver_batch().
+    Returns the batch (None when nobody could be placed) and how many got no slot."""
+    rules = schedule_rules.current(db)
+    now = utcnow()
+    earliest = max(datetime.combine(start_date, datetime.min.time(), rules.zone), now + LEAD_TIME)
+    off = scheduling.days_off(db, earliest, earliest + timedelta(days=planner.MAX_DAYS_AHEAD), rules)
+    starts = planner.plan(len(candidate_ids), earliest, scheduling.booked(db), off, rules)
+    if not starts:
+        return None, len(candidate_ids)
+
+    minutes = int(rules.length.total_seconds() // 60)
+    batch = InviteBatch(job_profile_id=job_id, created_by=interviewer_id, total=len(starts), round_number=round_number)
+    db.add(batch)
+    db.flush()
+    for candidate_id, start in zip(candidate_ids, starts):
+        session = InterviewSession(
+            candidate_id=candidate_id,
+            scheduled_at=start,
+            invite_token=new_invite_token(),
+            invite_expires_at=expiry_for(start),
+            duration_minutes=minutes,
+            round_number=round_number,
+        )
+        db.add(session)
+        db.flush()
+        db.add(InviteDelivery(batch_id=batch.id, session_id=session.id))
+    db.commit()  # every interview exists before a single e-mail goes out
+    log.info("invite batch created", extra={"event": "invite_batch_created", "batch_id": batch.id, "count": len(starts)})
+    return batch, len(candidate_ids) - len(starts)
+
+
 @router.post("/{job_id}/invite-top", response_model=InviteTopOut, status_code=status.HTTP_201_CREATED)
 def invite_top(
     job_id: int,
@@ -176,13 +215,17 @@ def invite_top(
     db: Session = Depends(get_db),
     interviewer: Interviewer = Depends(current_interviewer),
 ):
-    """Invites the top N candidates of the ranking, starting on start_date. Everyone gets a free
-    1-hour slot in ranking order (the best-ranked gets the earliest), then the e-mails go out."""
+    """Invites the top N candidates of the ranking to the first interview round, starting on start_date.
+    Everyone gets a free 1-hour slot in ranking order (the best-ranked gets the earliest), then the
+    e-mails go out. Later rounds are booked when the hiring team closes a round (hiring_rounds.py)."""
     find_job(db, job_id)
     rules = schedule_rules.current(db)
     now = utcnow()
     if body.start_date < now.astimezone(rules.zone).date():
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "The first interview day cannot be in the past.")
+    closed = db.scalar(select(RoundClosure).where(RoundClosure.job_profile_id == job_id, RoundClosure.round_number == 1))
+    if closed is not None:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Round 1 of this job is closed, so nobody new can be invited to it.")
 
     ranked = [row for row in list_candidates(job_id, db) if row.status == "screened"]
     if not ranked:
@@ -190,38 +233,17 @@ def invite_top(
 
     chosen, skipped = [], []
     for row in ranked[: body.top]:
-        reason = already_invited(db, row.id)
+        reason = already_invited(db, row.id, 1)
         if reason:
             skipped.append(SkippedCandidate(candidate_id=row.id, rank=row.rank or 0, name=row.name or row.cv_filename, reason=reason))
         else:
             chosen.append(row)
 
-    earliest = max(datetime.combine(body.start_date, datetime.min.time(), rules.zone), now + LEAD_TIME)
-    off = scheduling.days_off(db, earliest, earliest + timedelta(days=planner.MAX_DAYS_AHEAD), rules)
-    starts = planner.plan(len(chosen), earliest, scheduling.booked(db), off, rules)
-    if not starts:
-        return InviteTopOut(batch=None, skipped=skipped, not_placed=len(chosen))
-
-    minutes = int(rules.length.total_seconds() // 60)
-    batch = InviteBatch(job_profile_id=job_id, created_by=interviewer.id, total=len(starts))
-    db.add(batch)
-    db.flush()
-    for row, start in zip(chosen, starts):
-        session = InterviewSession(
-            candidate_id=row.id,
-            scheduled_at=start,
-            invite_token=new_invite_token(),
-            invite_expires_at=expiry_for(start),
-            duration_minutes=minutes,
-        )
-        db.add(session)
-        db.flush()
-        db.add(InviteDelivery(batch_id=batch.id, session_id=session.id))
-    db.commit()  # every interview exists before a single e-mail goes out
-
-    log.info("invite batch created", extra={"event": "invite_batch_created", "batch_id": batch.id, "count": len(starts)})
+    batch, not_placed = book_round(db, job_id, [row.id for row in chosen], body.start_date, 1, interviewer.id)
+    if batch is None:
+        return InviteTopOut(batch=None, skipped=skipped, not_placed=not_placed)
     background.add_task(deliver_batch, batch.id)
-    return InviteTopOut(batch=batch_out(db, batch), skipped=skipped, not_placed=len(chosen) - len(starts))
+    return InviteTopOut(batch=batch_out(db, batch), skipped=skipped, not_placed=not_placed)
 
 
 @router.get("/{job_id}/invite-batches/latest", response_model=BatchOut | None)

@@ -11,7 +11,18 @@ from pydantic import BaseModel, field_validator
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app import calendar_events, invite_mail, livekit_service, participants, planner, schedule_rules, scheduling, transcription
+from app import (
+    calendar_events,
+    invite_mail,
+    livekit_service,
+    participants,
+    planner,
+    round_info,
+    round_progress,
+    schedule_rules,
+    scheduling,
+    transcription,
+)
 from app.db import get_db
 from app.deps import current_interviewer
 from app.models import Candidate, Interviewer, InterviewSession, JobProfile
@@ -54,7 +65,11 @@ class SessionOut(BaseModel):
     id: int
     candidate_id: int
     candidate_name: str
+    job_id: int
     job_title: str
+    round_number: int  # which interview round of the job (1 = the first)
+    round_name: str
+    round_total: int  # how many rounds the job has
     scheduled_at: datetime
     invite_expires_at: datetime
     status: str  # scheduled | live | ended
@@ -105,11 +120,16 @@ def to_out(
     calendar_error: the same three states for the Google Calendar entry."""
     candidate = db.get(Candidate, session.candidate_id)
     job = db.get(JobProfile, candidate.job_profile_id)
+    number = session.round_number or 1
     return SessionOut(
         id=session.id,
         candidate_id=candidate.id,
         candidate_name=candidate.name or candidate.cv_filename,
+        job_id=job.id,
         job_title=job.title,
+        round_number=number,
+        round_name=round_info.round_of(job, number)["name"],
+        round_total=round_info.total_rounds(job),
         scheduled_at=session.scheduled_at,
         invite_expires_at=session.invite_expires_at,
         status=session.status,
@@ -163,12 +183,17 @@ def video_join(session: InterviewSession, identity: str, name: str, role: str) -
 
 @router.post("/candidates/{candidate_id}/interview", response_model=SessionOut, status_code=status.HTTP_201_CREATED)
 def schedule_interview(candidate_id: int, body: ScheduleIn, db: Session = Depends(get_db)):
-    """Creates the interview for a screened candidate, at a time in the future (Q&A 40)."""
+    """Creates the interview for a screened candidate, at a time in the future (Q&A 40). It is for the
+    round the candidate is in now: round 1, or the next round after the ones they passed."""
     candidate = db.get(Candidate, candidate_id)
     if candidate is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Candidate not found.")
     if candidate.status != "screened":
         raise HTTPException(status.HTTP_409_CONFLICT, "Only screened candidates can be invited to an interview.")
+    job = db.get(JobProfile, candidate.job_profile_id)
+    blocked = round_progress.why_not_invitable(db, candidate, job)
+    if blocked:
+        raise HTTPException(status.HTTP_409_CONFLICT, blocked)
     already = db.scalar(
         select(InterviewSession).where(
             InterviewSession.candidate_id == candidate_id,
@@ -184,6 +209,7 @@ def schedule_interview(candidate_id: int, body: ScheduleIn, db: Session = Depend
         invite_token=new_invite_token(),
         invite_expires_at=expiry_for(body.scheduled_at),
         duration_minutes=schedule_rules.default_minutes(db),
+        round_number=round_progress.current_round(db, candidate),
     )
     db.add(session)
     db.commit()
