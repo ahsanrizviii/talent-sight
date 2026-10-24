@@ -38,7 +38,7 @@ TalentSight follows one candidate through the whole hiring process and keeps the
 | F9 | Comprehensive interview scoring: one score in six weighted parts, each with a reason and the answer it rests on |
 | F10 | Interview quality assessment: talk time, question types, follow-ups and requirement coverage, with recommendations that point to moments in the transcript |
 
-Also built: a live question chat for the interviewer, a dashboard, candidate and interview lists with search, company sign-up with a company code, and candidate deletion.
+Also built: interview rounds per job (the hiring process from the JD chat or the job form, a pass mark or top N to close each round, next-round invitations and rejection e-mails), a report stage that selects new hires for onboarding, a live question chat for the interviewer, a dashboard, candidate and interview lists with search, company sign-up with a company code, and candidate deletion.
 
 **Innovation feature (F11)**
 
@@ -169,15 +169,17 @@ All settings come from `.env`. `.env.example` lists them with placeholders; the 
 
 ## Using it
 
-1. Log in. Press **Write a job with AI**, describe the role, answer the AI's questions if it asks, and approve the draft. Or press **New job** and fill the form yourself.
-2. Publish the job. Add CVs on the job page (PDF or DOCX) or import them from the Google Form.
-3. Press **Screen the new CVs**. The progress bar shows how far it is. The **Shortlist** tab lists passing candidates by score; **Excluded** shows who missed a must-have and why.
-4. Open a candidate to see the score and its reasons, each requirement with its evidence, and the CV.
-5. Press **Invite top candidates**. Each invitation has a private link for the candidate.
-6. Both sides open the interview room. The transcript appears as people speak. The interviewer sees the profile panel and the question chat.
-7. End the interview. On the candidate page, open **Interview** and run the answer analysis, the quality review and the interview score.
-8. Open **Assessment** to build the consolidated report and export it as a PDF. Use **Compare candidates** on the job page to see assessed candidates side by side. **CV claims** shows what to follow up.
-9. For a new hire, open **Onboarding** to run the identity check.
+The job page has five stages, shown as a bar at the top: **CV screening**, **Invitations**, **Interviews**, **Report** and **Onboarding**.
+
+1. Log in. Press **Write a job with AI**, describe the role and the hiring process (for example "an HR interview, then two technical rounds"), answer the AI's questions if it asks, and approve the draft. Or press **New job** and fill the form yourself, including the **interview rounds**.
+2. Publish the job. Publishing again later replaces the blog post with the job as it is now. Add CVs in the **CV screening** stage (PDF or DOCX) or import them from the Google Form.
+3. Press **Screen the new CVs**. The **Shortlist** tab lists passing candidates by score; **Excluded** shows who missed a must-have and why.
+4. Press **Invite top candidates**. They are booked into round 1 and e-mailed. The **Invitations** stage lists every e-mail of the job (invitations, rejections, onboarding) as sent, sending or failed.
+5. The **Interviews** page lists every booked interview with its round. **Start interview** opens the room: video, live transcript, profile panel and question chat.
+6. In the job's **Interviews** stage, each round has its own tab, ranked by interview score. **Analyse finished interviews** runs the answer analysis, interview score and quality review of every finished interview. A row opens that interview on the **Results** page.
+7. **Close round** lets you choose who passes: by a pass mark (60 by default), the top N (a tie at the cut asks you to pick), or by hand. Those who pass are booked into the next round and invited; the others get a rejection e-mail.
+8. After the last round, the **Report** stage lists the finalists with their CV score, their score in each round and the consolidated assessment (built from every round, with the CV claim check). **Select for onboarding** sends the onboarding e-mail to those you choose and a rejection e-mail to the others.
+9. On the first day, open **Identity check**, pick the new hire, check their photo ID and take their picture. The result shows in the job's **Onboarding** stage.
 
 ## Privacy
 
@@ -214,7 +216,8 @@ Details are in [docs/privacy.md](docs/privacy.md) and, for face data, [docs/READ
 - Interviews and transcription are English only. Streaming transcription does not support Bengali.
 - The Groq and AssemblyAI free tiers have per-minute limits. A large CV batch is slower when they are reached, and the free AssemblyAI tier allows 5 new streams a minute.
 - One interview at a time was tested; the app is meant for local use through Docker.
-- The candidate page shows the newest interview. Older interviews stay in the database but are not listed yet.
+- Every interview round is analysed against all of the job's requirements, so an HR round shows the technical requirements as not explored and scores lower. Rounds are only compared within themselves, and a person sets the pass mark after seeing the scores.
+- The CV claim check reads the newest analysed interview (usually the last round); the consolidated assessment uses every round.
 - The head-turn check stops a held-up photo or a replayed video. It does not stop a live face swap. The photo-ID check by a person is the main safeguard.
 - Video for a candidate on another device needs the public setup described above.
 
