@@ -6,7 +6,7 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 DEFAULT_WEIGHTS = {"technical_skills": 40, "experience": 30, "qualifications": 15, "jd_match": 15}
 # A job with no hiring process written down has one interview round.
-DEFAULT_ROUNDS = [{"name": "Interview", "focus": ""}]
+DEFAULT_ROUNDS = [{"name": "Interview", "focus": "", "type": "technical"}]
 
 
 class Base(DeclarativeBase):
@@ -277,7 +277,7 @@ class ClaimCheck(Base):
     seconds: Mapped[float | None] = mapped_column(Float)
 
 class InterviewChatMessage(Base):
-    """One message in the interviewer's question chat for an interview (Module 13).
+    """One message in the interviewer's Interview Assistant (question chat) for an interview (Module 13).
 
     Interviewer only: the candidate never sees it (N9). It is deleted with the interview, and so with
     the candidate (N19). A new table, so create_all makes it in an existing database.
@@ -640,7 +640,8 @@ class CandidateEmail(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     job_profile_id: Mapped[int] = mapped_column(ForeignKey("job_profiles.id", ondelete="CASCADE"), index=True)
     candidate_id: Mapped[int] = mapped_column(ForeignKey("candidates.id", ondelete="CASCADE"), index=True)
-    kind: Mapped[str] = mapped_column(String(20))  # rejection | onboarding
+    # rejection (took part in the round) | not_held (their interview never took place) | onboarding
+    kind: Mapped[str] = mapped_column(String(20))
     round_number: Mapped[int | None] = mapped_column(Integer, nullable=True)  # the round they did not pass; None = after the report
     status: Mapped[str] = mapped_column(String(10), default="queued")  # queued | sent | failed
     error: Mapped[str] = mapped_column(Text, default="")

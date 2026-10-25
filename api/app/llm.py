@@ -25,6 +25,36 @@ class LLMUnavailable(Exception):
     """The language model could not give a usable answer."""
 
 
+# What the screen says, by the reason the AI call failed. The default stays the general message.
+NOT_AVAILABLE = "The AI service is not available right now. Please try again."
+MINUTE_LIMIT = "The AI's free per-minute limit was reached. Wait a minute and try again."
+DAILY_LIMIT = (
+    "The AI's free daily limit for this model was reached. Try again later, "
+    "or give this task another model in the .env file (see the README)."
+)
+TOO_LARGE = "This request is too large for the AI's free per-minute limit. Please try again with less content."
+TIMED_OUT = "The AI service took too long to answer. Please try again."
+
+
+def reason_for(error: Exception) -> tuple[str, str]:
+    """(short code for the log, message for the screen) for a failed AI call. Plain code.
+
+    Groq answers 429 when a free limit is reached (per minute or per day) and 413 when one request
+    is larger than the per-minute token limit, so waiting would not help."""
+    status_code = getattr(error, "status_code", None) or getattr(getattr(error, "response", None), "status_code", None)
+    name = type(error).__name__
+    text = str(error).lower()
+    if status_code == 413 or "request too large" in text or "context_length" in text:
+        return "too_large", TOO_LARGE
+    if status_code == 429 or name == "RateLimitError" or "rate limit" in text:
+        if "per day" in text or "(tpd)" in text or "(rpd)" in text:
+            return "daily_limit", DAILY_LIMIT
+        return "minute_limit", MINUTE_LIMIT
+    if "timeout" in name.lower() or "timed out" in text:
+        return "timeout", TIMED_OUT
+    return "other", NOT_AVAILABLE
+
+
 class UsageMeter(BaseCallbackHandler):
     """Adds up the calls and tokens of every AI answer it is told about."""
 
@@ -106,13 +136,12 @@ def ask_llm(
             [("system", system_prompt), ("human", user_prompt)], config=config
         )
     except Exception as error:
+        why, message = reason_for(error)
         log.warning(
             "llm call failed",
-            extra={"event": "llm_error", "error_type": type(error).__name__},
+            extra={"event": "llm_error", "error_type": type(error).__name__, "why": why, "model": name},
         )
-        raise LLMUnavailable(
-            "The AI service is not available right now. Please try again."
-        ) from error
+        raise LLMUnavailable(message) from error
 
     if answer is None:
         raise LLMUnavailable(

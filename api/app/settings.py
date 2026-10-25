@@ -51,6 +51,9 @@ class Settings(BaseSettings):
     screening_model: str = ""
     evaluation_model: str = ""
     assessment_model: str = ""
+    # Skills reference notes are shown with an answer only when this close in meaning (cosine distance;
+    # smaller = closer). Raise it if relevant notes go missing, lower it if unrelated ones appear.
+    reference_max_distance: float = 0.3
 
         # LiveKit video server
     livekit_api_key: str = ""
