@@ -64,10 +64,12 @@ def close(client, headers, job_id, number, passed, start=True):
 
 def test_a_job_has_one_round_unless_more_are_given(client, auth_headers):
     created = client.post("/api/jobs", json=JOB, headers=auth_headers).json()
-    assert created["interview_rounds"] == [{"name": "Interview", "focus": ""}]
+    assert created["interview_rounds"] == [{"name": "Interview", "focus": "", "type": "technical"}]
 
     changed = client.put(f"/api/jobs/{created['id']}", json={**JOB, "interview_rounds": TWO_ROUNDS}, headers=auth_headers).json()
     assert [r["name"] for r in changed["interview_rounds"]] == ["HR interview", "Technical interview"]
+    # A round saved without a type gets one from its name.
+    assert [r["type"] for r in changed["interview_rounds"]] == ["hr", "technical"]
 
     refused = client.put(f"/api/jobs/{created['id']}", json={**JOB, "interview_rounds": []}, headers=auth_headers)
     assert refused.status_code == 422  # every job has at least one round
@@ -177,3 +179,59 @@ def test_rejection_and_onboarding_wording_without_the_ai():
     assert source == "template" and "HR interview" in rejection.intro
     welcome, _ = mail_writer.write_outcome("Ayesha", "Software Engineer", "onboarding")
     assert "photo ID" in welcome.intro
+
+
+def cancelled_interview(candidate_id: int, round_number: int) -> int:
+    """An interview that was booked and then cancelled: it ended without ever starting."""
+    yesterday = datetime.now(timezone.utc) - timedelta(days=1)
+    with SessionLocal() as db:
+        session = InterviewSession(
+            candidate_id=candidate_id,
+            scheduled_at=yesterday,
+            invite_token=f"cancelled-{candidate_id}-{round_number}",
+            invite_expires_at=yesterday + timedelta(hours=24),
+            status="ended",
+            started_at=None,
+            ended_at=yesterday,
+            duration_minutes=60,
+            round_number=round_number,
+        )
+        db.add(session)
+        db.commit()
+        return session.id
+
+
+def test_a_cancelled_interview_gets_the_not_held_email_not_a_rejection(client, auth_headers):
+    job, ids = make_job_with_ranked(3)
+    set_rounds(job, TWO_ROUNDS)
+    held_interview(ids[0], 1, 90)
+    held_interview(ids[1], 1, 40)
+    cancelled_interview(ids[2], 1)
+
+    assert close(client, auth_headers, job, 1, [ids[0]]).status_code == 200
+    with SessionLocal() as db:
+        kinds = {m.candidate_id: m.kind for m in db.scalars(select(CandidateEmail))}
+    assert kinds == {ids[1]: "rejection", ids[2]: "not_held"}
+
+    sent = {m["To"]: m for m in FakeSMTP.sent}
+    not_held = sent["person3@example.com"].get_body(preferencelist=("plain",)).get_content()
+    assert "unforeseen circumstances" in not_held.lower()
+    assert "attended" not in not_held.lower()
+
+
+def test_not_held_wording_without_the_ai():
+    wording, source = mail_writer.write_outcome("Ayesha", "Software Engineer", "not_held", "HR interview")
+    assert source == "template"
+    assert "unforeseen circumstances" in wording.intro and "HR interview" in wording.intro
+    assert not mail_writer.SAYS_ATTENDED.search(wording.intro)
+
+
+def test_the_onboarding_email_shows_onboarding_details_not_interview_details():
+    from app import invite_mail
+
+    candidate = SimpleNamespace(name="Ayesha", email="ayesha@example.com")
+    job = SimpleNamespace(title="Software Engineer", interview_rounds=TWO_ROUNDS)
+    message = invite_mail.build_outcome(candidate, job, "onboarding", None, "Sunday, 01 November 2026")
+    html = message.get_body(preferencelist=("html",)).get_content()
+    assert "ONBOARDING DETAILS" in html and "INTERVIEW DETAILS" not in html
+    assert "Sunday, 01 November 2026" in html

@@ -240,7 +240,10 @@ def close_round(
             score=row["score"],
         ))
     for row in failing:
-        db.add(CandidateEmail(job_profile_id=job.id, candidate_id=row["candidate_id"], kind="rejection", round_number=number))
+        # Only candidates who really sat the interview are told they took part in it. Someone whose
+        # interview was cancelled or never took place gets the "could not take place" e-mail instead.
+        kind = "rejection" if row["attended"] else "not_held"
+        db.add(CandidateEmail(job_profile_id=job.id, candidate_id=row["candidate_id"], kind=kind, round_number=number))
     db.add(RoundClosure(
         job_profile_id=job.id, round_number=number, rule=rule, value=value,
         passed=len(passing), rejected=len(failing), closed_by=interviewer_id,
