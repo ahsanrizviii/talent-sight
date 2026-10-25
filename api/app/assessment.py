@@ -86,20 +86,31 @@ def merge_analyses(job: JobProfile, items: list[tuple[InterviewEvaluation, Inter
 
     The question-answer pairs of all rounds are numbered on (Q1, Q2 ... across the rounds) and each
     question says its round. A requirement counts as explored when any round explored it, with the
-    best answer of all rounds. With one round the analysis is used as it is."""
-    if len(items) == 1:
-        return items[0][0].result or {}
+    best answer of all rounds. With one technical round the analysis is used as it is.
+
+    HR rounds: their answers count towards the answer quality, but their coverage is about HR topics,
+    so it never makes a job requirement look explored or unexplored."""
+    def is_hr(evaluation: InterviewEvaluation, session: InterviewSession) -> bool:
+        saved = (evaluation.result or {}).get("round_type")
+        return saved == "hr" if saved else round_info.is_hr(job, session.round_number)
+
+    technical = sum(1 for evaluation, session in items if not is_hr(evaluation, session))
+    if len(items) == 1 and technical == 1:
+        return {**(items[0][0].result or {}), "technical_rounds": 1}
     pairs: list[dict] = []
     coverage: dict[str, dict] = {}
     offset = 0
     for evaluation, session in items:
         result = evaluation.result or {}
+        hr_round = is_hr(evaluation, session)
         label = round_info.label(job, session.round_number or 1)
         new_id = {}
         for pair in result.get("pairs", []):
             new_id[pair["id"]] = pair["id"] + offset
             pairs.append({**pair, "id": pair["id"] + offset, "question": f"[{label}] {pair.get('question', '')}"})
         offset = max([offset, *new_id.values()])
+        if hr_round:
+            continue  # HR topics are not job requirements
         for item in result.get("coverage", []):
             key = " ".join(str(item.get("requirement", "")).lower().split())
             linked = [new_id[p] for p in item.get("pairs", []) if p in new_id]
@@ -118,6 +129,7 @@ def merge_analyses(job: JobProfile, items: list[tuple[InterviewEvaluation, Inter
     return {
         "pairs": pairs,
         "coverage": lines,
+        "technical_rounds": technical,
         "summary": {
             "pairs": len(pairs),
             "job_related": len(job_related),

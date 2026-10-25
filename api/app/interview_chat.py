@@ -1,4 +1,4 @@
-"""The interviewer's question chat for one interview (Module 13).
+"""The interviewer's Interview Assistant (question chat) for one interview (Module 13).
 
 Answered straight away (a few seconds), not in the background: the interviewer is waiting for it
 during the interview. The chat history is kept per interview, so a follow-up message makes sense,
@@ -30,7 +30,7 @@ def messages_of(db: Session, session_id: int) -> list[InterviewChatMessage]:
 
 
 def answer(db: Session, session: InterviewSession, message: str) -> tuple[InterviewChatMessage, InterviewChatMessage]:
-    """Runs the Question Chat Agent and saves the question and the answer together.
+    """Runs the Interview Assistant (the Question Chat Agent) and saves the question and the answer together.
 
     When the AI is not available nothing is saved and a clear error is returned (N6), so the
     interviewer can simply send the message again.

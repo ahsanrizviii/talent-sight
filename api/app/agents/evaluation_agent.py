@@ -1,4 +1,5 @@
 import logging
+import re
 from functools import lru_cache
 from typing import Literal
 
@@ -9,6 +10,7 @@ from app import references
 from app.agents.common import AgentState, has_error
 from app.db import SessionLocal
 from app.llm import LLMUnavailable, ask_llm
+from app.requirement_checks import DOCUMENTS, checked_by_documents
 from app.settings import settings
 
 log = logging.getLogger("talentsight.evaluation_agent")
@@ -24,6 +26,8 @@ WEAK_BELOW = 50
 class EvaluationState(AgentState, total=False):
     turns: list[dict]   # input: [{"n", "speaker", "text", "start_ms", "end_ms"}], see build_turns()
     job: dict           # input: {"title", "description", "requirements"}, like the Screening Agent
+    # input: "technical" (requirements = the job's requirements) or "hr" (requirements = the round's HR topics)
+    round_type: str
     pairs: list[dict]   # the question-answer pairs, filled in step by step
     coverage: list[dict]
 
@@ -126,10 +130,38 @@ def elapsed(ms: int) -> str:
 
 
 def find_references(question: str) -> list[dict]:
-    """The three sections of the skills documents closest to the question (Task 9.1.1)."""
+    """Up to three sections of the skills documents close to the question (Task 9.1.1). Sections that are
+    not really about it are left out, so an answer is never "checked against" unrelated notes."""
     with SessionLocal() as db:
-        found = references.search_references(db, question, limit=3)
+        found = references.search_close_references(db, question, limit=3, max_distance=settings.reference_max_distance)
         return [{"skill": c.skill, "heading": c.heading, "url": c.url, "text": c.text} for c in found]
+
+
+# Words that do not change what a question is about, so "How good are you in Japanese?" and
+# "Do you know Japanese?" are seen as the same question asked twice.
+GENERIC_WORDS = set(
+    "a an the and or of in on at to for with about is are was were be been do does did you your yours "
+    "can could would will should how what which who why when where much many well good know knew tell me "
+    "us please kindly any some there this that it its have has had any really so very little bit".split()
+)
+
+
+def topic_words(question: str) -> frozenset[str]:
+    return frozenset(w for w in re.findall(r"[a-z0-9+#.]+", question.lower()) if w.strip(".") and w not in GENERIC_WORDS)
+
+
+def drop_rephrased(questions: list[str]) -> list[str]:
+    """Plain code: a part that only rewords an earlier part of the same exchange (the same topic words)
+    is dropped, so one answer is never scored twice for one question."""
+    kept: list[str] = []
+    seen: list[frozenset[str]] = []
+    for question in questions:
+        words = topic_words(question)
+        if words and words in seen:
+            continue
+        kept.append(question)
+        seen.append(words)
+    return kept
 
 
 def ask(system_prompt: str, user_prompt: str, answer_shape):
@@ -146,14 +178,21 @@ SEGMENT_PROMPT = (
     "instruction, a comment). "
     "follow_up = true only when the interviewer asks the candidate to go on with the PREVIOUS question "
     "('Can you give an example?', 'Why?', 'Anything else?') instead of asking something new. "
-    "Use only what the transcript says."
+    "Do NOT split a question that is only said again in other words ('How good are you in Japanese? Do you "
+    "know Japanese?' is ONE question). "
+    "The transcript comes from speech-to-text and can have wrong words. When a question makes no sense as "
+    "written, write the question the interviewer most likely asked, using the answer as context (for example "
+    "'Why are we blanking on this role?' answered with reasons for applying is 'Why are you applying for this "
+    "role?'). Otherwise use only what the transcript says."
 )
 
 CLASSIFY_PROMPT = (
     "You sort interview questions. job_related = the exchange tests the candidate's skills, knowledge, "
     "experience, way of working, problem solving or motivation for the role. small_talk = greetings, "
     "checking the audio, chit-chat, scheduling and logistics, the interviewer introducing the company, "
-    "and 'Do you have any questions for us?'. When in doubt, choose job_related. Give a kind for EVERY pair."
+    "and 'Do you have any questions for us?'. Questions about salary, notice period, joining date, motivation, "
+    "teamwork, conflicts or difficult situations are job_related. When in doubt, choose job_related. "
+    "Give a kind for EVERY pair."
 )
 
 
@@ -174,7 +213,30 @@ SCORE_PROMPT = (
     "technical claim, judge whether it is plausible and consistent. "
     "completeness: does it cover the main points a good answer would, including every part of the "
     "question and the follow-ups? "
-    "articulation: is it clear, structured and easy to follow? Ignore small speech-to-text errors. "
+    "articulation: is it clear, structured and easy to follow? "
+    "The transcript comes from speech-to-text: when a word looks wrong (for example 'SVG classifier' for an "
+    "SVM classifier, or a garbled question), judge what the speaker most likely said and never take points "
+    "off any dimension for such errors. "
+    "Every justification is one or two sentences and names what in the answer supports the score. "
+    "evidence_turn is the number of the candidate turn that best supports the scores, and quote is a "
+    "short exact quote from it."
+)
+
+HR_SCORE_PROMPT = (
+    "You evaluate one answer from an HR interview (a behavioural interview about communication, motivation, "
+    "teamwork, situational judgement, professionalism and expectations such as salary or joining date). "
+    "Score four dimensions from 0 to 100 in steps of 5, using only the conversation. Do not judge technical "
+    "knowledge. "
+    "relevance: does the answer address the question that was asked (100 = fully on point, 0 = off topic)? "
+    "accuracy: in an HR interview this means consistency and credibility: is the answer realistic, consistent "
+    "with itself and with the rest of the conversation, and does it give a clear position? "
+    "completeness: does it cover what a good HR answer would: for a situation question what they would do, why, "
+    "and the likely outcome; for a motivation or teamwork question a reason and an example; for expectations a "
+    "clear answer? "
+    "articulation: is it clear, professional and easy to follow? "
+    "The transcript comes from speech-to-text: when a word looks wrong, judge what the speaker most likely said "
+    "and never take points off for such errors. "
+    "Never consider age, gender, ethnicity, religion, nationality, accent or health. "
     "Every justification is one or two sentences and names what in the answer supports the score. "
     "evidence_turn is the number of the candidate turn that best supports the scores, and quote is a "
     "short exact quote from it."
@@ -213,7 +275,7 @@ def segment_pairs(state: EvaluationState) -> dict:
             previous["answer_turns"] += answer_numbers
             continue
 
-        questions = [q.strip() for q in plan.questions if q.strip()] if plan else []
+        questions = drop_rephrased([q.strip() for q in plan.questions if q.strip()]) if plan else []
         if not questions:
             questions = [asked or "(The candidate spoke before any question.)"]
         for part, question in enumerate(questions, start=1):
@@ -259,10 +321,12 @@ def map_requirements(state: EvaluationState) -> dict:
     by_n = {turn["n"]: turn for turn in state["turns"]}
     pairs = [{**pair, "requirements": []} for pair in state["pairs"]]
     job_related = [pair for pair in pairs if pair["kind"] == "job_related"]
-    if not requirements or not job_related:
+    # Degrees, certificates and written skills are checked with documents, so no answer is linked to them.
+    testable = {n for n, r in enumerate(requirements, start=1) if not checked_by_documents(r)}
+    if not testable or not job_related:
         return {"pairs": pairs}
 
-    numbered = "\n".join(f"{i}. {r['requirement']}" for i, r in enumerate(requirements, start=1))
+    numbered = "\n".join(f"{i}. {r['requirement']}" for i, r in enumerate(requirements, start=1) if i in testable)
     links: dict[int, list[int]] = {}
     for start in range(0, len(job_related), BATCH):
         shown = []
@@ -277,8 +341,8 @@ def map_requirements(state: EvaluationState) -> dict:
         links.update({item.id: item.requirements for item in answer.pairs})
 
     for pair in job_related:
-        # Only numbers that exist, each once, in order: the AI cannot invent a requirement.
-        pair["requirements"] = sorted({n for n in links.get(pair["id"], []) if 1 <= n <= len(requirements)})
+        # Only numbers that exist (and can be tested in an interview), each once, in order.
+        pair["requirements"] = sorted({n for n in links.get(pair["id"], []) if n in testable})
     return {"pairs": pairs}
 
 
@@ -296,7 +360,10 @@ def score_one(pair: dict, state: EvaluationState) -> dict | str:
         }
 
     linked = [job["requirements"][n - 1]["requirement"] for n in pair["requirements"]]
-    notes = find_references(" ".join([pair["question"], *linked]))
+    hr_round = state.get("round_type") == "hr"
+    # Reference notes only for a technical answer linked to a requirement: an HR answer or a general
+    # question is never "checked against" technical documents.
+    notes = find_references(" ".join([pair["question"], *linked])) if linked and not hr_round else []
     conversation = "\n".join(
         f"[turn {n}, {elapsed(by_n[n]['start_ms'])}] "
         f"{'Interviewer' if by_n[n]['speaker'] == 'interviewer' else 'Candidate'}: {clip(by_n[n]['text'])}"
@@ -306,14 +373,18 @@ def score_one(pair: dict, state: EvaluationState) -> dict | str:
         f"Job: {job['title']}\n"
         f"Question being scored: {pair['question']}\n"
         + (f"Follow-up questions: {' | '.join(pair['follow_ups'])}\n" if pair["follow_ups"] else "")
-        + (f"Requirements it relates to: {'; '.join(linked)}\n" if linked else "")
-        + f"\nConversation:\n{conversation}\n\nReference notes:\n"
-        + ("\n".join(f"- {clip(note['text'], 900)}" for note in notes) or "(none)")
+        + (f"{'HR topics' if hr_round else 'Requirements'} it relates to: {'; '.join(linked)}\n" if linked else "")
+        + f"\nConversation:\n{conversation}"
+        + (
+            ""
+            if hr_round
+            else "\n\nReference notes:\n" + ("\n".join(f"- {clip(note['text'], 900)}" for note in notes) or "(none)")
+        )
     )
 
     for _ in range(MAX_SCORE_ATTEMPTS):
         try:
-            answer = ask(SCORE_PROMPT, prompt, AnswerScores)
+            answer = ask(HR_SCORE_PROMPT if hr_round else SCORE_PROMPT, prompt, AnswerScores)
         except LLMUnavailable as error:
             return str(error)
         scores = {d: getattr(answer, d).model_dump() for d in DIMENSIONS}
@@ -363,7 +434,9 @@ def check_coverage(state: EvaluationState) -> dict:
     for number, requirement in enumerate(state["job"]["requirements"], start=1):
         linked = [p for p in state["pairs"] if p["kind"] == "job_related" and number in p["requirements"]]
         best = max((p["overall"] for p in linked if p["overall"] is not None), default=None)
-        if not linked:
+        if checked_by_documents(requirement):
+            status = DOCUMENTS  # checked with documents at onboarding, never "not explored"
+        elif not linked:
             status = "not_explored"
         elif best is None or best < WEAK_BELOW:
             status = "weak"

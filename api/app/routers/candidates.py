@@ -10,6 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app import google_form, privacy
+from app.agents.screening_agent import requirements_of
 from app.cv_files import CVFileError
 from app.db import get_db
 from app.deps import current_interviewer
@@ -66,6 +67,8 @@ class CandidateRow(BaseModel):
     unmet: int = 0
     overall: float | None = None  # Module 6: the weighted total, 0-100
     rank: int | None = None  # Module 6: place in the shortlist (screened candidates only)
+    # True when the job's requirements were changed after this CV was screened: screen again to compare
+    requirements_changed: bool = False
 
 
 class DimensionOut(BaseModel):
@@ -141,11 +144,21 @@ def score_of(db: Session, candidate_id: int) -> CandidateScore | None:
     return db.scalar(select(CandidateScore).where(CandidateScore.candidate_id == candidate_id))
 
 
+def requirements_changed(job: JobProfile | None, verdicts: list[RequirementVerdict]) -> bool:
+    """Plain code: the requirements this CV was checked against are not the job's requirements now."""
+    if job is None or not verdicts:
+        return False
+    same = lambda text: " ".join(str(text).lower().split())  # noqa: E731
+    return {same(v.requirement) for v in verdicts} != {same(r["requirement"]) for r in requirements_of(job)}
+
+
 def to_row(db: Session, candidate: Candidate) -> CandidateRow:
     base = CandidateRow.model_validate(candidate).model_dump()
     score = score_of(db, candidate.id)
     overall = {"overall": score.overall} if score else {}
-    return CandidateRow(**{**base, **counts(verdicts_of(db, candidate.id)), **overall})
+    verdicts = verdicts_of(db, candidate.id)
+    changed = requirements_changed(db.get(JobProfile, candidate.job_profile_id), verdicts)
+    return CandidateRow(**{**base, **counts(verdicts), **overall, "requirements_changed": changed})
 
 
 def breakdown(score: CandidateScore, weights: dict) -> ScoreOut:

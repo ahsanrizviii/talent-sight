@@ -1,4 +1,4 @@
-"""The question chat in the interview room (Module 13).
+"""The Interview Assistant (question chat) in the interview room (Module 13).
 
 Interviewers only. The candidate's page never calls it and never sees it (N9).
 """

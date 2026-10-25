@@ -13,6 +13,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
+from app import round_info
 from app.agents.evaluation_agent import build_turns, get_evaluation_agent
 from app.agents.screening_agent import job_for_agent
 from app.db import SessionLocal
@@ -83,6 +84,20 @@ def summarise(pairs: list[dict], coverage: list[dict]) -> dict:
     }
 
 
+def job_for_round(job: JobProfile, round_number: int | None) -> dict:
+    """What the answers are judged against: the job's requirements in a technical round, the round's HR
+    topics (its focus text, or the default HR topics) in an HR round."""
+    found = round_info.round_of(job, round_number or 1)
+    if found["type"] != "hr":
+        return job_for_agent(job)
+    topics = round_info.hr_topics(found["focus"])
+    return {
+        "title": job.title,
+        "description": job.description,
+        "requirements": [{"requirement": topic, "kind": "hr_topic", "mandatory": False} for topic in topics],
+    }
+
+
 def set_step(evaluation_id: int, step: str) -> None:
     with SessionLocal() as db:
         db.execute(update(InterviewEvaluation).where(InterviewEvaluation.id == evaluation_id).values(step=step))
@@ -100,7 +115,11 @@ def run_evaluation(evaluation_id: int) -> None:
         candidate = db.get(Candidate, session.candidate_id)
         job = db.get(JobProfile, candidate.job_profile_id)
         session_id = session.id
-        state = {"turns": build_turns(transcript_of(db, session.id)), "job": job_for_agent(job)}
+        state = {
+            "turns": build_turns(transcript_of(db, session.id)),
+            "job": job_for_round(job, session.round_number),
+            "round_type": round_info.round_of(job, session.round_number or 1)["type"],
+        }
     # The database connection is closed while the AI works: one analysis can take a few minutes.
 
     final: dict = {}
@@ -128,6 +147,7 @@ def run_evaluation(evaluation_id: int) -> None:
                 "pairs": final["pairs"],
                 "coverage": final["coverage"],
                 "summary": summarise(final["pairs"], final["coverage"]),
+                "round_type": state["round_type"],
             }
         row.finished_at = utcnow()
         row.seconds = round(time.monotonic() - started, 1)

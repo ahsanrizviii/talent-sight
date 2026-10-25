@@ -15,6 +15,7 @@ Advice for the hiring team only: it never changes the candidate's score, assessm
 """
 
 import logging
+import re
 from collections import Counter
 from functools import lru_cache
 from statistics import mean
@@ -44,6 +45,8 @@ LABELS = {
     "unclear": "Unclear",
     "unrated": "Not rated",
 }
+# A question that starts like this asks for an explanation, so it is never a yes/no question.
+OPEN_START = re.compile(r"^\s*(what|how|why|which|describe|tell|explain|walk|talk|give)\b", re.IGNORECASE)
 
 
 # ---------- 1. The state ----------
@@ -52,7 +55,8 @@ class QualityState(AgentState, total=False):
     job: dict        # {"title", "requirements"}
     turns: list      # [{"n", "speaker", "text", "start_ms", "end_ms"}]
     pairs: list      # the question-answer pairs from the answer analysis (Module 9)
-    coverage: list   # [{"requirement", "mandatory", "status"}]
+    coverage: list   # [{"requirement", "mandatory", "status"}]; in an HR round the HR topics
+    round_type: str  # "technical" or "hr"
     others: list     # the measures of the other reviewed interviews for the same job
     # Filled in step by step
     measures: dict
@@ -159,20 +163,29 @@ SYSTEM_PROMPT = (
     "several questions at once). Then write a two-sentence summary and two to four concrete recommendations. "
     "Each recommendation names the transcript turn it is about (12 for T12), or 0 if it is about the whole "
     "interview. Use only turns you were shown. Base everything on the numbers and the transcript you see. "
+    "A question that starts with what, how, why or which, or asks the candidate to describe or explain, is never "
+    "closed. The transcript comes from speech-to-text: do not blame the interviewer for wrong words. "
     "Never comment on the candidate's or the interviewer's age, gender, ethnicity, religion, nationality or health."
+)
+
+HR_NOTE = (
+    " This was an HR interview round: judge how well it explored the HR topics (communication, motivation, "
+    "teamwork, situational judgement, professionalism, expectations). Never recommend technical questions."
 )
 
 
 def prompt_for(state: QualityState) -> str:
     by_n = {turn["n"]: turn for turn in state["turns"]}
     m = state["measures"]
+    hr_round = state.get("round_type") == "hr"
     lines = [
         f"Job: {state['job']['title']}",
         "",
         "Measured by plain code:",
         f"- The interview lasted {m['minutes']} minutes; the interviewer talked {m['interviewer_talk_pct']}% of the time.",
         f"- {m['questions']} job questions, {m['follow_ups']} follow-up questions, {m['small_talk']} small-talk exchanges.",
-        f"- Requirements: {m['explored']} explored, {m['weak']} weakly explored, {m['not_explored']} not explored.",
+        f"- {'HR topics' if hr_round else 'Requirements'}: {m['explored']} explored, "
+        f"{m['weak']} weakly explored, {m['not_explored']} not explored.",
     ]
     missed = [item["requirement"] for item in state.get("coverage") or [] if item["status"] == "not_explored"]
     if missed:
@@ -182,7 +195,7 @@ def prompt_for(state: QualityState) -> str:
         lines.append(
             f"- The other {state['compare']['interviews']} interviews for this job average: interviewer talk "
             f"{average['interviewer_talk_pct']}%, {average['questions']} job questions, {average['follow_ups']} follow-ups, "
-            f"{average['coverage_pct']}% of requirements explored."
+            f"{average['coverage_pct']}% of {'HR topics' if hr_round else 'requirements'} explored."
         )
     lines += ["", "The job questions (Q) with their transcript turns (T):"]
     for pair in job_pairs(state):
@@ -200,7 +213,8 @@ def review(state: QualityState) -> dict:
     if state.get("problems"):
         prompt += "\n\nYour last answer had these problems. Fix them:\n- " + "\n- ".join(state["problems"])
     try:
-        answer = ask(SYSTEM_PROMPT, prompt, Review)
+        system = SYSTEM_PROMPT + (HR_NOTE if state.get("round_type") == "hr" else "")
+        answer = ask(system, prompt, Review)
     except LLMUnavailable as error:
         return {"error": str(error)}
     return {"draft": answer.model_dump(), "attempts": state.get("attempts", 0) + 1}
@@ -229,6 +243,8 @@ def check_review(state: QualityState) -> dict:
     for pair in job_pairs(state):
         found = rated.get(pair["id"])
         kind = found["kind"] if found else "unrated"  # a question the AI skipped is shown, not hidden
+        if kind == "closed" and OPEN_START.match(pair["question"]):
+            kind = "open"  # plain code: "What do you use to deploy it?" is not a yes/no question
         questions.append({
             "id": pair["id"],
             "question": pair["question"],

@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 
 from app.agents.claim_agent import get_claim_agent
 from app.agents.screening_agent import requirements_of
-from app.assessment import latest_analysis
+from app.assessment import analyses_by_round, latest_analysis
 from app.db import SessionLocal
 from app.models import Candidate, ClaimCheck, JobProfile
 
@@ -75,14 +75,26 @@ def start_check(db: Session, candidate: Candidate) -> ClaimCheck:
 
 
 def inputs_for(db: Session, candidate: Candidate) -> dict:
-    """What the agent needs: the job's requirements, the structured CV and the interview turns."""
+    """What the agent needs: the job's requirements, the structured CV and the interview turns of EVERY
+    analysed round (a claim can come up in any round), numbered on across the rounds like the report."""
     job = db.get(JobProfile, candidate.job_profile_id)
-    evaluation, _ = latest_analysis(db, candidate.id)
     return {
         "job": {"title": job.title, "requirements": [r["requirement"] for r in requirements_of(job)]},
         "profile": candidate.profile or {},
-        "turns": (evaluation.result or {}).get("turns", []),
+        "turns": turns_of_every_round(analyses_by_round(db, candidate.id)),
     }
+
+
+def turns_of_every_round(items: list) -> list[dict]:
+    """The analysed turns of each round in round order: T1 ... of round 1, then round 2 numbered on."""
+    turns: list[dict] = []
+    offset = 0
+    for evaluation, session in items:
+        own = (evaluation.result or {}).get("turns", [])
+        for turn in own:
+            turns.append({**turn, "n": turn["n"] + offset, "round": session.round_number or 1})
+        offset = max([offset, *(turn["n"] + offset for turn in own)])
+    return turns
 
 
 def set_step(check_id: int, step: str) -> None:
