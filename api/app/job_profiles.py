@@ -1,9 +1,10 @@
 import re
 from datetime import datetime
-from typing import Annotated
+from typing import Annotated, Literal
 from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validator
 
 from app.blogger import blog_url_for
+from app.round_info import type_or_guess
 from app.models import DEFAULT_ROUNDS, DEFAULT_WEIGHTS, JobProfile
 
 
@@ -32,6 +33,16 @@ class InterviewRound(BaseModel):
 
     name: str = Field(min_length=1, max_length=80)
     focus: str = Field(default="", max_length=300)  # what this round covers, in a few words
+    # technical = judged on the job's requirements; hr = judged on HR topics (communication, motivation ...)
+    type: Literal["technical", "hr"] = "technical"
+
+    @model_validator(mode="before")
+    @classmethod
+    def type_from_name(cls, data):
+        """A round sent or saved without a type (older jobs, older screens) gets one from its name."""
+        if isinstance(data, dict) and str(data.get("type") or "").strip().lower() not in ("technical", "hr"):
+            data = {**data, "type": type_or_guess(data)}
+        return data
 
 
 def default_rounds() -> list[InterviewRound]:

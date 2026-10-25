@@ -1,6 +1,8 @@
 import json
 import logging
+import re
 from functools import lru_cache
+from typing import Literal
 
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import interrupt
@@ -14,10 +16,21 @@ from app.job_profiles import JobIn, publish_job_post
 from app.knowledge import search_policies
 from app.llm import LLMUnavailable, ask_llm
 from app.models import JobProfile
+from app.round_info import guess_type
 
 log = logging.getLogger("talentsight.jd_agent")
 
 MAX_QUESTION_ROUNDS = 1  
+MAX_QUESTIONS = 4
+# Asked by plain code whenever the brief does not describe the interview rounds and the AI did not ask.
+ROUNDS_QUESTION = (
+    "How many interview rounds will there be, what is each round called, and is each one a technical "
+    "or an HR interview (for example: 1. Technical interview, 2. HR interview)?"
+)
+# Steps of the hiring process that are not interviews, so they never become an interview round.
+NOT_AN_INTERVIEW = re.compile(
+    r"(?<![a-z])(cv|resume|résumé|screening|shortlist(ing)?|decision|offer|onboarding)(?![a-z])", re.IGNORECASE
+)
 MAX_DRAFT_ATTEMPTS = 2  
 
 class JDState(AgentState, total=False):
@@ -37,8 +50,14 @@ class JDState(AgentState, total=False):
 class BriefCheck(BaseModel):
     job_title: str = Field(description="Short job title, for example 'Backend Developer'")
     missing_details: list[str] = Field(
-        description="Up to 3 short questions about facts the brief does not give: the job level, "
-        "the main skills, or the minimum years of experience. An empty list if all three are given."
+        description="Up to 4 short questions about facts the brief does not give: the job level, "
+        "the main skills, the minimum years of experience, and the interview rounds (how many, their "
+        "names, and whether each is a technical or an HR interview). An empty list if all are given."
+    )
+    rounds_described: bool = Field(
+        default=False,
+        description="True when the brief says which interview rounds there are (for example 'one technical "
+        "interview, then an HR interview')",
     )
 
 class DraftWeights(BaseModel):
@@ -50,6 +69,10 @@ class DraftWeights(BaseModel):
 class DraftRound(BaseModel):
     name: str = Field(description="Short name of the round, for example 'HR interview' or 'Technical round 1'")
     focus: str = Field(description="What this round covers, in a few words")
+    type: Literal["technical", "hr"] = Field(
+        default="technical",
+        description="technical = tests the job's skills; hr = communication, motivation, teamwork, expectations",
+    )
 
 
 class JobDraft(BaseModel):
@@ -63,25 +86,30 @@ class JobDraft(BaseModel):
     weights: DraftWeights = Field(description="Scoring weights in percent; the four numbers must add up to 100")
     interview_rounds: list[DraftRound] = Field(
         default_factory=list,
-        description="The interview rounds of the hiring process, in order, exactly as the brief describes them "
-        "(at most 6). Empty when the brief does not describe the rounds.",
+        description="The INTERVIEW rounds of the hiring process, in order, exactly as the brief or the hiring "
+        "manager's answers describe them (at most 6). Only interviews: never CV screening, tests, the final "
+        "decision or the offer. Empty when the rounds are not described.",
     )
 
 CHECK_PROMPT = (
     "You help a hiring manager write a job post. Read their brief and check whether it gives "
-    "the job level, the main skills and the minimum years of experience. Ask only about what is really missing."
+    "the job level, the main skills, the minimum years of experience and the interview rounds (how many, "
+    "what each is called, and whether each is a technical or an HR interview). Ask only about what is "
+    "really missing, one short question per missing fact."
 )
 
 DRAFT_PROMPT = (
     "You write job posts for a company. Follow the company policies you are given exactly. "
     "Use only job-related requirements. Never mention or ask for age, gender, religion, nationality, "
     "marital status or any other personal characteristic. "
-    "If the brief describes the hiring process (the interview rounds), list those rounds in interview_rounds, "
-    "in the same order, each with a short name and what it covers. Never invent rounds the brief does not mention."
+    "If the brief or the hiring manager's answers describe the interview rounds, list those rounds in "
+    "interview_rounds, in the same order, each with a short name, what it covers and its type (technical or hr). "
+    "interview_rounds holds interviews only: CV screening, the final decision and the offer are not rounds. "
+    "Never invent rounds the brief does not mention, and do not take rounds from the company policies."
 )
 
 # A brief that says nothing about the hiring process gives a job with one interview round.
-ONE_ROUND = [{"name": "Interview", "focus": ""}]
+ONE_ROUND = [{"name": "Interview", "focus": "", "type": "technical"}]
 
 
 def check_brief(state: JDState) -> dict:
@@ -89,9 +117,13 @@ def check_brief(state: JDState) -> dict:
         result = ask_llm(CHECK_PROMPT, state["brief"], BriefCheck)
     except LLMUnavailable as error:
         return {"error": str(error)}
-    if result.missing_details and state.get("question_rounds", 0) < MAX_QUESTION_ROUNDS:
-        return {"questions": result.missing_details[:3]}
-    return {"questions": []}
+    if state.get("question_rounds", 0) >= MAX_QUESTION_ROUNDS:
+        return {"questions": []}
+    questions = [q.strip() for q in result.missing_details if q.strip()][:MAX_QUESTIONS]
+    # Plain code makes sure the rounds are asked about: the AI sometimes forgets this one.
+    if not result.rounds_described and not any("round" in q.lower() for q in questions):
+        questions = questions[: MAX_QUESTIONS - 1] + [ROUNDS_QUESTION]
+    return {"questions": questions}
 
 
 def ask_for_details(state: JDState) -> dict:
@@ -122,12 +154,21 @@ def write_draft(state: JDState) -> dict:
         return {"error": str(error)}
     result = draft.model_dump()
     rounds = [
-        {"name": r["name"].strip()[:80], "focus": r.get("focus", "").strip()[:300]}
+        {
+            "name": r["name"].strip()[:80],
+            "focus": r.get("focus", "").strip()[:300],
+            "type": r.get("type") if r.get("type") in ("technical", "hr") else guess_type(r["name"], r.get("focus", "")),
+        }
         for r in result.get("interview_rounds", [])
-        if r.get("name", "").strip()
+        if r.get("name", "").strip() and is_interview(r["name"])
     ]
     result["interview_rounds"] = rounds[:6] or [dict(r) for r in ONE_ROUND]
     return {"draft": result, "feedback": "", "draft_attempts": state.get("draft_attempts", 0) + 1}
+
+
+def is_interview(name: str) -> bool:
+    """False for steps such as "CV screening" or "Final decision"; anything named an interview is kept."""
+    return "interview" in name.lower() or not NOT_AN_INTERVIEW.search(name)
 
 
 def check_draft(state: JDState) -> dict:

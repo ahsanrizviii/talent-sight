@@ -2,8 +2,10 @@ from app.agents import jd_agent
 from app.agents.jd_agent import BriefCheck, DraftWeights, JobDraft
 from app.llm import LLMUnavailable
 
-COMPLETE_BRIEF = BriefCheck(job_title="Backend Developer", missing_details=[])
-INCOMPLETE_BRIEF = BriefCheck(job_title="Backend Developer", missing_details=["How many years of experience?"])
+COMPLETE_BRIEF = BriefCheck(job_title="Backend Developer", missing_details=[], rounds_described=True)
+INCOMPLETE_BRIEF = BriefCheck(
+    job_title="Backend Developer", missing_details=["How many years of experience?"], rounds_described=True
+)
 GOOD_DRAFT = JobDraft(
     title="Mid-level Backend Developer",
     description="About the role ...",
@@ -99,3 +101,31 @@ def test_ai_failure_gives_a_clear_error(client, auth_headers, monkeypatch):
     assert chat["message"] == "The AI service is not available right now. Please try again."
     response = client.post(f"/api/jd-chat/{chat['thread_id']}/reply", json={"approve": True}, headers=auth_headers)
     assert response.status_code == 409
+
+
+def test_the_rounds_are_asked_about_when_the_brief_does_not_give_them(client, auth_headers, monkeypatch):
+    no_rounds = BriefCheck(job_title="Backend Developer", missing_details=["How many years of experience?"])
+    use_fake_llm(monkeypatch, [no_rounds, COMPLETE_BRIEF], [GOOD_DRAFT])
+    chat = start(client, auth_headers, "We need a backend developer")
+    assert chat["kind"] == "questions"
+    assert chat["questions"] == ["How many years of experience?", jd_agent.ROUNDS_QUESTION]
+
+
+def test_the_rounds_question_is_not_asked_twice(client, auth_headers, monkeypatch):
+    asked = BriefCheck(job_title="Backend Developer", missing_details=["How many interview rounds are there?"])
+    use_fake_llm(monkeypatch, [asked, COMPLETE_BRIEF], [GOOD_DRAFT])
+    chat = start(client, auth_headers, "Python backend developer, 3 years, SQL")
+    assert chat["questions"] == ["How many interview rounds are there?"]
+
+
+def test_cv_screening_and_the_final_decision_never_become_rounds(client, auth_headers, monkeypatch):
+    steps = [
+        jd_agent.DraftRound(name="CV screening", focus="resume match"),
+        jd_agent.DraftRound(name="Technical interview", focus="coding and backend concepts"),
+        jd_agent.DraftRound(name="HR interview", focus="communication, salary", type="hr"),
+        jd_agent.DraftRound(name="Final decision", focus="hiring team review"),
+    ]
+    use_fake_llm(monkeypatch, [COMPLETE_BRIEF], [GOOD_DRAFT.model_copy(update={"interview_rounds": steps})])
+    chat = start(client, auth_headers, "Python backend developer, 3 years, SQL, technical then HR interview")
+    rounds = chat["draft"]["interview_rounds"]
+    assert [(r["name"], r["type"]) for r in rounds] == [("Technical interview", "technical"), ("HR interview", "hr")]
