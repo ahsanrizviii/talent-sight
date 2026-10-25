@@ -28,6 +28,7 @@ from pydantic import BaseModel, Field
 
 from app.agents.common import AgentState, has_error
 from app.llm import LLMUnavailable, ask_llm
+from app.requirement_checks import DOCUMENTS, checked_by_documents
 from app.settings import settings
 
 log = logging.getLogger("talentsight.assessment_agent")
@@ -51,6 +52,12 @@ VERDICT_WORDS = {"met": "met", "partially_met": "partly met", "unmet": "not met"
 MAX_ITEMS = 5               # most strengths, weaknesses or follow-ups kept
 MAX_FINDING_ATTEMPTS = 2    # the AI is asked again once if none of its findings can be traced
 EVIDENCE_CHARS = 300        # the longest piece of one evidence item the AI is shown
+# A weakness that only says some evidence is missing: that is a gap, listed (and followed up) already.
+ONLY_MISSING = re.compile(
+    r"\bno (solid |clear )?(interview )?evidence\b|\bnot (discussed|explored|covered|asked|shown in the interview)\b"
+    r"|\bnever (asked|discussed|explored)\b|\brests on the cv alone\b",
+    re.IGNORECASE,
+)
 
 
 # ---------- 1. The state ----------
@@ -149,6 +156,16 @@ def gather_evidence(state: AssessmentState) -> dict:
             by_text[same(line["requirement"])] = line
         line.update(interview=covered["status"], best_score=covered.get("best_score"), pairs=list(covered.get("pairs", [])))
 
+    # A technical interview took place, so a requirement it never touched counts as not explored (it is
+    # not left out, which would make the coverage look better than it was). Degrees, certificates and
+    # written skills are checked with documents at onboarding, whatever an older analysis said.
+    interviewed = analysis.get("technical_rounds", 1 if analysis.get("coverage") else 0)
+    for line in requirements:
+        if checked_by_documents(line):
+            line.update(interview=DOCUMENTS, best_score=None, pairs=[])
+        elif line["interview"] is None and line["cv"] and interviewed:
+            line["interview"] = "not_explored"
+
     evidence: list[dict] = []
     for line in requirements:
         if line["cv"]:
@@ -175,7 +192,7 @@ def gather_evidence(state: AssessmentState) -> dict:
             "at": elapsed(found["start_ms"] if found else pair.get("start_ms", 0)),
         })
     for line in requirements:
-        if not line["interview"]:
+        if not line["interview"] or line["interview"] == DOCUMENTS:
             continue
         answers = ", ".join(f"Q{p}" for p in line["pairs"])
         text = {
@@ -194,6 +211,17 @@ def find_gaps(state: AssessmentState) -> dict:
         ids = [f"R{line['n']}"] if line["cv"] else []
         ids += [f"C{line['n']}"] if line["interview"] else []
         name = line["requirement"]
+        if line["interview"] == DOCUMENTS:
+            # Checked with documents at onboarding: only a CV that does not show it at all is a gap.
+            if line["cv"] == "unmet":
+                gaps.append({
+                    "kind": "not_in_cv",
+                    "requirement": name,
+                    "mandatory": line["mandatory"],
+                    "text": f"The CV does not show {name}; it is checked with documents at onboarding.",
+                    "evidence": ids,
+                })
+            continue
         if line["interview"] != "explored" and line["cv"] != "met":
             kind = "no_evidence"
             text = f"No solid evidence for {name}: the CV check says {VERDICT_WORDS.get(line['cv'], 'nothing')}"
@@ -256,7 +284,7 @@ def compute_position(state: AssessmentState) -> dict:
     capped_by = []
     # A must-have requirement with no solid evidence anywhere keeps the candidate from "strong fit".
     for gap in state["gaps"]:
-        if gap["mandatory"] and gap["kind"] == "no_evidence" and code == "strong_fit":
+        if gap["mandatory"] and gap["kind"] in ("no_evidence", "not_in_cv") and code == "strong_fit":
             code = "possible_fit"
             capped_by += gap["evidence"]
             reasons.append(f"Lowered to a possible fit: no solid evidence for the must-have {gap['requirement']}.")
@@ -268,8 +296,13 @@ FINDINGS_PROMPT = (
     "You write the findings of a hiring assessment from numbered evidence about one candidate. "
     "Use ONLY the evidence given. Every item must list the ids of the evidence it rests on, for example "
     '["Q2", "R1"]. summary: two or three sentences on the overall picture. strengths: up to 4 clear strengths. '
-    "weaknesses: up to 4 clear weaknesses or risks. follow_ups: up to 4 concrete areas a person should verify "
-    "next, for example a question for the next round; start with the evidence gaps. "
+    "weaknesses: up to 4 clear weaknesses or risks that the evidence SHOWS (a low answer score, a weak answer, "
+    "a requirement the CV does not meet); a piece of evidence that is only missing is not a weakness, it is a gap. "
+    "Never cite a requirement the CV check marks partly met or not met (R) as a strength. "
+    "follow_ups: up to 4 concrete areas a person should verify next, for example a question for the next round; "
+    "start with the evidence gaps. Degrees, certificates and written skills are checked with documents at "
+    "onboarding: never make them a follow-up. Questions labelled with an HR round are HR answers (communication, "
+    "motivation, teamwork): use them for soft-skill findings, never as evidence of technical skill. "
     "Write short, neutral sentences about job-related skills and experience only. Never mention or guess age, "
     "gender, ethnicity, nationality, religion, marital status or health. The position is decided already; "
     "do not change it."
@@ -318,6 +351,17 @@ def check_citations(state: AssessmentState) -> dict:
     known = {item["id"] for item in state["evidence"]}
     draft = state["draft"]
     findings = {part: keep_traceable(draft.get(part, []), known) for part in ("strengths", "weaknesses", "follow_ups")}
+    # Plain code keeps the report from contradicting itself or repeating its gaps.
+    not_met = {f"R{line['n']}" for line in state["requirements"] if line["cv"] in ("partially_met", "unmet")}
+    strengths = []
+    for item in findings["strengths"]:
+        ids = [code for code in item["evidence"] if code not in not_met]
+        if ids:
+            strengths.append({**item, "evidence": ids})
+    findings["strengths"] = strengths
+    findings["weaknesses"] = [item for item in findings["weaknesses"] if not ONLY_MISSING.search(item["text"])]
+    documents = {f"R{line['n']}" for line in state["requirements"] if line["interview"] == DOCUMENTS}
+    findings["follow_ups"] = [item for item in findings["follow_ups"] if not set(item["evidence"]) <= documents]
 
     if not findings["strengths"] and not findings["weaknesses"]:
         if state.get("attempts", 0) < MAX_FINDING_ATTEMPTS:

@@ -1,10 +1,11 @@
 """What is known about one interview, gathered in one place (Module 13).
 
-The question chat uses it now; the interview quality and interview scoring features reuse it, so each
+The Interview Assistant uses it now; the interview quality and interview scoring features reuse it, so each
 of them reads the CV, the job and the transcript the same way. Plain code, no AI.
 
     context_for(db, session) -> {
-        "job":      {"title", "requirements": [text, ...]},
+        "job":      {"title", "requirements": [text, ...]}   in an HR round: the round's HR topics
+        "round_type": "technical" | "hr"
         "cv":       [{"id": "C1", "text": "..."}, ...]   numbered CV facts, so an answer can point to one
         "turns":    [{"n", "speaker", "text", "start_ms", "end_ms"}, ...]   the transcript so far
         "coverage": [{"requirement", "status"}, ...]   explored / weak / not_explored, or mentioned / not_mentioned
@@ -16,10 +17,12 @@ import re
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app import round_info
 from app.agents.evaluation_agent import build_turns
 from app.agents.screening_agent import requirements_of
 from app.evaluation import transcript_of
 from app.models import Candidate, InterviewEvaluation, InterviewSession, JobProfile
+from app.requirement_checks import checked_by_documents, interview_items
 
 MAX_CV_LINES = 30  # enough for a full CV, short enough for the AI's free limit
 
@@ -78,7 +81,9 @@ def coverage_for(db: Session, session_id: int, requirements: list[str], turns: l
         .order_by(InterviewEvaluation.finished_at.desc(), InterviewEvaluation.id.desc())
         .limit(1)
     )
-    found = (analysed.result or {}).get("coverage", []) if analysed else []
+    # Degrees, certificates and written skills are checked with documents, never in the interview.
+    found = interview_items((analysed.result or {}).get("coverage", [])) if analysed else []
+    found = [item for item in found if item["requirement"] in requirements] if requirements else found
     if found:
         return [{"requirement": item["requirement"], "status": item["status"]} for item in found]
     said = " ".join(turn["text"] for turn in turns)
@@ -88,9 +93,14 @@ def coverage_for(db: Session, session_id: int, requirements: list[str], turns: l
 def context_for(db: Session, session: InterviewSession) -> dict:
     candidate = db.get(Candidate, session.candidate_id)
     job = db.get(JobProfile, candidate.job_profile_id)
-    requirements = [r["requirement"] for r in requirements_of(job)]
+    found = round_info.round_of(job, session.round_number or 1)
+    if found["type"] == "hr":
+        requirements = round_info.hr_topics(found["focus"])
+    else:
+        requirements = [r["requirement"] for r in requirements_of(job) if not checked_by_documents(r)]
     turns = build_turns(transcript_of(db, session.id))
     return {
+        "round_type": found["type"],
         "job": {"title": job.title, "requirements": requirements},
         "cv": cv_lines(candidate.profile or {}),
         "turns": turns,
@@ -121,5 +131,6 @@ def review_context(db: Session, session: InterviewSession) -> dict:
         **context,
         "turns": result.get("turns") or context["turns"],  # the same numbering the analysis used
         "pairs": result.get("pairs", []),
-        "coverage": result.get("coverage") or context["coverage"],
+        # The full coverage (with "mandatory"), without the document checks: they are not the interview's job.
+        "coverage": interview_items(result.get("coverage")) or context["coverage"],
     }

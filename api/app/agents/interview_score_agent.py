@@ -6,6 +6,9 @@ problem-solving, depth of experience, relevance of answers and communication. Al
 requirements comes from the requirement coverage, by plain code. Every part is in steps of 5, and the
 overall score is a weighted average with fixed weights, worked out by plain code.
 
+An HR round is scored on its own six parts instead: communication, motivation and fit, teamwork,
+situational judgement and professionalism from the AI, and HR topic coverage by plain code.
+
 Steps:
     measure_alignment (plain code) explored 100, weak 50, not explored 0; required requirements count double
     score             (AI)         the other five parts, each with a reason and a candidate turn
@@ -36,6 +39,16 @@ DIMENSIONS = (
     ("alignment", "Alignment with requirements", 15),
 )
 BY_AI = ("technical", "problem_solving", "depth", "relevance", "communication")
+# An HR round: the same idea (five AI parts and one coverage part by code), with HR parts.
+HR_DIMENSIONS = (
+    ("communication", "Communication", 20),
+    ("motivation", "Motivation and fit", 20),
+    ("teamwork", "Teamwork", 15),
+    ("judgement", "Situational judgement", 20),
+    ("professionalism", "Professionalism", 10),
+    ("alignment", "HR topic coverage", 15),
+)
+HR_BY_AI = ("communication", "motivation", "teamwork", "judgement", "professionalism")
 COVERAGE_POINTS = {"explored": 100, "weak": 50, "not_explored": 0}
 MAX_PAIRS = 12        # job questions shown to the AI (keeps it inside Groq's free limit)
 ANSWER_CHARS = 500
@@ -49,6 +62,7 @@ class ScoreState(AgentState, total=False):
     turns: list
     pairs: list
     coverage: list
+    round_type: str   # "technical" or "hr"
     # Filled in step by step
     alignment: dict
     draft: dict
@@ -61,7 +75,10 @@ class ScoreState(AgentState, total=False):
 
 # ---------- 2. The answer shape ----------
 class PartScore(BaseModel):
-    dimension: Literal["technical", "problem_solving", "depth", "relevance", "communication"]
+    dimension: Literal[
+        "technical", "problem_solving", "depth", "relevance", "communication",
+        "motivation", "teamwork", "judgement", "professionalism",
+    ]
     score: int = Field(description="0 to 100")
     reason: str = Field(description="One neutral sentence on why, naming what the candidate said")
     turn: int = Field(description="The candidate turn that best supports this score, for example 12 for T12")
@@ -91,6 +108,18 @@ def steps_of_5(value) -> int:
     return int(5 * round(max(0, min(100, float(value))) / 5))
 
 
+def is_hr(state: ScoreState) -> bool:
+    return state.get("round_type") == "hr"
+
+
+def dimensions_for(state: ScoreState) -> tuple:
+    return HR_DIMENSIONS if is_hr(state) else DIMENSIONS
+
+
+def by_ai_for(state: ScoreState) -> tuple:
+    return HR_BY_AI if is_hr(state) else BY_AI
+
+
 def answered_pairs(state: ScoreState) -> list[dict]:
     return [p for p in state.get("pairs") or [] if p.get("kind") == "job_related" and p.get("answer_turns")][:MAX_PAIRS]
 
@@ -108,11 +137,18 @@ def measure_alignment(state: ScoreState) -> dict:
     total = sum(weight for weight, _ in weights)
     score = steps_of_5(sum(weight * points for weight, points in weights) / total) if total else 0
     status = Counter(item["status"] for item in coverage)
-    reason = (
-        f"{status['explored']} of {len(coverage)} requirements explored and {status['weak']} weakly; required ones count double."
-        if coverage
-        else "The job has no requirements to cover."
-    )
+    if is_hr(state):
+        reason = (
+            f"{status['explored']} of {len(coverage)} HR topics explored and {status['weak']} weakly."
+            if coverage
+            else "The round has no HR topics to cover."
+        )
+    else:
+        reason = (
+            f"{status['explored']} of {len(coverage)} requirements explored and {status['weak']} weakly; required ones count double."
+            if coverage
+            else "The job has no requirements to cover."
+        )
     return {"alignment": {"score": score, "reason": reason}, "attempts": 0, "problems": []}
 
 
@@ -126,13 +162,25 @@ SYSTEM_PROMPT = (
     "Score only what was said: never consider age, gender, ethnicity, religion, nationality, accent or health."
 )
 
+HR_SYSTEM_PROMPT = (
+    "You score a candidate's HR interview as a whole, from the questions and the candidate's own answers. This is "
+    "not a technical interview: do not judge technical knowledge. Give five parts, each 0 to 100: communication "
+    "(clear, structured, professional answers), motivation (why they want the role and the company, and fit with "
+    "it), teamwork (how they work with others and handle conflict), judgement (how they would handle difficult or "
+    "workplace situations) and professionalism (attitude, honesty and clear, realistic expectations such as salary "
+    "or joining date). For each part give one neutral sentence naming what the candidate said, and the candidate "
+    "turn (T number) that best supports it. Use only turns you were shown under the answers. The earlier "
+    "per-answer scores are a guide, not a rule. The transcript comes from speech-to-text, so ignore wrong words. "
+    "Score only what was said: never consider age, gender, ethnicity, religion, nationality, accent or health."
+)
+
 
 def prompt_for(state: ScoreState) -> str:
     by_n = {turn["n"]: turn for turn in state["turns"]}
     names = {item.get("number"): item["requirement"] for item in state.get("coverage") or []}
     lines = [
-        f"Job: {state['job']['title']}",
-        "Requirements: " + "; ".join(state["job"].get("requirements", [])),
+        f"Job: {state['job']['title']}" + (" (HR interview round)" if is_hr(state) else ""),
+        ("HR topics: " if is_hr(state) else "Requirements: ") + "; ".join(state["job"].get("requirements", [])),
         "",
         "The job questions (Q), the candidate's answers (T) and the earlier per-answer scores (0-100):",
     ]
@@ -154,7 +202,7 @@ def score(state: ScoreState) -> dict:
     if state.get("problems"):
         prompt += "\n\nYour last answer had these problems. Fix them:\n- " + "\n- ".join(state["problems"])
     try:
-        answer = ask(SYSTEM_PROMPT, prompt, InterviewScores)
+        answer = ask(HR_SYSTEM_PROMPT if is_hr(state) else SYSTEM_PROMPT, prompt, InterviewScores)
     except LLMUnavailable as error:
         return {"error": str(error)}
     return {"draft": answer.model_dump(), "attempts": state.get("attempts", 0) + 1}
@@ -164,11 +212,12 @@ def check_scores(state: ScoreState) -> dict:
     """Plain code: all five AI parts are there and each rests on a candidate answer turn."""
     by_n = {turn["n"]: turn for turn in state["turns"]}
     answers = {n for pair in answered_pairs(state) for n in pair["answer_turns"]}
+    by_ai = by_ai_for(state)
     found: dict[str, dict] = {}
     for item in state["draft"].get("scores") or []:
-        if item.get("dimension") in BY_AI and item["dimension"] not in found:
+        if item.get("dimension") in by_ai and item["dimension"] not in found:
             found[item["dimension"]] = item
-    missing = [key for key in BY_AI if key not in found]
+    missing = [key for key in by_ai if key not in found]
     problems = [f"Score every part; missing: {', '.join(missing)}."] if missing else []
     for key, item in found.items():
         if int(item.get("turn") or 0) not in answers:
@@ -179,7 +228,7 @@ def check_scores(state: ScoreState) -> dict:
         return {"error": "The AI did not score every part of the interview. Please try again."}
 
     dimensions = []
-    for key, label, weight in DIMENSIONS:
+    for key, label, weight in dimensions_for(state):
         if key == "alignment":
             dimensions.append({"key": key, "label": label, "weight": weight, "score": state["alignment"]["score"],
                                "reason": state["alignment"]["reason"], "evidence": None, "by": "code"})

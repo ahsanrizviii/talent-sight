@@ -28,8 +28,9 @@ class EvaluationOut(BaseModel):
     seconds: float | None
     turns: list[dict]     # the transcript turns the pairs point to
     pairs: list[dict]     # question-answer pairs with kind, requirements, scores and evidence
-    coverage: list[dict]  # every job requirement: explored, weak or not_explored
+    coverage: list[dict]  # every job requirement: explored, weak, not_explored or documents (checked at onboarding)
     summary: dict
+    round_type: str = "technical"  # "hr": the coverage lists the round's HR topics, not the job requirements
 
 
 def to_out(row: InterviewEvaluation) -> EvaluationOut:
@@ -46,6 +47,7 @@ def to_out(row: InterviewEvaluation) -> EvaluationOut:
         pairs=result.get("pairs", []),
         coverage=result.get("coverage", []),
         summary=result.get("summary", {}),
+        round_type=result.get("round_type", "technical"),
     )
 
 

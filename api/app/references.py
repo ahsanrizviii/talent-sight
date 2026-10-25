@@ -118,6 +118,15 @@ def load_references() -> None:
     log.info("skills references loaded", extra={"event": "references_loaded", "count": len(sections)})
 
 
+def search_close_references(db: Session, question: str, limit: int = 3, max_distance: float = 0.3) -> list[ReferenceChunk]:
+    """Like search_references, but only sections really close in meaning (cosine distance at most
+    max_distance). A question about Japanese gets no SQL notes: an empty list is a fair answer."""
+    vector = knowledge.embed_question(question)
+    distance = ReferenceChunk.embedding.cosine_distance(vector)
+    rows = db.execute(select(ReferenceChunk, distance.label("distance")).order_by(distance).limit(limit)).all()
+    return [chunk for chunk, found in rows if found is not None and found <= max_distance]
+
+
 def search_references(db: Session, question: str, limit: int = 3) -> list[ReferenceChunk]:
     """The sections closest in meaning to the question (cosine distance), closest first."""
     vector = knowledge.embed_question(question)

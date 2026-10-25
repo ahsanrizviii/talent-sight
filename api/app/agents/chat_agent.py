@@ -1,6 +1,7 @@
-"""The Question Chat Agent (Module 13): a chat assistant for the interviewer, grounded in the CV and the transcript.
+"""The Interview Assistant (Module 13, called the Question Chat Agent in the WBS): a chat assistant for the
+interviewer, grounded in the CV and the transcript.
 
-The interviewer types in the Chat tab of the interview room and the assistant answers like a colleague:
+The interviewer types in the Interview Assistant tab of the interview room and the assistant answers like a colleague:
 a greeting gets a greeting, "what have we covered?" gets a list, "write 5 Python questions" gets five
 questions (with model answers if asked), "should I ask this?" gets an honest opinion.
 
@@ -67,6 +68,7 @@ class ChatState(AgentState, total=False):
     cv: list         # [{"id": "C1", "text"}]
     turns: list      # [{"n", "speaker", "text", "start_ms", "end_ms"}]
     coverage: list   # [{"requirement", "status"}]
+    round_type: str  # "technical" or "hr": in an HR round the R lines are the round's HR topics
     # Filled in step by step
     shown: dict      # source id -> {"kind", "text", ...} for everything the AI was shown
     prompt: str
@@ -141,10 +143,11 @@ def gather_context(state: ChatState) -> dict:
     picked = sorted(older[:RELATED_TURNS] + recent, key=lambda t: t["n"])
 
     shown: dict[str, dict] = {}
+    hr_round = state.get("round_type") == "hr"
     lines = [
-        f"Job: {state['job']['title']}",
+        f"Job: {state['job']['title']}" + (" (this is the HR interview round)" if hr_round else ""),
         "",
-        "Job requirements (R). The note in brackets is a rough check of whether the interview has touched on it "
+        ("HR topics of this round (R)" if hr_round else "Job requirements (R)") + ". The note in brackets is a rough check of whether the interview has touched on it "
         "(a keyword match while the interview is live, so confirm it against the transcript):",
     ]
     coverage = {item["requirement"]: item["status"] for item in state.get("coverage") or []}
@@ -205,7 +208,10 @@ SYSTEM_PROMPT = (
     "- Never write questions about age, family, marriage, children, pregnancy, religion, ethnicity, nationality, "
     "health, disability, gender, sexuality or politics. If asked, decline in one short sentence without listing the "
     "topics. Do not judge the candidate's honesty or character; point to what the transcript shows instead.\n"
-    "- Write plain text only: no markdown symbols such as ** or #. Keep it as short as the question allows."
+    "- Write plain text only: no markdown symbols such as ** or #. Keep it as short as the question allows.\n"
+    "- If the job line says this is the HR interview round, questions and suggestions are about the HR topics "
+    "(communication, motivation, teamwork, situational judgement, professionalism, expectations), not technical "
+    "skills, unless the interviewer asks for technical ones."
 )
 
 

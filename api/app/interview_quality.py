@@ -15,7 +15,7 @@ NEXT_STEP = {
     "measure": "Reviewing each question",
     "review": "Checking the recommendations against the transcript",
 }
-KEPT = ("measures", "compare", "personal", "questions", "kinds", "recommendations", "summary")
+KEPT = ("measures", "compare", "personal", "questions", "kinds", "recommendations", "summary", "round_type")
 
 
 def inputs_for(db: Session, session: InterviewSession) -> dict:
@@ -28,6 +28,8 @@ def inputs_for(db: Session, session: InterviewSession) -> dict:
         .join(Candidate, InterviewSession.candidate_id == Candidate.id)
         .where(
             Candidate.job_profile_id == candidate.job_profile_id,
+            # Only the same round: an HR round is compared with HR rounds, not with technical ones.
+            InterviewSession.round_number == session.round_number,
             InterviewQuality.session_id != session.id,
             InterviewQuality.status == "done",
         )
@@ -37,6 +39,7 @@ def inputs_for(db: Session, session: InterviewSession) -> dict:
         "turns": context["turns"],
         "pairs": context["pairs"],
         "coverage": context["coverage"],
+        "round_type": context["round_type"],
         "others": [(row.result or {}).get("measures", {}) for row in others],
     }
 
