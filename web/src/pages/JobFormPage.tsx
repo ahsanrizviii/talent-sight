@@ -19,7 +19,7 @@ const EMPTY_JOB: JobInput = {
     qualifications: 15,
     jd_match: 15,
   },
-  interview_rounds: [{ name: "Interview", focus: "" }],
+  interview_rounds: [{ name: "Interview", focus: "", type: "technical" }],
 };
 
 const MAX_ROUNDS = 6;
@@ -94,7 +94,7 @@ export default function JobFormPage() {
   }
 
   function addRound() {
-    change("interview_rounds", [...rounds, { name: `Round ${rounds.length + 1}`, focus: "" }]);
+    change("interview_rounds", [...rounds, { name: `Round ${rounds.length + 1}`, focus: "", type: "technical" }]);
   }
 
   const weightTotal = Object.values(job.weights).reduce(
@@ -111,7 +111,7 @@ export default function JobFormPage() {
       qualifications: clean(job.qualifications),
       interview_rounds: (() => {
         const named = rounds
-          .map((round) => ({ name: round.name.trim(), focus: round.focus.trim() }))
+          .map((round) => ({ name: round.name.trim(), focus: round.focus.trim(), type: round.type ?? "technical" }))
           .filter((round) => round.name);
         return named.length ? named : EMPTY_JOB.interview_rounds;
       })(),
@@ -309,6 +309,14 @@ export default function JobFormPage() {
                   placeholder="What it covers, for example: communication and motivation"
                   onChange={(e) => changeRound(index, "focus", e.target.value)}
                 />
+                <select
+                  aria-label={`Type of round ${index + 1}`}
+                  value={round.type ?? "technical"}
+                  onChange={(e) => changeRound(index, "type", e.target.value)}
+                >
+                  <option value="technical">Technical</option>
+                  <option value="hr">HR</option>
+                </select>
                 <button className="button quiet small" type="button" disabled={index === 0} onClick={() => moveRound(index, -1)} aria-label="Move up">
                   ↑
                 </button>
@@ -334,7 +342,9 @@ export default function JobFormPage() {
           )}
           <p className="muted small">
             Candidates are invited to round 1 from the shortlist. When a round is over, you close it on the job page and choose who goes on to the
-            next round. The e-mails name the round.
+            next round. The e-mails name the round. A Technical round is judged on the job's requirements; an HR round is judged on HR
+            topics (communication, motivation, teamwork, situational judgement, professionalism and expectations), or on the topics you write
+            in its "covers" box.
           </p>
         </div>
 

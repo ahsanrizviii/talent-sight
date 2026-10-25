@@ -3870,6 +3870,11 @@ iframe.cv-frame {
   flex: none;
 }
 
+.round-edit select {
+  width: 120px;
+  flex: none;
+}
+
 .round-number {
   display: inline-flex;
   align-items: center;

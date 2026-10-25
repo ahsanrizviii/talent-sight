@@ -3,7 +3,7 @@ import type { KeyboardEvent } from "react";
 import { api } from "../api";
 import type { InterviewChatMessage, ChatSource, ChatTurn } from "../types";
 
-// The question chat beside the transcript in the interview room (Module 13). Interviewer only:
+// The Interview Assistant beside the transcript in the interview room (Module 13). Interviewer only:
 // the API checks the login, and the candidate's page never loads it (N9).
 // Each suggested question shows the CV line, transcript moment or requirement it is based on.
 
@@ -74,7 +74,7 @@ export default function ChatPanel({ sessionId }: { sessionId: number }) {
   return (
     <section className="card glass chat">
       <div className="transcript-head">
-        <h2>Question chat</h2>
+        <h2>Interview Assistant</h2>
         <span className="muted small">Only you see this</span>
       </div>
 
@@ -143,7 +143,7 @@ export default function ChatPanel({ sessionId }: { sessionId: number }) {
           maxLength={1000}
           rows={2}
           placeholder="Ask anything about this interview… (Enter sends, Shift+Enter for a new line)"
-          aria-label="Message to the question chat"
+          aria-label="Message to the Interview Assistant"
         />
         <button className="button" type="submit" disabled={!!pending || !text.trim()}>
           Send

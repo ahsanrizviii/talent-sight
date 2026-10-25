@@ -9,7 +9,9 @@ export type Weights = {
 };
 
 // One round of the hiring process, for example "HR interview" or "Technical round 1".
-export type InterviewRound = { name: string; focus: string };
+// technical = judged on the job's requirements; hr = judged on HR topics (communication, motivation ...)
+export type RoundType = "technical" | "hr";
+export type InterviewRound = { name: string; focus: string; type?: RoundType };
 
 export type JobInput = {
   title: string;
@@ -88,6 +90,7 @@ export type CandidateRow = {
   unmet: number;
   overall: number | null;
   rank: number | null;
+  requirements_changed?: boolean; // the job's requirements changed after this CV was screened
 };
 
 export type ScoreBreakdown = {
@@ -401,7 +404,8 @@ export type QaCoverage = {
   mandatory: boolean;
   pairs: number[];
   best_score: number | null;
-  status: "explored" | "weak" | "not_explored";
+  // documents = a degree, certificate or written skill: checked with documents at onboarding, not in the interview
+  status: "explored" | "weak" | "not_explored" | "documents";
 };
 
 export type QaEvaluation = {
@@ -415,6 +419,7 @@ export type QaEvaluation = {
   turns: QaTurn[];
   pairs: QaPair[];
   coverage: QaCoverage[];
+  round_type?: "technical" | "hr"; // hr = the coverage lists the round's HR topics
   summary: {
     pairs: number;
     job_related: number;
@@ -446,7 +451,7 @@ export type AssessmentRequirement = {
   mandatory: boolean;
   cv: "met" | "partially_met" | "unmet" | null;
   cv_note: string;
-  interview: "explored" | "weak" | "not_explored" | null;
+  interview: "explored" | "weak" | "not_explored" | "documents" | null;
   best_score: number | null;
   pairs: number[];
 };
@@ -532,7 +537,7 @@ export type ClaimCheck = {
   turns: { n: number; speaker: string; text: string; start_ms: number; end_ms: number }[];
 };
 
-// The question chat in the interview room (Module 13)
+// The Interview Assistant in the interview room (Module 13)
 export type ChatSource = {
   id: string; // C3, T12 or R2
   kind: "cv" | "transcript" | "requirement";
@@ -581,6 +586,7 @@ export type QualityResult = {
   kinds: Record<string, number>;
   recommendations: { text: string; turn: number | null; at: string | null }[];
   summary: string;
+  round_type?: "technical" | "hr";
 };
 
 export type ScoreDimension = {
@@ -651,6 +657,7 @@ export type RoundView = {
   number: number;
   name: string;
   focus: string;
+  type?: RoundType;
   total: number;
   is_last: boolean;
   state: "not_started" | "open" | "closed";
@@ -704,7 +711,7 @@ export type OnboardingRow = {
 
 export type EmailRow = {
   key: string;
-  kind: "invitation" | "rejection" | "onboarding";
+  kind: "invitation" | "rejection" | "not_held" | "onboarding";
   candidate_id: number;
   name: string;
   email: string;

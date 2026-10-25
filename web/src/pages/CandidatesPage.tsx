@@ -188,6 +188,7 @@ export default function CandidatesPage() {
   const other = candidates.filter((c) => c.status !== "screened" && c.status !== "excluded");
   const shown = { ranked, excluded, other }[tab];
   const running = run?.status === "running";
+  const changedCount = candidates.filter((c) => c.requirements_changed).length;
 
   if (loadError) return <LoadError message={loadError} back="/jobs" backLabel="Back to jobs" />;
 
@@ -244,6 +245,16 @@ export default function CandidatesPage() {
           <button className="notice-close" aria-label="Close the notice" onClick={() => setVisit(null)}>
             ×
           </button>
+        </div>
+      )}
+
+      {changedCount > 0 && (
+        <div className="notice" role="status">
+          <span className="grow">
+            <strong>Requirements changed after screening.</strong> {changedCount} screened{" "}
+            {changedCount === 1 ? "CV was" : "CVs were"} checked against this job's old requirements. Use "Screen everyone again" to
+            compare them with the new list; until then the reports mix the old and the new requirements.
+          </span>
         </div>
       )}
 
@@ -484,6 +495,7 @@ function JobGlance({ job, hasChat, chatId }: { job: Job; hasChat: boolean; chatI
         {job.interview_rounds.map((round, index) => (
           <li key={index}>
             <strong>{round.name}</strong>
+            <span className="muted"> · {round.type === "hr" ? "HR" : "Technical"}</span>
             {round.focus && <span className="muted"> · {round.focus}</span>}
           </li>
         ))}

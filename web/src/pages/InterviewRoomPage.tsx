@@ -13,7 +13,7 @@ import type { CandidateDetail, Interview, JoinInfo } from "../types";
 type Side = "transcript" | "chat" | "cv";
 
 // The interviewer's side of the video interview (Tasks 7.2.1 and 7.3.2). Under the video: the live
-// transcript (Module 8), the question chat (Module 13) and the candidate's CV, in three tabs.
+// transcript (Module 8), the Interview Assistant (Module 13) and the candidate's CV, in three tabs.
 // Beside it: the identity check and the profile panel (F7), which stay in view while the
 // interviewer listens.
 export default function InterviewRoomPage() {
@@ -112,7 +112,7 @@ export default function InterviewRoomPage() {
               Transcript
             </button>
             <button role="tab" aria-selected={side === "chat"} onClick={() => choose("chat")}>
-              Question chat
+              Interview Assistant
             </button>
             <button role="tab" aria-selected={side === "cv"} onClick={() => choose("cv")}>
               CV
