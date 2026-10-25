@@ -58,7 +58,21 @@ def save_result(
     result: dict,
     weights: dict,
 ) -> None:
-    """Stores what the agent found for one candidate."""
+    """Stores what the agent found for one candidate.
+
+    If the AI could not answer (a free limit, a timeout), the earlier result is kept: a screening
+    that fails must never wipe a score the candidate already has."""
+    if result.get("error"):
+        had_result = bool((candidate.profile or {}).get("skills")) and db.scalar(
+            select(RequirementVerdict.id).where(RequirementVerdict.candidate_id == candidate.id).limit(1)
+        )
+        candidate.error = result["error"]
+        if had_result:  # screened before: back to where it was, with the reason shown
+            candidate.status = "excluded" if candidate.exclusion_reason else "screened"
+        else:
+            candidate.status = "failed"
+        return
+
     db.execute(
         delete(RequirementVerdict).where(
             RequirementVerdict.candidate_id == candidate.id
@@ -69,10 +83,6 @@ def save_result(
             CandidateScore.candidate_id == candidate.id
         )
     )
-
-    if result.get("error"):
-        candidate.status, candidate.error = "failed", result["error"]
-        return
 
     profile = result["profile"]
     candidate.profile = profile
@@ -126,7 +136,7 @@ def run_screening(run_id: int, candidate_ids: list[int]) -> None:
                         "failed",
                         "Something went wrong while screening this CV.",
                     )
-                if candidate.status == "failed":
+                if candidate.error:  # failed now (a kept earlier result also shows why)
                     run.failed += 1
             run.done += 1
             db.commit()

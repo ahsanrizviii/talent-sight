@@ -8,6 +8,7 @@ measure_usage() (F11) counts the AI calls, tokens and cost of everything asked i
 piece of work can report what it cost. Outside measure_usage() nothing is counted or changed.
 """
 import logging
+import re
 import threading
 from contextlib import contextmanager
 from contextvars import ContextVar
@@ -27,13 +28,24 @@ class LLMUnavailable(Exception):
 
 # What the screen says, by the reason the AI call failed. The default stays the general message.
 NOT_AVAILABLE = "The AI service is not available right now. Please try again."
-MINUTE_LIMIT = "The AI's free per-minute limit was reached. Wait a minute and try again."
-DAILY_LIMIT = (
-    "The AI's free daily limit for this model was reached. Try again later, "
-    "or give this task another model in the .env file (see the README)."
-)
-TOO_LARGE = "This request is too large for the AI's free per-minute limit. Please try again with less content."
-TIMED_OUT = "The AI service took too long to answer. Please try again."
+MINUTE_LIMIT = "The AI is busy right now. Please wait a minute and try again."
+DAILY_LIMIT = "The AI has used up its free allowance for now. Please try again later. Nothing has been lost."
+TOO_LARGE = "This is too long for the AI to handle in one go. Please try again with less content."
+TIMED_OUT = "The AI took too long to answer. Please try again."
+
+
+def wait_in_words(text: str) -> str:
+    """"3h2m10.5s" -> "about 4 hours"; "14m19.2s" -> "about 15 minutes". Empty when the text has no wait."""
+    found = re.search(r"try again in (?:(\d+)h)?(?:(\d+)m)?([\d.]+)?s?", text)
+    if not found or not any(found.groups()):
+        return ""
+    hours, minutes, seconds = int(found.group(1) or 0), int(found.group(2) or 0), float(found.group(3) or 0)
+    total = hours * 60 + minutes + (1 if seconds > 0 else 0)
+    if total >= 90:
+        count = round(total / 60)
+        return f"about {count} hours"
+    total = max(total, 1)
+    return f"about {total} minute{'s' if total != 1 else ''}"
 
 
 def reason_for(error: Exception) -> tuple[str, str]:
@@ -48,6 +60,9 @@ def reason_for(error: Exception) -> tuple[str, str]:
         return "too_large", TOO_LARGE
     if status_code == 429 or name == "RateLimitError" or "rate limit" in text:
         if "per day" in text or "(tpd)" in text or "(rpd)" in text:
+            wait = wait_in_words(text)
+            if wait:
+                return "daily_limit", DAILY_LIMIT.replace("try again later", f"try again in {wait}")
             return "daily_limit", DAILY_LIMIT
         return "minute_limit", MINUTE_LIMIT
     if "timeout" in name.lower() or "timed out" in text:
@@ -141,6 +156,7 @@ def ask_llm(
             "llm call failed",
             extra={"event": "llm_error", "error_type": type(error).__name__, "why": why, "model": name},
         )
+        log.warning("llm call failed: %s (%s) %s", name, why, str(error)[:300])
         raise LLMUnavailable(message) from error
 
     if answer is None:

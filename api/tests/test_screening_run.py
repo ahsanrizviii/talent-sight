@@ -84,6 +84,22 @@ def test_one_failed_cv_does_not_stop_the_batch(client, auth_headers, monkeypatch
     assert run["seconds"] is not None
 
 
+def test_a_failed_second_screening_keeps_the_first_result(client, auth_headers, monkeypatch):
+    use_fake_llm(monkeypatch, [GOOD_PROFILE], [ALL_MET])
+    job_id = job_with_cvs(client, auth_headers)
+    before = screen(client, auth_headers, job_id)[0]
+    assert before["status"] == "screened"
+
+    use_fake_llm(monkeypatch, [LLMUnavailable("The AI's free daily limit for this model was reached.")], [])
+    client.post(f"/api/jobs/{job_id}/screening?again=true", headers=auth_headers)
+    after = client.get(f"/api/jobs/{job_id}/candidates", headers=auth_headers).json()[0]
+
+    assert after["status"] == "screened"  # still on the shortlist, not "failed"
+    assert after["overall"] == before["overall"]  # the score is still there
+    run = client.get(f"/api/jobs/{job_id}/screening", headers=auth_headers).json()
+    assert run["failed"] == 1
+
+
 def test_screening_again_only_when_asked(client, auth_headers, monkeypatch):
     use_fake_llm(monkeypatch, [GOOD_PROFILE, GOOD_PROFILE], [ALL_MET, NO_PYTHON])
     job_id = job_with_cvs(client, auth_headers)
