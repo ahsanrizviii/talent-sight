@@ -61,6 +61,7 @@ class RoundOut(BaseModel):
     number: int
     name: str
     focus: str
+    type: str = "technical"  # technical | hr
     total: int
     is_last: bool
     state: str  # not_started | open | closed
@@ -133,7 +134,7 @@ class OnboardingRow(BaseModel):
 
 class EmailRow(BaseModel):
     key: str
-    kind: str  # invitation | rejection | onboarding
+    kind: str  # invitation | rejection | not_held (their interview never took place) | onboarding
     candidate_id: int
     name: str
     email: str

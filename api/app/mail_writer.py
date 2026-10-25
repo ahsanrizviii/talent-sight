@@ -162,6 +162,13 @@ def write_invite(
 
 # ---------- The rejection and the onboarding e-mail ----------
 
+# Words that would tell a candidate whose interview never took place that they took part in one.
+SAYS_ATTENDED = re.compile(
+    r"\b(attend(ed|ing)?|took part|taking part|participat\w*|speaking with you|meeting you|met with you|"
+    r"your performance|time in the interview)\b",
+    re.IGNORECASE,
+)
+
 OUTCOME_PROMPT = (
     "You write the wording of a short, formal e-mail from the HR team of a company to a job candidate. "
     "Write in plain, polite, professional English: warm and respectful, not casual and not salesy. "
@@ -174,6 +181,11 @@ OUTCOME_PROMPT = (
     "If the situation is 'not selected': thank the candidate for their time and interest, say kindly that the "
     "company will not continue with their application for this position (after the round named, when one is "
     "given), and wish them well. Do not invite them to reply. "
+    "If the situation is 'interview did not take place': thank the candidate for their interest, say that due to "
+    "unforeseen circumstances their scheduled interview (the round named, when one is given) could not take place, "
+    "and that the company will not be moving forward with their application for this position at this time; "
+    "apologise for the inconvenience and wish them well. Never say or suggest that they attended an interview. "
+    "Do not invite them to reply. "
     "If the situation is 'selected': congratulate the candidate on being selected for the position, say the "
     "hiring team will contact them about the next steps and their first day, and ask them to bring their "
     "original photo ID on their first day for a short identity check. Do not ask them to reply or confirm."
@@ -192,6 +204,17 @@ def plain_outcome(company: str, title: str, kind: str, round_name: str = "") -> 
             ),
             closing="We look forward to welcoming you to the team.",
         )
+    if kind == "not_held":
+        which = f"your {round_name}" if round_name else "your scheduled interview"
+        return InviteWording(
+            subject=f"Your application at {company}: {title}",
+            intro=(
+                f"Thank you for your interest in the {title} position. Due to unforeseen circumstances, "
+                f"{which} could not take place, and we will not be moving forward with your application at this time. "
+                "We apologise for the inconvenience and wish you every success in your search."
+            ),
+            closing="Thank you again for considering us.",
+        )
     after = f" after the {round_name}" if round_name else " after our final review"
     return InviteWording(
         subject=f"Your application at {company}: {title}",
@@ -205,7 +228,8 @@ def plain_outcome(company: str, title: str, kind: str, round_name: str = "") -> 
 
 
 def write_outcome(candidate_name: str, job_title: str, kind: str, round_name: str = "") -> tuple[InviteWording, str]:
-    """The wording of a rejection (kind "rejection") or onboarding e-mail, and "ai" or "template". Never raises."""
+    """The wording of a rejection ("rejection"), interview-not-held ("not_held") or onboarding e-mail, and "ai"
+    or "template". Never raises."""
     company = company_profile.current().name
     title = company_profile.one_line(job_title)[:120]
     name = company_profile.one_line(candidate_name)[:80]
@@ -214,10 +238,12 @@ def write_outcome(candidate_name: str, job_title: str, kind: str, round_name: st
 
     if not settings.ai_mail or not settings.groq_api_key.strip():
         return fallback, "template"
-    situation = "selected" if kind == "onboarding" else "not selected"
+    situation = {"onboarding": "selected", "not_held": "interview did not take place"}.get(kind, "not selected")
     facts = f"Company: {company}\nCandidate: {name or 'not known'}\nPosition: {title}\nSituation: {situation}"
-    if round_name and kind != "onboarding":
+    if round_name and kind == "rejection":
         facts += f"\nLast round they took part in: {round_name}"
+    if round_name and kind == "not_held":
+        facts += f"\nThe interview that did not take place: {round_name}"
     try:
         wording = ask_llm(OUTCOME_PROMPT, facts, InviteWording)
     except LLMUnavailable:
@@ -230,6 +256,8 @@ def write_outcome(candidate_name: str, job_title: str, kind: str, round_name: st
         closing=company_profile.one_line(wording.closing),
     )
     why = problem_with(wording, company, name, title, round_name)
+    if not why and kind == "not_held" and SAYS_ATTENDED.search(f"{wording.intro} {wording.closing}"):
+        why = "it says the candidate took part in an interview that never took place"
     if why:
         log.warning(f"outcome wording refused: {why}", extra={"event": "outcome_wording_fallback", "why": why})
         return fallback, "template"

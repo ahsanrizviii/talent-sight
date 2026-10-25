@@ -389,7 +389,8 @@ def send_invite(session: InterviewSession, candidate: Candidate, job: JobProfile
 def build_outcome(
     candidate: Candidate, job: JobProfile, kind: str, round_number: int | None, onboarding_day: str = ""
 ) -> EmailMessage:
-    """The rejection (kind "rejection") or onboarding e-mail. The AI writes the wording; the rest is fixed."""
+    """The rejection ("rejection"), interview-not-held ("not_held") or onboarding e-mail. The AI writes the
+    wording; the rest is fixed."""
     details = company_profile.current()
     title = company_profile.one_line(job.title)
     name = company_profile.one_line(candidate.name)
@@ -397,6 +398,8 @@ def build_outcome(
     wording, written_by = mail_writer.write_outcome(candidate.name, job.title, kind, round_name)
     greeting = f"Dear {name}," if name else "Dear candidate,"
     rows = [("Position", title)]
+    if kind == "not_held" and round_name:
+        rows.append(("Interview", round_name))
     if kind == "onboarding" and onboarding_day:
         rows.append(("First day", onboarding_day))
     if kind == "onboarding":
@@ -418,7 +421,7 @@ def build_outcome(
     body = (
         mail_template.paragraph(greeting)
         + mail_template.paragraph(wording.intro)
-        + mail_template.details_table(rows)
+        + mail_template.details_table(rows, "Onboarding details" if kind == "onboarding" else "Application details")
         + contact_html
         + mail_template.paragraph(wording.closing)
         + mail_template.paragraph(sign_off).replace("\n", "<br>")
@@ -429,7 +432,7 @@ def build_outcome(
 
 
 def send_outcome(candidate: Candidate, job: JobProfile, kind: str, round_number: int | None, onboarding_day: str = "") -> str:
-    """Sends a rejection or onboarding e-mail. Returns "" when sent, otherwise a short reason. Never raises."""
+    """Sends a rejection, interview-not-held or onboarding e-mail. Returns "" when sent, otherwise a short reason. Never raises."""
     reason = _send(None, candidate, job, lambda server: build_outcome(candidate, job, kind, round_number, onboarding_day), kind)
     return reason.replace(" Copy the link and send it yourself.", "")  # there is no link in these e-mails
 
