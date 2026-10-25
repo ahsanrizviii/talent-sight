@@ -165,6 +165,12 @@ export default function CandidatePage() {
         </div>
       )}
       {candidate.error && <div className="card notice stop">{candidate.error}</div>}
+      {candidate.requirements_changed && (
+        <div className="card notice">
+          <strong>Requirements changed after screening.</strong> This CV was checked against the job's old requirements. Screen the job
+          again ("Screen everyone again" on the job page) to compare it with the new list.
+        </div>
+      )}
 
       <div className="tabs glass" role="tablist">
         {TABS.map((item) => (

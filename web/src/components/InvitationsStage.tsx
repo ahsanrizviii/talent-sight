@@ -6,7 +6,13 @@ import Empty from "./Empty";
 import type { EmailRow } from "../types";
 import { clockTime, shortDate } from "../when";
 
-const KINDS = { invitation: "Interview invitation", rejection: "Rejection", onboarding: "Onboarding" };
+// not_held = a rejection for someone whose interview was cancelled or never took place
+const KINDS = {
+  invitation: "Interview invitation",
+  rejection: "Rejection",
+  not_held: "Interview not held",
+  onboarding: "Onboarding",
+};
 const STATES = { queued: "Sending…", sent: "Sent", failed: "Failed" };
 
 type Props = { jobId: string; canInvite: boolean; onInvite: () => void; onChange: () => void };
@@ -94,6 +100,7 @@ export default function InvitationsStage({ jobId, canInvite, onInvite, onChange 
           <option value="">Every kind</option>
           <option value="invitation">Interview invitations</option>
           <option value="rejection">Rejections</option>
+          <option value="not_held">Interview not held</option>
           <option value="onboarding">Onboarding</option>
         </select>
         <span className="spacer result-count">{shown.length} shown</span>

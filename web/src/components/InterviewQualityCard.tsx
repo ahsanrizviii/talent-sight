@@ -60,10 +60,10 @@ export default function InterviewQualityCard({ sessionId }: { sessionId: number 
                     {done.measures[tile.key]}
                     {tile.unit}
                   </strong>
-                  <span>{tile.label}</span>
+                  <span>{tile.key === "coverage_pct" && done.round_type === "hr" ? "HR topics explored" : tile.label}</span>
                   {average !== undefined && (
                     <small>
-                      Job average {average}
+                      Round average {average}
                       {tile.unit}
                     </small>
                   )}
@@ -115,8 +115,8 @@ export default function InterviewQualityCard({ sessionId }: { sessionId: number 
             {done.measures.minutes} minutes · longest answer {done.measures.longest_answer_s} s · average answer{" "}
             {done.measures.average_answer_s} s · {done.measures.small_talk} small-talk exchanges.{" "}
             {done.compare.interviews > 0
-              ? `Compared with ${done.compare.interviews} other reviewed interview${done.compare.interviews === 1 ? "" : "s"} for this job.`
-              : "No other interview for this job has been reviewed yet."}
+              ? `Compared with ${done.compare.interviews} other reviewed interview${done.compare.interviews === 1 ? "" : "s"} in the same round of this job.`
+              : "No other interview in this round has been reviewed yet."}
           </p>
         </>
       )}

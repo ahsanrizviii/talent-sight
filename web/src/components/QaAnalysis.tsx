@@ -20,6 +20,7 @@ const COVERAGE: Record<QaCoverage["status"], { label: string; tone: string }> = 
   explored: { label: "Explored", tone: "pass" },
   weak: { label: "Weak evidence", tone: "warn" },
   not_explored: { label: "Not explored", tone: "stop" },
+  documents: { label: "Checked at onboarding", tone: "" },
 };
 
 // 70 and above reads as a good answer, 50 to 70 as a maybe, below that as a weak one (like the CV score).
@@ -111,6 +112,7 @@ function Result({ evaluation, candidateName }: { evaluation: QaEvaluation; candi
   const requirementName = new Map(coverage.map((c) => [c.number, c.requirement]));
   const jobRelated = pairs.filter((pair) => pair.kind === "job_related");
   const smallTalk = pairs.filter((pair) => pair.kind === "small_talk");
+  const hr = evaluation.round_type === "hr";
 
   return (
     <>
@@ -131,23 +133,26 @@ function Result({ evaluation, candidateName }: { evaluation: QaEvaluation; candi
         </div>
         <div>
           <strong className={summary.not_explored ? "qa-tone-stop" : ""}>{summary.not_explored}</strong>
-          <span>requirements never explored</span>
+          <span>{hr ? "HR topics never explored" : "requirements never explored"}</span>
         </div>
       </div>
 
       {coverage.length > 0 && (
         <div className="qa-block">
-          <h4>Requirement coverage</h4>
+          <h4>{hr ? "HR topic coverage" : "Requirement coverage"}</h4>
+          {hr && <p className="muted small">This is an HR round: the answers are judged on HR topics, not on the job's technical requirements.</p>}
           <ul className="qa-coverage">
             {coverage.map((c) => (
               <li key={c.number}>
                 <span className={`badge ${COVERAGE[c.status].tone}`}>{COVERAGE[c.status].label}</span>
                 <span>
                   {c.requirement}
-                  {!c.mandatory && <span className="muted small"> · preferred</span>}
+                  {!c.mandatory && !hr && c.status !== "documents" && <span className="muted small"> · preferred</span>}
                 </span>
                 <span className="muted small">
-                  {c.status === "not_explored"
+                  {c.status === "documents"
+                    ? "a degree, certificate or written skill: checked with documents, not in the interview"
+                    : c.status === "not_explored"
                     ? "no question touched it"
                     : `${c.pairs.length} ${c.pairs.length === 1 ? "answer" : "answers"}, best ${c.best_score ?? "–"}`}
                 </span>

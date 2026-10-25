@@ -19,6 +19,7 @@ const INTERVIEW = {
   explored: { label: "Explored", tone: "pass" },
   weak: { label: "Weak", tone: "warn" },
   not_explored: { label: "Not explored", tone: "stop" },
+  documents: { label: "Checked at onboarding", tone: "" },
 } as const;
 
 export default function ComparePage() {

@@ -142,7 +142,8 @@ export default function RoundsStage({ jobId, summary, round, onPickRound, onChan
           <div className="card glass round-head">
             <div>
               <h2 style={{ margin: 0 }}>
-                Round {view.number} of {view.total} · {view.name}
+                Round {view.number} of {view.total} · {view.name}{" "}
+                <span className="badge">{view.type === "hr" ? "HR round" : "Technical round"}</span>
               </h2>
               {view.focus && <p className="muted small" style={{ margin: "4px 0 0" }}>{view.focus}</p>}
               <p className="small" style={{ margin: "8px 0 0" }}>
@@ -260,6 +261,8 @@ export default function RoundsStage({ jobId, summary, round, onPickRound, onChan
             <>
               Everyone in this round, ranked by their interview score. Choose who passes. Those who pass{" "}
               {view.is_last ? "go to the Report stage" : `are invited to round ${view.number + 1}`}; everyone else gets a polite rejection e-mail.
+              Candidates whose interview was cancelled or never took place get an e-mail saying it could not go ahead, not a rejection
+              after an interview.
             </>
           }
           items={view.rows.map((row) => ({
