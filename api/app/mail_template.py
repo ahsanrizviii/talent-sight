@@ -14,8 +14,8 @@ ACCENT = "#b8702f"  # TalentSight amber, darkened so white text on it is easy to
 WASH = "#fbf5ee"
 
 
-def details_table(rows: list[tuple[str, str]]) -> str:
-    """The 'Interview details' block: one label and value per line."""
+def details_table(rows: list[tuple[str, str]], title: str = "Interview details") -> str:
+    """The details block ("Interview details", "Onboarding details" ...): one label and value per line."""
     cells = "".join(
         f'<tr><td style="padding:6px 16px 6px 0;color:{MUTED};font-size:14px;white-space:nowrap;vertical-align:top">{escape(label)}</td>'
         f'<td style="padding:6px 0;color:{INK};font-size:14px;font-weight:600">{escape(value)}</td></tr>'
@@ -24,7 +24,7 @@ def details_table(rows: list[tuple[str, str]]) -> str:
     return (
         f'<table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;background:{WASH};'
         f'border:1px solid {LINE};border-radius:10px;margin:18px 0"><tr><td style="padding:14px 18px">'
-        f'<div style="font-size:12px;letter-spacing:0.08em;color:{ACCENT};font-weight:700;margin-bottom:6px">INTERVIEW DETAILS</div>'
+        f'<div style="font-size:12px;letter-spacing:0.08em;color:{ACCENT};font-weight:700;margin-bottom:6px">{escape(title.upper())}</div>'
         f'<table role="presentation" cellpadding="0" cellspacing="0">{cells}</table></td></tr></table>'
     )
 
