@@ -46,7 +46,7 @@ flowchart LR
   TR --> CL["Claim check"]
   TR --> QU["Interview quality"]
   QA --> SC["Interview score"]
-  QA --> CH["Question chat (during)"]
+  QA --> CH["Interview Assistant (during)"]
 ```
 
 The CV screening result and the transcript are the two sources. The answer analysis adds requirement coverage, and everything after it reads those same facts through one shared context (`app/interview_context.py`), so the chat, quality review, score and claim check never disagree about what was said.
@@ -66,7 +66,7 @@ The CV screening result and the transcript are the two sources. The answer analy
 |---|---|---|
 | Asks and pauses for a person | Job writing agent | LangGraph `interrupt()`, state kept in Postgres by the checkpointer, resumed when the person answers or approves |
 | Background run with progress | CV screening, answer analysis, assessment, claim check, interview quality, interview score | A background run with a status the page polls every 2 seconds. At startup a run left half-finished is marked interrupted |
-| Answered straight away | Question chat | A few seconds, because the interviewer is waiting during the interview |
+| Answered straight away | Interview Assistant | A few seconds, because the interviewer is waiting during the interview |
 
 ## The nine agents
 
@@ -131,7 +131,7 @@ flowchart LR
 
 Four results: supported, contradicted, unsubstantiated, not discussed. A result other than "not discussed" must point to a turn that was shown and a quote the candidate really said. A contradiction needs a direct conflict. Soft-skill claims are skipped. Results are prompts for a person and never change a score.
 
-### 6. Question chat agent (`chat_agent.py`)
+### 6. Interview Assistant agent (`chat_agent.py`)
 A chat assistant for the interviewer. It answers what was asked. Only when questions about the candidate are requested does it return suggestion cards.
 
 ```mermaid

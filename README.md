@@ -13,7 +13,7 @@ TalentSight follows one candidate through the whole hiring process and keeps the
 | Stage | What happens |
 |---|---|
 | Before the interview | The hiring team writes a job with an AI assistant (checked against company hiring policies), uploads CVs or imports them from a Google Form, and each CV is read against every requirement, scored out of 100 and ranked. The top candidates are invited in bulk with AI-written e-mails, holiday-aware times and Google Calendar entries. |
-| During the interview | A browser video call (the candidate joins from an e-mailed link, no account), a live transcript with the interviewer and candidate kept apart, a side panel with the candidate's profile and score, and a question chat that helps the interviewer. |
+| During the interview | A browser video call (the candidate joins from an e-mailed link, no account), a live transcript with the interviewer and candidate kept apart, a side panel with the candidate's profile and score, and an Interview Assistant chat that helps the interviewer. |
 | After the interview | The answers are analysed against the job requirements, and one consolidated assessment is built from the CV and the interview, with the evidence behind every conclusion, a PDF export and a side-by-side comparison of candidates. |
 
 ## Features
@@ -38,7 +38,7 @@ TalentSight follows one candidate through the whole hiring process and keeps the
 | F9 | Comprehensive interview scoring: one score in six weighted parts, each with a reason and the answer it rests on |
 | F10 | Interview quality assessment: talk time, question types, follow-ups and requirement coverage, with recommendations that point to moments in the transcript |
 
-Also built: interview rounds per job (the hiring process from the JD chat or the job form, a pass mark or top N to close each round, next-round invitations and rejection e-mails), a report stage that selects new hires for onboarding, a live question chat for the interviewer, a dashboard, candidate and interview lists with search, company sign-up with a company code, and candidate deletion.
+Also built: interview rounds per job (the hiring process from the JD chat or the job form, each round Technical or HR, a pass mark or top N to close each round, next-round invitations and rejection e-mails), a report stage that selects new hires for onboarding, a live Interview Assistant for the interviewer, a dashboard, candidate and interview lists with search, company sign-up with a company code, and candidate deletion.
 
 **Innovation feature (F11)**
 
@@ -77,7 +77,7 @@ flowchart LR
   API --> SMTP["Mail server (SMTP)"]
 ```
 
-- **Nine LangGraph agents** do the AI work: job writing, CV screening, answer analysis, assessment, claim check, question chat, interview quality, interview scoring and Litmus. In each one the AI proposes and plain code checks: scores are added up by code, every conclusion must name evidence that exists, and a failed check goes back to the AI once. Details and graphs: [docs/architecture.md](docs/architecture.md).
+- **Nine LangGraph agents** do the AI work: job writing, CV screening, answer analysis, assessment, claim check, Interview Assistant (question chat), interview quality, interview scoring and Litmus. In each one the AI proposes and plain code checks: scores are added up by code, every conclusion must name evidence that exists, and a failed check goes back to the AI once. Details and graphs: [docs/architecture.md](docs/architecture.md).
 - **Long jobs run in the background** and show their progress (screening, answer analysis, assessment and the other reviews). A restart marks a half-finished run as interrupted instead of leaving it stuck.
 - **Access is separated.** The hiring team logs in. A candidate only has their private interview link, which reaches nothing but their own join page; scores, rankings and assessments are never sent to a candidate.
 
@@ -146,8 +146,10 @@ All settings come from `.env`. `.env.example` lists them with placeholders; the 
 | `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` | **required** | Database account and name |
 | `JWT_SECRET`, `JWT_MINUTES` | **required** | Login token secret (use a long random string) and how long a login lasts |
 | `SEED_INTERVIEWER_EMAIL`, `SEED_INTERVIEWER_PASSWORD` | **required** | The first hiring-team account, created at startup |
-| `GROQ_API_KEY`, `LLM_MODEL` | **required** | Language model key and model name |
-| `SCREENING_MODEL` | optional | A different Groq model for CV screening only |
+| `GROQ_API_KEY`, `LLM_MODEL` | **required** | Language model key and the default model (JD chat, Interview Assistant, e-mail wording) |
+| `SCREENING_MODEL` | optional | Model for CV screening and Litmus (Litmus must use the screening model: it tests that scorer). Empty = `LLM_MODEL` |
+| `EVALUATION_MODEL` | optional | Model for the interview answer analysis. Empty = `LLM_MODEL` |
+| `ASSESSMENT_MODEL` | optional | Model for the report, CV claim check, interview score and quality review. Empty = `LLM_MODEL` |
 | `ASSEMBLYAI_API_KEY`, `STT_MODEL` | **required** | Live transcription |
 | `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` | **required** | Video server keys (secret: 32+ random characters) |
 | `LIVEKIT_URL`, `LIVEKIT_SERVER_URL` | **required** | Video address used by the browser, and by the API container |
@@ -171,13 +173,13 @@ All settings come from `.env`. `.env.example` lists them with placeholders; the 
 
 The job page has five stages, shown as a bar at the top: **CV screening**, **Invitations**, **Interviews**, **Report** and **Onboarding**.
 
-1. Log in. Press **Write a job with AI**, describe the role and the hiring process (for example "an HR interview, then two technical rounds"), answer the AI's questions if it asks, and approve the draft. Or press **New job** and fill the form yourself, including the **interview rounds**.
+1. Log in. Press **Write a job with AI**, describe the role and the hiring process (for example "an HR interview, then two technical rounds"), answer the AI's questions if it asks (it always asks about the interview rounds when the brief does not name them), and approve the draft. Or press **New job** and fill the form yourself, including the **interview rounds** and whether each one is a Technical or an HR round.
 2. Publish the job. Publishing again later replaces the blog post with the job as it is now. Add CVs in the **CV screening** stage (PDF or DOCX) or import them from the Google Form.
 3. Press **Screen the new CVs**. The **Shortlist** tab lists passing candidates by score; **Excluded** shows who missed a must-have and why.
 4. Press **Invite top candidates**. They are booked into round 1 and e-mailed. The **Invitations** stage lists every e-mail of the job (invitations, rejections, onboarding) as sent, sending or failed.
-5. The **Interviews** page lists every booked interview with its round. **Start interview** opens the room: video, live transcript, profile panel and question chat.
+5. The **Interviews** page lists every booked interview with its round. **Start interview** opens the room: video, live transcript, profile panel and the Interview Assistant.
 6. In the job's **Interviews** stage, each round has its own tab, ranked by interview score. **Analyse finished interviews** runs the answer analysis, interview score and quality review of every finished interview. A row opens that interview on the **Results** page.
-7. **Close round** lets you choose who passes: by a pass mark (60 by default), the top N (a tie at the cut asks you to pick), or by hand. Those who pass are booked into the next round and invited; the others get a rejection e-mail.
+7. **Close round** lets you choose who passes: by a pass mark (60 by default), the top N (a tie at the cut asks you to pick), or by hand. Those who pass are booked into the next round and invited; the others get a rejection e-mail. Someone whose interview was cancelled or never took place gets a different e-mail: the interview could not go ahead, and the application will not move forward.
 8. After the last round, the **Report** stage lists the finalists with their CV score, their score in each round and the consolidated assessment (built from every round, with the CV claim check). **Select for onboarding** sends the onboarding e-mail to those you choose and a rejection e-mail to the others.
 9. On the first day, open **Identity check**, pick the new hire, check their photo ID and take their picture. The result shows in the job's **Onboarding** stage.
 
@@ -214,10 +216,10 @@ Details are in [docs/privacy.md](docs/privacy.md) and, for face data, [docs/READ
 
 - AI output is imperfect. The system is built for transparency: evidence, checks and a human decision, not for benchmark accuracy.
 - Interviews and transcription are English only. Streaming transcription does not support Bengali.
-- The Groq and AssemblyAI free tiers have per-minute limits. A large CV batch is slower when they are reached, and the free AssemblyAI tier allows 5 new streams a minute.
+- The Groq and AssemblyAI free tiers have per-minute and per-day limits. A large CV batch is slower when they are reached, and the free AssemblyAI tier allows 5 new streams a minute. Every Groq model has its own limits, so `.env.example` spreads the work over two models (`openai/gpt-oss-120b` for screening and answer analysis, `openai/gpt-oss-20b` for the report-side agents). The screen says when a limit was reached.
 - One interview at a time was tested; the app is meant for local use through Docker.
-- Every interview round is analysed against all of the job's requirements, so an HR round shows the technical requirements as not explored and scores lower. Rounds are only compared within themselves, and a person sets the pass mark after seeing the scores.
-- The CV claim check reads the newest analysed interview (usually the last round); the consolidated assessment uses every round.
+- A Technical round is judged on the job's requirements and an HR round on HR topics (its focus text, or communication, motivation, teamwork, situational judgement, professionalism and expectations). Both use the same four answer dimensions, with a rubric written for each kind of round.
+- Degrees, certificates and written skills cannot be shown in a spoken interview: the CV screening scores them and they are checked with documents at onboarding, so the interview never counts them as not explored.
 - The head-turn check stops a held-up photo or a replayed video. It does not stop a live face swap. The photo-ID check by a person is the main safeguard.
 - Video for a candidate on another device needs the public setup described above.
 
