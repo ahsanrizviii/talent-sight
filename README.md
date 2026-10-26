@@ -115,6 +115,7 @@ Product name, positioning and rationale: [docs/TalentSight — Product Name & Po
   <em>Four containers in Docker Compose; the API holds the nine LangGraph agents, and the only code that talks to the language model is <code>app/llm.py</code>.</em>
 </p>
 
+
 ```mermaid
 flowchart LR
   subgraph browser["Browser"]
