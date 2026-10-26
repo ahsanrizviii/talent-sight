@@ -1,0 +1,267 @@
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Link, useSearchParams } from "react-router-dom";
+
+import { api, withQuery } from "../api";
+import Avatar from "../components/Avatar";
+import Empty from "../components/Empty";
+import Icon from "../components/Icon";
+import StageBadge, { stageLabel } from "../components/StageBadge";
+import type { JobRow, PersonRow, Stage } from "../types";
+import { shortDate } from "../when";
+
+// Every stage can be picked. With none picked, the list is the shortlist: people sent an interview
+// invitation, and people already interviewed. "all" lists everyone who applied.
+const STAGES: Stage[] = ["new", "screened", "excluded", "interview", "interviewed", "finalist", "onboarding", "rejected", "problem"];
+
+function subtitle(stage: string): string {
+  if (!stage) return "The shortlist: everyone sent an interview invitation, across every job.";
+  if (stage === "all") return "Everyone who applied, across every job.";
+  return `${stageLabel(stage as Stage)}, across every job.`;
+}
+
+const SORTS = [
+  { value: "score", label: "Highest score" },
+  { value: "name", label: "Name" },
+  { value: "added", label: "Newest first" },
+  { value: "job", label: "Job" },
+];
+
+// Candidates of every job in one table. By default the shortlist (invited or interviewed); the stage
+// filter opens everyone, or one stage, which is where the dashboard's links point.
+export default function PeoplePage() {
+  const [params, setParams] = useSearchParams();
+  const [rows, setRows] = useState<PersonRow[] | null>(null);
+  const [jobs, setJobs] = useState<JobRow[]>([]);
+  const [error, setError] = useState("");
+
+  // Every filter lives in the address bar, so a filtered list can be bookmarked or sent to a colleague.
+  const filters = useMemo(
+    () => ({
+      q: params.get("q") ?? "",
+      job_id: params.get("job_id") ?? "",
+      stage: params.get("stage") ?? "",
+      source: params.get("source") ?? "",
+      min_score: params.get("min_score") ?? "",
+      sort: params.get("sort") ?? "score",
+    }),
+    [params],
+  );
+
+  const set = useCallback(
+    (key: string, value: string) => {
+      const next = new URLSearchParams(params);
+      if (value) next.set(key, value);
+      else next.delete(key);
+      setParams(next, { replace: true });
+    },
+    [params, setParams],
+  );
+
+  useEffect(() => {
+    api<JobRow[]>("/workspace/jobs").then(setJobs).catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
+    setRows(null);
+    api<PersonRow[]>(withQuery("/workspace/candidates", filters))
+      .then(setRows)
+      .catch((err) => setError(err.message));
+  }, [filters]);
+
+  // Downloads exactly the rows on screen, so a filtered list downloads only what the filters keep.
+  function downloadCsv() {
+    const head = ["Name", "E-mail", "Job", "Rank", "Stage", "Score", "Met", "Partly met", "Unmet", "Interview", "Source", "Added"];
+    const body = (rows ?? []).map((row) => [
+      row.name,
+      row.email,
+      row.job_title,
+      row.rank ?? "",
+      stageLabel(row.stage),
+      row.overall ?? "",
+      row.met,
+      row.partially_met,
+      row.unmet,
+      row.interview_at ? new Date(row.interview_at).toLocaleString() : "",
+      row.source === "google_form" ? "Google Form" : "Upload",
+      shortDate(row.created_at),
+    ]);
+    const csv = [head, ...body]
+      .map((line) => line.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(","))
+      .join("\r\n");
+
+    // The "\uFEFF" at the start tells Excel the file is UTF-8, so names like "Sébastien" or Bangla names show correctly.
+    const url = URL.createObjectURL(new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8" }));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `talentsight-${filters.stage || "shortlist"}-${new Date().toISOString().slice(0, 10)}.csv`;
+    // The link must be on the page for Firefox to follow it, and the file address must stay valid
+    // until the browser has started the download. Freeing it at once is what cancelled the download.
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 10_000);
+  }
+
+  const filtered = Object.entries(filters).some(([key, value]) => value && key !== "sort");
+
+  return (
+    <>
+      <div className="page-head">
+        <div>
+          <h1>Candidates</h1>
+          <p>{subtitle(filters.stage)}</p>
+        </div>
+        <button className="button secondary" type="button" onClick={downloadCsv} disabled={!rows?.length}>
+          <Icon name="download" />
+          Download CSV
+        </button>
+      </div>
+
+      <div className="filters glass">
+        <div className="search">
+          <Icon name="search" />
+          <input
+            type="search"
+            value={filters.q}
+            onChange={(event) => set("q", event.target.value)}
+            placeholder="Name, e-mail or job"
+            aria-label="Search candidates"
+          />
+        </div>
+
+        <select value={filters.job_id} onChange={(event) => set("job_id", event.target.value)} aria-label="Job">
+          <option value="">Every job</option>
+          {jobs.map((job) => (
+            <option key={job.id} value={job.id}>
+              {job.title}
+            </option>
+          ))}
+        </select>
+
+        <select value={filters.stage} onChange={(event) => set("stage", event.target.value)} aria-label="Stage">
+          <option value="">Shortlist</option>
+          <option value="all">Everyone</option>
+          {STAGES.map((stage) => (
+            <option key={stage} value={stage}>
+              {stageLabel(stage)}
+            </option>
+          ))}
+        </select>
+
+        <select value={filters.source} onChange={(event) => set("source", event.target.value)} aria-label="Came from">
+          <option value="">Any source</option>
+          <option value="upload">Uploaded</option>
+          <option value="google_form">Google Form</option>
+        </select>
+
+        <select
+          value={filters.min_score}
+          onChange={(event) => set("min_score", event.target.value)}
+          aria-label="Lowest score"
+        >
+          <option value="">Any score</option>
+          <option value="80">80 and above</option>
+          <option value="70">70 and above</option>
+          <option value="60">60 and above</option>
+        </select>
+
+        <select value={filters.sort} onChange={(event) => set("sort", event.target.value)} aria-label="Sort by">
+          {SORTS.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+
+        <span className="spacer result-count">
+          {rows ? `${rows.length} candidate${rows.length === 1 ? "" : "s"}` : "Loading…"}
+        </span>
+        {filtered && (
+          <button className="button quiet small" type="button" onClick={() => setParams({}, { replace: true })}>
+            Clear filters
+          </button>
+        )}
+      </div>
+
+      {error && <p className="error">{error}</p>}
+
+      <div className="card glass flush">
+        {rows === null ? (
+          <div style={{ padding: 18 }}>
+            <div className="skeleton" />
+            <div className="skeleton" />
+            <div className="skeleton" />
+          </div>
+        ) : rows.length === 0 ? (
+          <Empty title={filtered ? "Nobody here" : "Nobody is shortlisted yet"}>
+            {filtered
+              ? "Try a wider search, another stage, or clear the filters."
+              : "Open a job, screen the CVs and invite the top candidates. Everyone you invite appears here."}
+          </Empty>
+        ) : (
+          <table>
+            <thead>
+              <tr>
+                <th>Candidate</th>
+                <th>Job</th>
+                <th>Stage</th>
+                <th className="right">Score</th>
+                <th>Requirements</th>
+                <th>Interview</th>
+                <th>Added</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row) => (
+                <tr key={row.id}>
+                  <td>
+                    <span className="who">
+                      <Avatar name={row.name} />
+                      <span>
+                        <Link to={`/candidates/${row.id}`}>{row.name}</Link>
+                        <span className="cell-sub">{row.email || row.cv_filename}</span>
+                      </span>
+                    </span>
+                  </td>
+                  <td>
+                    <Link to={`/jobs/${row.job_id}/candidates`}>{row.job_title}</Link>
+                    {row.rank !== null && <span className="cell-sub">#{row.rank} for this job</span>}
+                  </td>
+                  <td>
+                    <StageBadge stage={row.stage} />
+                  </td>
+                  <td className="right score-cell">{row.overall ?? "—"}</td>
+                  <td>
+                    {row.met + row.partially_met + row.unmet > 0 ? (
+                      <span className="verdict-counts">
+                        <span className="verdict-met">{row.met} met</span>
+                        <span className="verdict-partially_met">{row.partially_met} partly</span>
+                        <span className="verdict-unmet">{row.unmet} unmet</span>
+                      </span>
+                    ) : (
+                      <span className="muted">—</span>
+                    )}
+                  </td>
+                  <td>
+                    {row.interview_id ? (
+                      <Link to={`/interview/${row.interview_id}`}>
+                        {row.interview_status === "ended"
+                          ? `${row.transcript_lines} transcript lines`
+                          : row.interview_status === "live"
+                            ? "Happening now"
+                            : "Booked"}
+                      </Link>
+                    ) : (
+                      <span className="muted">—</span>
+                    )}
+                  </td>
+                  <td className="muted small nowrap">{shortDate(row.created_at)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </>
+  );
+}

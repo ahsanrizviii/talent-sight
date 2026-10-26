@@ -1,0 +1,211 @@
+/* The answer analysis of an interview (Module 9, Task 9.2.3).
+ * Kept in its own file so the main styles.css stays as it is. It only uses the colours,
+ * glass and radii already defined in styles.css (the variables in :root).
+ */
+
+.qa-analysis {
+  margin-top: 22px;
+  padding-top: 20px;
+  border-top: 1px solid var(--line-2);
+}
+
+.qa-analysis h3 {
+  margin: 0;
+}
+
+.qa-analysis h4 {
+  margin: 0 0 10px;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--ink-2);
+}
+
+.qa-block {
+  margin-top: 22px;
+}
+
+/* While the agent works: one quiet line with a turning ring. */
+.qa-step {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 14px 0 0;
+  color: var(--ink-2);
+  font-size: 14px;
+}
+
+.qa-spinner {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid var(--line);
+  border-top-color: var(--accent);
+  animation: qa-turn 0.9s linear infinite;
+}
+
+@keyframes qa-turn {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* The four numbers at the top. */
+.qa-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.qa-summary > div {
+  padding: 14px 15px;
+  border-radius: var(--radius-s);
+  background: rgba(255, 255, 255, 0.6);
+  border: 1px solid var(--line-2);
+}
+
+.qa-summary strong {
+  display: block;
+  font-size: 28px;
+  font-weight: 600;
+  letter-spacing: -0.035em;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+
+.qa-summary span {
+  display: block;
+  margin-top: 5px;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+
+.qa-tone-pass {
+  color: var(--met);
+}
+
+.qa-tone-warn {
+  color: var(--partly);
+}
+
+.qa-tone-stop {
+  color: var(--unmet);
+}
+
+/* Requirement coverage: one line per requirement. */
+.qa-coverage {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.qa-coverage li {
+  display: grid;
+  grid-template-columns: 124px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 4px 12px;
+  font-size: 14px;
+}
+
+.qa-coverage .badge {
+  justify-content: center;
+}
+
+/* One question and its answer. */
+.qa-pair {
+  margin-bottom: 12px;
+  padding: 16px 18px;
+  border-radius: var(--radius-s);
+  background: rgba(255, 255, 255, 0.6);
+  border: 1px solid var(--line-2);
+}
+
+.qa-pair-head {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.qa-pair-head strong {
+  font-weight: 500;
+  line-height: 1.45;
+}
+
+.qa-dimensions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px 22px;
+  margin-top: 14px;
+}
+
+.qa-dimension p {
+  margin: 6px 0 4px;
+}
+
+/* The candidate's own words the scores rest on. */
+.qa-evidence {
+  margin: 10px 0;
+  padding: 8px 14px;
+  border-left: 2px solid var(--accent-line);
+  color: var(--ink-2);
+  font-size: 14px;
+  font-style: italic;
+  line-height: 1.55;
+}
+
+.qa-evidence span {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+  font-style: normal;
+  color: var(--ink-4);
+}
+
+.qa-analysis details > summary {
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--ink-3);
+}
+
+.qa-analysis details > summary:hover {
+  color: var(--ink);
+}
+
+.qa-lines {
+  margin-top: 8px;
+}
+
+.qa-exchange {
+  margin: 12px 0 4px;
+  padding: 0;
+  list-style: none;
+}
+
+.qa-small-talk .qa-exchange {
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--line-2);
+}
+
+@media (max-width: 720px) {
+  /* On a phone the "2 answers, best 85" note goes under the requirement instead of beside it. */
+  .qa-coverage li {
+    grid-template-columns: 112px minmax(0, 1fr);
+  }
+
+  .qa-coverage li > :last-child {
+    grid-column: 2;
+  }
+
+  .qa-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .qa-dimensions {
+    grid-template-columns: 1fr;
+  }
+}
