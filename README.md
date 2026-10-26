@@ -112,7 +112,7 @@ Product name, positioning and rationale: [docs/TalentSight — Product Name & Po
 
 <p align="center">
   <img src="./docs/assets/architecture.png" alt="TalentSight architecture"><br>
-  <em>Four containers in Docker Compose; the API holds the nine LangGraph agents, and the only code that talks to the language model is `app/llm.py`.</em>
+  <em>Four containers in Docker Compose; the API holds the nine LangGraph agents, and the only code that talks to the language model is <code>app/llm.py</code>.</em>
 </p>
 
 ```mermaid
