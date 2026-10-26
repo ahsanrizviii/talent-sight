@@ -12,8 +12,10 @@
 [![Docker](https://img.shields.io/badge/Run-Docker_Compose-2496ED?logo=docker&logoColor=white)](./docker-compose.yml)
 [![Tests](https://img.shields.io/badge/Tests-582_passing-2EA44F)](./api/tests)
 
-![TalentSight job page](./docs/assets/job-stages.png)
-*The job page: five stages from CV screening to onboarding, with the ranked shortlist. All data shown is fictional sample data.*
+<p align="center">
+  <img src="./docs/assets/job-stages.png" alt="TalentSight job page"><br>
+  <em>The job page: five stages from CV screening to onboarding, with the ranked shortlist. All data shown is fictional sample data.</em>
+</p>
 
 > **The problem:** a hiring team reads dozens of CVs, runs interviews and then tries to remember why one candidate felt stronger than another. The reasons end up in someone's head, not in a record, and nothing shows whether the AI tools they use are fair.
 >
@@ -52,19 +54,30 @@ Product name, positioning and rationale: [docs/TalentSight — Product Name & Po
 | F5 | **Question and answer analysis:** exchanges split from the transcript, scored on relevance, accuracy, completeness and articulation, and mapped to each requirement (explored, weak, not explored) |
 | F6 | **Consolidated assessment:** one report with strengths, weaknesses, gaps and follow-up questions, each pointing to its evidence; PDF export and candidate comparison |
 
-<table>
-<tr>
-<td width="50%"><img src="./docs/assets/shortlist.png" alt="Ranked shortlist"><br><em>F1 and F2: the ranked shortlist</em></td>
-<td width="50%"><img src="./docs/assets/candidate-verdicts.png" alt="Requirement verdicts and score breakdown"><br><em>F1 and F2: verdicts with their CV lines, and the score breakdown</em></td>
-</tr>
-<tr>
-<td width="50%"><img src="./docs/assets/interview-room.png" alt="Interview room"><br><em>F3 and F4: the interview room with the live transcript</em></td>
-<td width="50%"><img src="./docs/assets/answer-analysis.png" alt="Answer analysis"><br><em>F5: answer analysis and requirement coverage</em></td>
-</tr>
-<tr>
-<td colspan="2"><img src="./docs/assets/assessment.png" alt="Consolidated assessment"><br><em>F6: the consolidated assessment with its evidence</em></td>
-</tr>
-</table>
+<p align="center">
+  <img src="./docs/assets/shortlist.png" alt="Ranked shortlist"><br>
+  <em>F1 and F2: the ranked shortlist</em>
+</p>
+
+<p align="center">
+  <img src="./docs/assets/candidate-verdicts.png" alt="Requirement verdicts and score breakdown"><br>
+  <em>F1 and F2: verdicts with their CV lines, and the score breakdown</em>
+</p>
+
+<p align="center">
+  <img src="./docs/assets/interview-room.png" alt="Interview room"><br>
+  <em>F3 and F4: the interview room with the live transcript</em>
+</p>
+
+<p align="center">
+  <img src="./docs/assets/answer-analysis.png" alt="Answer analysis"><br>
+  <em>F5: answer analysis and requirement coverage</em>
+</p>
+
+<p align="center">
+  <img src="./docs/assets/assessment.png" alt="Consolidated assessment"><br>
+  <em>F6: the consolidated assessment with its evidence</em>
+</p>
 
 ### Stretch (all four attempted)
 
@@ -81,8 +94,10 @@ Product name, positioning and rationale: [docs/TalentSight — Product Name & Po
 
 **Litmus checks that a CV score rests on the CV, not on who the candidate is.**
 
-![Litmus tab](./docs/assets/litmus.png)
-*The Litmus tab: the reference score, the repeat that measures chance, and the four changed copies.*
+<p align="center">
+  <img src="./docs/assets/litmus.png" alt="Litmus tab"><br>
+  <em>The Litmus tab: the reference score, the repeat that measures chance, and the four changed copies.</em>
+</p>
 
 - **The problem:** the screening AI is told to ignore personal details, but nothing showed whether it does. A rule in a prompt is a promise, not a proof.
 - **What it does:** for one candidate it scores the unchanged profile twice (to measure chance), then scores controlled copies of the profile, each with one identity detail changed: contact details removed, two different made-up names, and university names removed. Plain code compares the scores. A copy is flagged only when a score moves more than chance plus one 5-point step, or the must-have check changes.
@@ -95,8 +110,10 @@ Product name, positioning and rationale: [docs/TalentSight — Product Name & Po
 
 ## 🏗️ Architecture
 
-![TalentSight architecture](./docs/assets/architecture.png)
-*Four containers in Docker Compose; the API holds the nine LangGraph agents, and the only code that talks to the language model is `app/llm.py`.*
+<p align="center">
+  <img src="./docs/assets/architecture.png" alt="TalentSight architecture"><br>
+  <em>Four containers in Docker Compose; the API holds the nine LangGraph agents, and the only code that talks to the language model is `app/llm.py`.</em>
+</p>
 
 ```mermaid
 flowchart LR
@@ -263,8 +280,10 @@ The job page has five stages, shown as a bar at the top: **CV screening**, **Inv
 8. After the last round, the **Report** stage lists the finalists with their CV score, their score in each round and the consolidated assessment (built from every round, with the CV claim check). **Select for onboarding** sends the onboarding e-mail to those you choose and a rejection e-mail to the others.
 9. On the first day, open **Identity check**, pick the new hire, check their photo ID and take their picture. The result shows in the job's **Onboarding** stage.
 
-![Write a job with AI](./docs/assets/jd-chat.png)
-*Step 1: the job writing agent asks about the interview rounds and waits for approval.*
+<p align="center">
+  <img src="./docs/assets/jd-chat.png" alt="Write a job with AI"><br>
+  <em>Step 1: the job writing agent asks about the interview rounds and waits for approval.</em>
+</p>
 
 ---
 
