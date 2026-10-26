@@ -43,5 +43,5 @@ used and the cost, so the team always knows what a check cost and what it was ru
 | Blind scoring for everyone | It hides the problem without measuring it. Litmus measures it. |
 
 Litmus was chosen because it closes the one gap the other features cannot: every other feature
-produces AI judgements, and Litmus is the only one that checks them. Its limits are listed in
-[innovation-design.md](innovation-design.md).
+produces AI judgements, and Litmus is the only one that checks them. Its main limit:
+a steady result means no effect was found for these changes, not that the scorer is proven fair.
