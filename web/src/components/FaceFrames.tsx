@@ -5,7 +5,7 @@ import { grabFrame } from "../camera";
 // Sends three camera frames during the interview, only after the candidate agreed (Module 13, F7).
 // The frames come from the candidate's own video tile. The server keeps numbers, never pictures,
 // and stops at three, so rejoining the call does not add more.
-const MOMENTS_SECONDS = [20, 180, 360]; // early, middle and later in the call
+const MOMENTS_SECONDS = [20, 40, 55]; // early, middle and later in the call
 const RETRY_SECONDS = 15; // camera off or no face found: try again a little later
 const MAX_TRIES = 6;
 

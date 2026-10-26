@@ -225,7 +225,7 @@ Details are in [docs/privacy.md](docs/privacy.md) and, for face data, [docs/READ
 
 ## Measured performance (N1)
 
-20 sample CVs were parsed, screened, scored and ranked in **<MEASURED> seconds** on `<date>` (Groq free tier, `openai/gpt-oss-120b`, `<machine>`). TODO: read the figure from "took N s" under the screening progress bar after a full run of the 20 sample CVs.
+20 sample CVs were parsed, screened, scored and ranked in **13 minutes (about 780 seconds, roughly 39 seconds per CV)** on 26 October 2026. Machine: Windows 11 Pro laptop, Intel Core i5-10210U, 16 GB RAM, running Docker Desktop. Model: Groq free tier, `openai/gpt-oss-120b`. The run was started once from a fresh job, and most of the time is spent waiting for the AI service, not on this laptop's processor. It includes any waits for the free tier's per-minute limit.
 
 ## Repository layout
 
