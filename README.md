@@ -14,7 +14,7 @@
 
 <p align="center">
   <img src="./docs/assets/job-stages.png" alt="TalentSight job page"><br>
-  <em>The job page: five stages from CV screening to onboarding, with the ranked shortlist. All data shown is fictional sample data.</em>
+  <em>The job page: five stages from CV screening to onboarding.</em>
 </p>
 
 > **The problem:** a hiring team reads dozens of CVs, runs interviews and then tries to remember why one candidate felt stronger than another. The reasons end up in someone's head, not in a record, and nothing shows whether the AI tools they use are fair.
