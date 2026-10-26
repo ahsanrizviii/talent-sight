@@ -175,7 +175,7 @@ flowchart LR
   D -- no --> F[judge in code]
 ```
 
-Each run uses the Screening agent's own `match_requirements`, `mandatory_gate` and `score_candidate`. The two unchanged runs give the chance band; a copy is flagged only when it moves more than that plus one 5-point step, or the must-have check changes. A result that is not steady waits for a person to acknowledge it. Details: [innovation-design.md](innovation-design.md).
+Each run uses the Screening agent's own `match_requirements`, `mandatory_gate` and `score_candidate`. The two unchanged runs give the chance band; a copy is flagged only when it moves more than that plus one 5-point step, or the must-have check changes. A result that is not steady waits for a person to acknowledge it. Why it was built: [innovation-rationale.md](innovation-rationale.md).
 
 ## Access separation (N9)
 
