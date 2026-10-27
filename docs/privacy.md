@@ -1,5 +1,36 @@
 # Candidate data and privacy
 
+This is the privacy and data-handling note (BID P2.7): which outside services receive candidate data,
+what is stored and for how long, how a candidate is deleted, and the known fairness limits.
+
+## Which outside services receive candidate data (N18)
+
+| Service | What it receives | Why |
+|---|---|---|
+| Groq (language model) | CV text, job text, transcript text and the prompts built from them | All AI analysis and writing |
+| AssemblyAI | The live audio of the interview, one stream per speaker | Transcription. Its own data retention applies |
+| Google (Blogger, Calendar, Forms) | The job post (public); the interview time and candidate name for the calendar entry; CVs sent through the linked Form | Publishing, scheduling and import. Optional |
+| Mail server (SMTP) | The candidate's e-mail address, interview time and join link | Invitations. Optional |
+| LiveKit | Runs inside the Docker Compose stack. Video goes from the browsers to it and is not recorded | The video call |
+
+Face matching (OpenCV) and the text embeddings (fastembed) run inside the API container. No face
+picture and no CV text is sent anywhere for them.
+
+## What is stored, and for how long (N16, N17)
+
+| Data | Where | Kept until |
+|---|---|---|
+| CV file | `cv_uploads` volume | The candidate or the job is deleted |
+| CV text, profile, verdicts, scores | Database | The candidate or the job is deleted |
+| Transcript lines (text and times) | Database | The candidate is deleted |
+| Analysis, assessment, claim check, interview score and quality, Litmus checks | Database | The candidate is deleted |
+| Face templates (128 numbers each, no picture), at most three per interview, only with consent | Database | 60 days (`BIOMETRIC_RETENTION_DAYS`), or earlier when the candidate is deleted |
+| Raw audio and video | Never stored | — |
+
+Expired face templates are deleted each time the API starts. Everything else is kept until a person
+deletes it: there is no automatic retention period, so a real deployment would need one.
+
+
 ## Deleting a candidate (N19)
 
 A candidate and everything about them can be deleted in three ways. All three use the same code
@@ -22,7 +53,8 @@ What is removed:
 - the Google Calendar entry of each of their interviews (it carries the candidate's name)
 - the candidate's row, and with it (ON DELETE CASCADE) their requirement verdicts, CV score,
   interviews, participant times, transcript lines, calendar records, invitation deliveries,
-  answer analysis, assessment, CV claim check, interview Interview Assistant, interview quality and score, identity records, face templates and onboarding check
+  answer analysis, assessment, CV claim check, Interview Assistant chat, interview quality and score, identity records, face templates,
+  onboarding check, Litmus checks, round and hiring decisions, and the e-mails sent to them
 
 Deleting a **job** deletes each of its candidates the same way, including their CV files.
 
@@ -54,3 +86,16 @@ Known limit: when the API is down, nginx's *error* log can still print the full 
 
 All keys and passwords come from `.env`, which git ignores. `.env.example` holds placeholders
 only. `.gitignore` also keeps CV uploads, database dumps and audio files out of the repository.
+
+## Fairness limits (N20)
+
+- Scores use four job-relevant dimensions with the job's own weights. Age, gender, ethnicity,
+  nationality, religion and marital status are never scoring inputs.
+- The AI still reads the whole CV, which can contain such cues, and no model can be proved to ignore
+  them. So every score shows its reasons, a person makes every decision, and Litmus tests the scorer.
+  A steady Litmus result means no effect was found for its changes, not that the scorer is proven fair.
+- The only automatic rule is the must-have check. An excluded candidate and the reason stay visible.
+- The Interview Assistant and the quality review block personal questions (age, family, religion and
+  similar) in plain code, not only in the prompt.
+- Face matching is less accurate for some groups and in poor light, so anything other than a match goes
+  to a person and is never called fraud.
