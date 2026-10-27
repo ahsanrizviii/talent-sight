@@ -1,7 +1,7 @@
 import { Fragment } from "react";
 import { Link } from "react-router-dom";
 
-// Where this page sits, as a trail of links: Jobs › Junior AI Engineer › Rizvi Kabir.
+// Where this page sits, as a trail of links: Jobs › Junior AI Engineer › Tanvir Hasan.
 // The last item is the page itself, so it is plain text. Replaces the single "back" links.
 export type Crumb = { label: string; to?: string };
 

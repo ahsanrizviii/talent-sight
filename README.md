@@ -297,7 +297,7 @@ Details are in [docs/privacy.md](docs/privacy.md).
 - **Data used:** only the fictional sample CVs and mock interviews. No real candidate data is in the repository (`cv_uploads/`, recordings and database dumps are git-ignored). Every screenshot in this README shows fictional sample data only.
 - **Deletion (N19):** a candidate and everything about them can be deleted in the app, through `DELETE /api/candidates/{id}`, or with `scripts.delete_candidate`.
 - **Minimisation (N16):** raw audio and video are never stored.
-- **Face data (N17):** used only with the candidate's consent, shown in the flow. At most three face templates (numbers, no pictures) are kept per interview, for 60 days at most (`BIOMETRIC_RETENTION_DAYS`), and they are deleted with the candidate.
+- **Face data (N17):** used only with the candidate's consent, shown in the flow. At most three face templates (numbers, no pictures) are kept per interview for 60 days (`BIOMETRIC_RETENTION_DAYS`; expired ones are deleted each time the API starts), and they are deleted with the candidate.
 - **Logs (N22):** one JSON line per event with a fixed list of safe fields. Names, e-mail addresses, CV text, transcripts and prompts are never logged; invite tokens show as `***`.
 - **Errors (N12):** an unexpected error shows a plain message, never a stack trace, path or prompt.
 
@@ -360,6 +360,10 @@ The test suite has 582 tests (`docker compose exec api pytest -q`). They run aga
 | [Product name and positioning](docs/TalentSight%20%E2%80%94%20Product%20Name%20%26%20Positioning.pdf) | P1.1 |
 | [Requirement clarification](docs/requirement-clarification.xlsx) | P1.2 |
 | [Work Breakdown Structure](docs/WBS%20-%20TalentSight_30219_Ahsan_Rizvi.xlsx) and [actual vs planned](docs/wbs-actual-vs-planned.md) | P1.3, P2.5 |
+| [Risk register](docs/risk-register.md) | P1.5 |
+| [Software Requirements Specification](docs/TalentSight_SRS_v1.0.pdf) ([Word](docs/TalentSight_SRS_v1.0.docx)) | SRS |
 | [Innovation rationale](docs/innovation-rationale.md) | P2.4 |
 | [Architecture and agent design as built](docs/architecture.md), [diagrams](docs/diagrams) | P2.6 |
 | [Privacy and data handling](docs/privacy.md) | P2.7 |
+| [Presentation deck](docs/TalentSight%20Project%20Presentation.pptx) | P2.9 |
+| [AI cost and token use, October 2026](docs/reports/TalentSight_AI_Cost_October_2026.xlsx) | Extra |

@@ -7,11 +7,11 @@
 | | Hours |
 |---|---|
 | Planned (original WBS) | 160 |
-| Actual on the planned tasks | 165 |
+| Actual on the planned tasks | 170 |
 | Actual on tasks added during the project | 25 |
-| **Actual total** | **190** |
+| **Actual total** | **195** |
 
-The planned tasks took 165 hours against 160 planned. The 25 added hours are almost all the four stretch features F7 to F10, which were not in the plan. The release task (15.5) is not yet logged.
+The planned tasks took 170 hours against 160 planned. The 25 added hours are almost all the four stretch features F7 to F10, which were not in the plan. The total of 195 hours matches the spent time in Redmine (story #645583).
 
 ## Module by module
 
@@ -31,8 +31,8 @@ The planned tasks took 165 hours against 160 planned. The 25 added hours are alm
 | 12 Innovation feature (F11): Litmus | 10 | 10.5 | — | Built after the stretch features instead of before them |
 | 13 Stretch features | 8 | 8 | 24 | The plan had one stretch item, the live question chat (built as planned). The four stretch features F7 to F10 were built as added tasks |
 | 14 UI/UX refinement | 8 | 9 | — | The reference design took longer than planned |
-| 15 Testing, documentation, release | 12 | 11 | — | The rehearsal was taken out of the presentation task. The release task (15.5) is done last |
-| **Total** | **160** | **165** | **25** | |
+| 15 Testing, documentation, release | 12 | 16 | — | The rehearsal was taken out of the presentation task. The final re-run and tag (15.5) took 5 hours against 2 planned |
+| **Total** | **160** | **170** | **25** | |
 
 ## Tasks added during the project
 
