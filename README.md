@@ -13,6 +13,11 @@
 [![Tests](https://img.shields.io/badge/Tests-582_passing-2EA44F)](./api/tests)
 
 <p align="center">
+  <img src="./docs/assets/welcome_screen.png" alt="TalentSight welcome screen"><br>
+  <em>The TalentSight welcome screen: one place for the hiring team to start, from writing a job to onboarding a new hire.</em>
+</p>
+
+<p align="center">
   <img src="./docs/assets/job-stages.png" alt="TalentSight job page"><br>
   <em>The job page: five stages from CV screening to onboarding.</em>
 </p>
